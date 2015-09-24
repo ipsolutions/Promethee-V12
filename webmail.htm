@@ -1,0 +1,148 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2007 by Dominique Laporte(C-E-D@wanadoo.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : webmail.htm
+ *		projet   : page d'affichage des méls envoyés
+ *
+ *		version  : 1.0
+ *		auteur   : laporte
+ *		creation : 2/06/07
+ *		modif    : 
+ */
+
+
+$submit  = @$_POST["valid_x"];	// bouton de validation
+?>
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($WEBMAIL_TITLE)); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+
+	<p style="margin-top:0px; margin-bottom:10px; text-align:justify;">
+	<?php print($msg->read($WEBMAIL_DISCLAIMER)); ?>
+	</p>
+
+	<?php
+		// vérification des autorisations
+		admSessionAccess();
+
+		// on efface le webmail
+		if ( $submit ) {
+			$IDpost = @$_POST["IDpost"];		// identifiant des webmails
+
+			for ($i = 0; $i < count($IDpost); $i++ )
+				if ( @$IDpost[$i] AND $_SESSION["CnxAdm"] == 255 ) {
+					$Query  = "delete from webmail ";
+					$Query .= "where _IDpost = '$IDpost[$i]' ";
+					$Query .= "limit 1";
+
+					if ( !mysql_query($Query, $mysql_link) )
+						mysql_error($mysql_link);
+					}
+			}
+
+		print("
+	            <table class=\"width100\">
+      	        <tr>
+	                <td style=\"width:10%;\" class=\"valign-middle\">
+	                	<a href=\"index.php?item=$item&amp;cmde=post\"><img src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/post.gif\" title=\"\" alt=\"\" /></a>
+	                </td>
+	                <td style=\"width:40%;\" class=\"valign-middle\">". $msg->read($WEBMAIL_POST) ."</td>
+	                <td class=\"valign-middle align-right\">
+	                  ". $msg->read($WEBMAIL_NEXTPREV) ."
+	                </td>
+	              </tr>
+	            </table>
+	            ");
+	?>
+
+		<form id="formulaire" action="index.php" method="post">
+
+		<?php
+			print("
+				<p class=\"hidden\"><input type=\"hidden\" name=\"item\"  value=\"$item\" /></p>
+				<p class=\"hidden\"><input type=\"hidden\" name=\"cmde\"  value=\"$cmde\" /></p>
+				");
+
+			// tri par colonne
+			$mysort = "<a href=\"#\" onclick=\"ts_resortTable(this); return false;\"><img src=\"".$_SESSION["ROOTDIR"]."/images/sort_none.gif\" title=\"\" alt=\"\" /></a>";
+		?>
+
+            <table class="width100">
+              <tr style="background-color:#c0c0c0;">
+                <td class="align-center" style="width:1%;"><input type="image" src="images/corb.gif" name="valid" title="<?php print($msg->read($WEBMAIL_DELETE)); ?>" alt="<?php print($msg->read($WEBMAIL_DELETE)); ?>" /></td>
+                <td style="width:49%;"><?php print("$mysort ". $msg->read($WEBMAIL_MESSAGE) .""); ?></td>
+                <td class="align-center" style="width:20%;"><?php print("$mysort ". $msg->read($WEBMAIL_DATE) .""); ?></td>
+                <td class="align-center" style="width:20%;"><?php print("$mysort ". $msg->read($WEBMAIL_PRIORITY) .""); ?></td>
+                <td class="align-center" style="width:10%;"><?php print("$mysort ". $msg->read($WEBMAIL_TOTAL) .""); ?></td>
+              </tr>
+
+            <?php
+			// lecture de la base de données
+			$Query  = "select _IDpost, _ID, _IP, _date, _titre, _pj, _priority, _total ";
+			$Query .= "from webmail ";
+			$Query .= "order by _date desc";
+
+			$result = mysql_query($Query, $mysql_link);
+			$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+			$i = 0;
+			while ( $row ) {
+				$bgcol = ( $i++ % 2 ) ? "item" : "menu" ;
+
+				// accès au webmail
+				$link  = "<a href=\"".myurlencode("index.php?item=$item&IDpost=$row[0]&cmde=post")."\">$row[4]</a>";
+
+				$pj    = ( $row[5] == "O" )
+					? "<img src=\"".$_SESSION["ROOTDIR"]."/images/pj.gif\" title=\"\" alt=\"\" />"
+					: "" ;
+
+				$speed = explode(",", $msg->read($WEBMAIL_SPEED));
+
+				print("
+					<tr class=\"$bgcol\">
+          		    		  <td class=\"valign-top\"><label for=\"IDpost_$row[0]\"><input type=\"checkbox\" id=\"IDpost_$row[0]\" name=\"IDpost[]\" value=\"$row[0]\" /></label></td>
+          		    		  <td>
+          		    		  	$link $pj<br/>
+          		    		  	<span class=\"x-small\">".$msg->read($WEBMAIL_SEND, Array(getUserName($row[1]), _getHostName($row[2])))."</span>
+			       	  </td>
+		       		  <td class=\"align-center\">". date2longfmt($row[3]) ."</td>
+					  <td class=\"align-center\">".$speed[$row[6]]."</td>
+					  <td class=\"align-center\">$row[7]</td>
+	       		       </tr>
+	       		       ");
+
+				$row = remove_magic_quotes(mysql_fetch_row($result));
+				}
+		?>
+		</table>
+
+	</form>
+
+	<hr/>
+
+</div>

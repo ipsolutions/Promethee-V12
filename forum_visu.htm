@@ -1,0 +1,145 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2002-2007 by Dominique Laporte(C-E-D@wanadoo.fr)
+   Copyright (c) 2006 by Cyril Fresne (cyril.fresne@gmail.com)
+   Copyright (c) 2006 by Nordine Zetoutou (nordine.zetoutou@educagri.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : forum_visu.htm
+ *		projet   : la page de visualisation du forum sélectionné
+ *
+ *		version  : 1.3
+ *		auteur   : laporte
+ *		creation : 20/10/02
+ *		modif    : 29/07/03 - par D. Laporte
+ *                     suppression d'un post par l'administrateur
+ *
+ *		           17/03/04 - par D. Laporte
+ *                     création de forum pour un campus virtuel
+ *                     
+ *                     15/06/06 - par cyril fresne
+ *                     migration PHP5
+ *
+ *		           17/07/06 - Nordine Zetoutou
+ * 	                 migration des balises HTML en XHTML 1.0 strict
+ */
+
+
+$IDgroup = ( @$_POST["IDgroup"] )		// identifiant du e-groupe
+	? (int) $_POST["IDgroup"]
+	: (int) @$_GET["IDgroup"] ;
+$IDroot   = ( @$_POST["IDroot"] ) 		// ID du répertoire racine
+	? (int) $_POST["IDroot"]
+	: (int) @$_GET["IDroot"] ;
+$IDforum  = ( @$_POST["IDforum"] ) 		// ID du forum
+	? (int) $_POST["IDforum"]
+	: (int) @$_GET["IDforum"] ;
+$showmode = ( @$_GET["showmode"] )		// commentaire
+	? (int) $_GET["showmode"]
+	: (int) @$_GET["showmode"] ;
+?>
+
+
+<?php
+	// forum d'un campus virtuel
+	if ( !$IDforum AND @$_SESSION["CampusName"] ) {
+		$result = mysql_query("select _IDforum from forum_data where _title = '".$_SESSION["CampusName"]."' limit 1", $mysql_link);
+		$row    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+		$IDforum = $row[0];
+		}
+
+	// lecture de la base de données des forums
+	$Query  = "select _title, _IDmod, _IDgrprd, _texte, _IDgrpwr, _update, _erase, _showmode, _IDroot, _chrono ";
+	$Query .= "from forum_data ";
+	$Query .= "where _IDforum = '$IDforum' ";
+	$Query .= "AND _visible = 'O' ";
+	$Query .= "limit 1";
+
+	$result = mysql_query($Query, $mysql_link);
+	$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+	// vérification des autorisations
+	verifySessionAccess($row[1], $row[2]);
+
+	// lecture forum parent
+	$result = mysql_query("select _title from forum where _IDroot = '$row[8]' limit 1", $mysql_link);
+	$forum  = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+	$title  = ( $forum ) ? "$forum[0]/$row[0]" : $row[0] ;
+
+	// lecture du modérateur
+	if ( $row[1] ) {
+		$result = mysql_query("select _sexe from user_id where _ID = '$row[1]' limit 1", $mysql_link);
+		$who    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+						
+		$mod    = ( $who[0] == "F" )
+			? $msg->read($FORUM_MODOF) ." : "
+			: $msg->read($FORUM_MODOM) ." : " ;
+		$mod   .= " : " . getUserName($row[1]);
+		}
+	else
+		$mod =$msg->read($FORUM_NOMODO);
+						
+	// lecture des droits de lecture
+	// et des commandes accessibles aux utilisateurs
+	$grprd    = $row[2];
+	$update   = $row[5];
+	$erase    = $row[6];
+	$chrono   = $row[9];
+
+	// mode d'affichage
+	$showmode = ( $showmode ) ? $showmode : $row[7] ;
+?>
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat; height: 25px;\">
+	<div style="text-align: center;"><?php print($msg->read($FORUM_MYFORUM, $title)); ?></div>
+	<div class="x-small" style="float: left;"><em><?php echo $mod; ?></em></div>
+</div>
+
+<?php
+	if ( isset($IDforum) ) 
+		require "forum_visu.php";
+	else {
+		$result = mysql_query("select _IDforum from forum_data where _title = '".$_SESSION["CampusName"]."' limit 1", $mysql_link);
+		$row    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+		if ( !$row ) {
+			$result = mysql_query("select _IDmod from campus_data where _titre = '".$_SESSION["CampusName"]."' limit 1", $mysql_link);
+			$row    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+			if ( $_SESSION["CnxAdm"] == 255 OR $row[0] == $_SESSION["CnxID"] )
+				print("
+					<div class=\"maincontent\">
+
+						<table class=\"width100\">
+						  <tr>
+						    <td style=\"width:25%;\" class=\"align-right\"><img src=\"".$_SESSION["ROOTDIR"]."/images/warning.png\" title=\"!\" alt=\"!\" /></td>
+						    <td style=\"width:75%;\">
+						      ". $msg->read($FORUM_NOFORUM, Array($_SESSION["CampusName"], "index.php?item=3&amp;cmde=new")) ."
+						    </td>
+						  </tr>
+						</table>
+
+					</div>
+					");
+			}
+		}
+?>

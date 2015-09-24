@@ -1,0 +1,234 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2008 by Dominique Laporte(C-E-D@wanadoo.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : config_kwords.htm
+ *		projet   : paramétrage de l'interface intranet
+ *
+ *		version  : 1.0
+ *		auteur   : laporte
+ *		creation : 24/08/08
+ *		modif    : 
+ */
+
+
+$IDconf   = ( @$_POST["IDconf"] )			// ID de la configuration
+	? (int) $_POST["IDconf"]
+	: (int) @$_GET["IDconf"] ;
+$IDcentre = ( @$_POST["IDcentre"] )			// ID du centre
+	? (int) $_POST["IDcentre"]
+	: (int) (@$_GET["IDcentre"] ? $_GET["IDcentre"] : $_SESSION["CnxCentre"]) ;
+
+$IDdef   = @$_POST["IDdef"];
+$text    = @$_POST["text"];
+$kwords  = addslashes(trim(@$_POST["kwords"]));
+
+$submit  = (int) @$_POST["valid_x"];		// bouton de validation
+?>
+
+
+<?php
+	// vérification des autorisations
+	admSessionAccess();
+
+	// l'utilisateur a validé
+	if ( $submit ) {
+		// mise à jours des mot-clefs métiers
+		for ($i = 0; $i < count($IDdef); $i++) {
+			$texte = addslashes(trim(@$text[$i]));
+
+			if ( $texte != "" ) {
+				// mise à jour de la config
+				$Query  = "update config_def ";
+				$Query .= "set _text = '$texte' ";
+				$Query .= "where _IDdef = '".@$IDdef[$i]."' ";
+				$Query .= "limit 1";
+
+				mysql_query($Query, $mysql_link);
+				}
+			}
+
+		// mise à jours des mot-clefs du robot d'indexation
+		$query  = "update config set _crawler = '".str_replace(array('\r','\n'), array('',''), $kwords)."' ";
+		$query .= "where _ident = '". addslashes($_SESSION["CfgIdent"]) ."' ";
+		$query .= "AND config._lang = '".$_SESSION["lang"]."' " ;
+		$query .= "limit 1";
+
+		mysql_query($query, $mysql_link);
+		}
+?>
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($CONFIG_CONFIGKWORDS)); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+
+	<form id="formulaire" action="index.php?item=21&amp;cmde=kwords&amp;<?php echo $IDconf; ?>" method="post">
+	<?php
+		print("
+			<p class=\"hidden\"><input type=\"hidden\" name=\"item\"     value=\"$item\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"cmde\"     value=\"$cmde\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"IDconf\"   value=\"$IDconf\" /></p>
+			");
+	?>
+
+        <table class="width100">
+          <tr>
+            <td class="align-center">
+			<span class="menucfg">
+			<img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/options.png" title="" alt="" />
+			<?php print("<a href=\"index.php?item=$item&amp;IDconf=$IDconf\">". $msg->read($CONFIG_OPTION) ."</a>"); ?>
+			</span>
+
+			<span class="menucfg">
+			<img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/config.png" title="" alt="" />
+			<?php print("<a href=\"index.php?item=$item&amp;cmde=skin&amp;IDconf=$IDconf\">". $msg->read($CONFIG_TUNE) ."</a>"); ?>
+			</span>
+
+			<span class="menucfg">
+			<img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/database.gif" title="" alt="" />
+			<?php print("<a href=\"index.php?item=$item&amp;cmde=dba&amp;IDconf=$IDconf\">". $msg->read($CONFIG_DATABASE) ."</a>"); ?>
+			</span>
+
+			<span style="margin:5px; padding:2px; border-style:solid; border-color:#000000; border-width:1px; background-color:#eeeeee;">
+			<img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/personnaliser.gif" title="" alt="" /> <?php print($msg->read($CONFIG_KEYWORDS)); ?>
+			</span>
+
+			<span class="menucfg">
+			<img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/liste.png" title="" alt="" />
+			<?php print("<a href=\"index.php?item=$item&amp;cmde=menu&amp;IDconf=$IDconf\">". $msg->read($CONFIG_MENU) ."</a>"); ?>
+			</span>
+
+			<span class="menucfg">
+			<img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/p2p.png" title="" alt="" />
+			<?php print("<a href=\"index.php?item=$item&amp;cmde=p2p&amp;IDconf=$IDconf\">". $msg->read($CONFIG_P2P) ."</a>"); ?>
+			</span>
+			
+			<span class="menucfg">
+			<?php print("<a href=\"index.php?item=$item&amp;cmde=edt&amp;IDconf=$IDconf\">". $msg->read($CONFIG_EDT) ."</a>"); ?>
+			</span>
+            </td>
+          </tr>
+        </table>
+
+        <hr/>
+
+        <table class="width100">
+          <tr>
+            <td class="align-right" style="width:20%;"><?php print($msg->read($CONFIG_CENTERS)); ?></td>
+		<td>
+		<?php
+			$select = "<select id=\"IDcentre\" name=\"IDcentre\" onchange=\"document.forms.formulaire.submit()\">";
+
+			// lecture des centres constitutifs
+			$query  = "select _IDcentre, _ident from config_centre ";
+			$query .= "where _visible = 'O' AND _lang = '".$_SESSION["lang"]."' ";
+			$query .= "order by _IDcentre";
+
+			$result = mysql_query($query, $mysql_link);
+			$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+			while ( $row ) {
+				$check   = ( $IDcentre == $row[0] ) ? "selected=\"selected\"" : "" ;
+
+				$select .= "<option value=\"$row[0]\" $check >$row[1]</option>";
+
+				$row     = remove_magic_quotes(mysql_fetch_row($result));
+				}
+			
+			$select .= "</select>";
+
+			print("
+				<fieldset style=\"width:60%; border:#cccccc solid 1px;\">
+				<legend>$select</legend>");
+
+				// lecture des centres constitutifs
+				$query  = "select _IDdef, _ident, _text from config_def ";
+				$query .= "where _IDcentre = '$IDcentre' AND _lang = '".$_SESSION["lang"]."' ";
+				$query .= "order by _IDdef";
+
+				$result = mysql_query($query, $mysql_link);
+				$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+				while ( $row ) {
+					print("
+						<p style=\"margin: 2px 0px 0px 0px;\">
+							<input type=\"hidden\" name=\"IDdef[]\" value=\"$row[0]\" />
+							<input type=\"text\" id=\"IDdef_$row[0]\" name=\"text[]\" value=\"$row[2]\" size=\"30\" />
+				            	<strong>$row[1]</strong>
+						</p>");
+
+				$row = remove_magic_quotes(mysql_fetch_row($result));
+				}
+
+			print("</fieldset>");
+		?>
+		</td>
+          </tr>
+
+          <tr>
+            <td class="align-right"><?php print($msg->read($CONFIG_WEBCRAWLER)); ?></td>
+		<td>
+		<?php
+			// lecture des centres constitutifs
+			$query  = "select _crawler from config ";
+			$query .= "where _ident = '". addslashes($_SESSION["CfgIdent"]) ."' ";
+			$query .= "AND config._lang = '".$_SESSION["lang"]."' " ;
+			$query .= "limit 1";
+
+			$result = mysql_query($query, $mysql_link);
+			$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+              	print("<label for=\"kwords\"><textarea id=\"kwords\" name=\"kwords\" rows=\"4\" cols=\"50\">$row[0]</textarea></label>");
+		?>
+		</td>
+          </tr>
+        </table>
+
+	<hr/>
+
+        <table class="width100">
+          <tr>
+             <td style="width:10%;" class="valign-middle align-center">
+			<?php print("<input type=\"image\" src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/valid.gif\" name=\"valid\" alt=\"".$msg->read($CONFIG_INPUTOK)."\" />"); ?>
+             </td>
+             <td class="valign-middle">
+			<?php print($msg->read($CONFIG_VALIDATE)); ?>
+             </td>
+          </tr>
+	       
+          <tr>
+             <td class="valign-middle align-center">
+			<a href="index.php"><?php print("<img src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/cancel.gif\" title=\"\" alt=\"".$msg->read($CONFIG_INPUTCANCEL)."\" />"); ?></a>
+             </td>
+             <td class="valign-middle">
+			<?php print($msg->read($CONFIG_GOHOME)); ?>
+             </td>
+          </tr>
+        </table>
+
+      </form>
+      
+</div>

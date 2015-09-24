@@ -1,0 +1,73 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2003-2007 by Dominique Laporte(C-E-D@wanadoo.fr)
+   Copyright (c) 2006 by Nordine Zetoutou (nordine.zetoutou@educagri.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : gallery.htm
+ *		projet   : la page des galeries d'images
+ *
+ *		version  : 1.1
+ *		auteur   : laporte
+ *		creation : 2/07/03
+ *		modif    : 17/03/04 - par D. Laporte
+ *                     création d'une galerie d'images pour un campus virtuel
+ *		           17/07/06 - Nordine Zetoutou
+ * 	                 migration des balises HTML en XHTML 1.0 strict
+ */
+
+
+$IDgroup  = ( @$_POST["IDgroup"] )				// identifiant du e-groupe
+	? (int) $_POST["IDgroup"]
+	: (int) @$_GET["IDgroup"] ;
+
+// réinitialisation
+if ( @$_GET["salon"] == "" )
+	$_SESSION["CampusName"] = "";
+?>
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($GALLERY_LIST)); ?>
+	</div>
+</div>
+
+<?php
+	// recherche de la version GD
+	$version = "";
+	$array   = get_loaded_extensions();
+	foreach ($array as $key => $value)
+		if ( $value == 'gd' ) {
+			$ar      = gd_info();
+			$version = $ar['GD Version'];
+			break;
+			}
+
+require_once "gallery.php";
+/*
+	// la librairie GD est présente
+	if ( $version )
+		require_once "gallery.php";
+	else
+		// la librairie GD est absente
+		print("<div class=\"maincontent\">". $msg->read($GALLERY_ERRGD) ."</div>");
+*/
+?>

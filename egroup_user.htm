@@ -1,0 +1,388 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2007-2008 by Dominique Laporte(C-E-D@wanadoo.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : egroup_user.htm
+ *		projet   : la page de gestion des membres des e-groupes
+ *
+ *		version  : 1.0
+ *		auteur   : laporte
+ *		creation : 10/02/07
+ *		modif    : 
+ */
+
+
+$IDdata = ( @$_POST["IDdata"] )			// ID du egroup (validation)
+	? (int) $_POST["IDdata"]
+	: (int) (@$_GET["IDdata"] ? $_GET["IDdata"] : $_SESSION["egroup"]) ;
+$IDtype = ( strlen(@$_POST["IDtype"]) )		// tri sur statut
+	? (int) $_POST["IDtype"]
+	: -1000 ;
+
+$submit = ( @$_GET["submit"] ) 			// bouton de validation
+	? $_GET["submit"]
+	: @$_POST["valid_x"] ;
+?>
+
+
+<?php
+	require_once "include/postit.php";
+
+	// lecture des droits
+	$Query  = "select distinctrow ";
+	$Query .= "egroup_user._access, ";
+	$Query .= "egroup_data._IDmod, egroup_data._ident ";
+	$Query .= "from egroup_user, egroup_data ";
+	$Query .= "where egroup_data._IDdata = '$IDdata' ";
+	$Query .= "AND egroup_user._IDdata = egroup_data._IDdata ";
+	$Query .= "AND egroup_user._ID = '".$_SESSION["CnxID"]."' ";
+	$Query .= "AND egroup_user._access > 0 ";
+	$Query .= "limit 1";
+
+	$result = mysql_query($Query, $mysql_link);
+	$auth   = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+	// test du droit de lecture
+	if ( $_SESSION["CnxAdm"] != 255 AND !$auth[0] )
+		logSessionAccess();
+
+	// commande modérateur
+	if ( $auth[1] == $_SESSION["CnxID"] )
+		switch ( $submit ) {
+			case "revoke" :
+				$query  = "delete from egroup_user ";
+				$query .= "where _IDdata = '$IDdata' ";
+				$query .= "AND _ID <> '".$_SESSION["CnxID"]."' ";
+
+				if ( mysql_query($query, $mysql_link) ) {
+					$query  = "delete from user_acl ";
+					$query .= "where _ident = 'e-group' ";
+					$query .= "AND _IDident = '$IDdata' ";
+
+					mysql_query($query, $mysql_link);
+					}
+				break;
+
+			case "invite" :
+				// date d'inscription
+				$date   = date("Y-m-d H:i:s");
+
+				$query  = "select _ID from egroup_user ";
+				$query .= "where _IDdata = '$IDdata' AND _invite = '0000-00-00 00:00:00' AND _ID <> '".$_SESSION["CnxID"]."' ";
+
+				$result = mysql_query($query, $mysql_link);
+				$users  = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+				while ( $users ) {
+					// envoie invitation par post-it
+					$query  = "update egroup_user ";
+					$query .= "set _invite = '$date' ";
+					$query .= "where _IDdata = '$IDdata' AND _ID = '$users[0]' ";
+					$query .= "limit 1";
+
+					if ( mysql_query($query, $mysql_link) ) {
+						$subject = $msg->read($EGROUP_SUBJECT2, $auth[2]);
+						$body    = $msg->read($EGROUP_REQUEST2, Array(getUserName($auth[1], false), $auth[2], $auth[2], myurlencode("index.php?item=$item&cmde=$cmde&IDdata=$IDdata")));
+
+						sendAlertMessage($users[0], $subject, $body);
+						}
+
+					$users  = mysql_fetch_row($result);
+					}
+				break;
+
+			default :
+				if ( $submit ) {
+					$cb     = @$_POST["cb"];
+					$user   = @$_POST["user"];
+					$action = @$_POST["action"];
+
+					// suppression
+					for ($i = 0; $i < count($cb); $i++) {
+						$query  = "delete from egroup_user ";
+						$query .= "where _IDdata = '$IDdata' ";
+						$query .= "AND _ID = '$cb[$i]' ";
+						$query .= "AND _ID <> '".$_SESSION["CnxID"]."' ";
+						$query .= "limit 1";
+
+						if ( mysql_query($query, $mysql_link) ) {
+							$query  = "delete from user_acl ";
+							$query .= "where _ident = 'e-group' ";
+							$query .= "AND _IDident = '$IDdata' ";
+							$query .= "AND _ID = '$cb[$i]' ";
+							$query .= "limit 1";
+
+							mysql_query($query, $mysql_link);
+							}
+						}
+
+					// modification statut
+					for ($i = 0; $i < count($user); $i++) {
+						$Query  = "update egroup_user ";
+						$Query .= "set _access = '".$action[$i]."' ";
+						$Query .= "where _ID = '".$user[$i]."' ";
+						$Query .= "AND _IDdata = '$IDdata' ";
+						$Query .= "limit 1";
+
+						mysql_query($Query, $mysql_link);
+						}
+					}
+				break;
+			}
+?>
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($EGROUP_MEMBERLIST)); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+
+	<form id="formulaire" action="index.php" method="post">
+	<?php
+		print("
+			<p class=\"hidden\"><input type=\"hidden\" name=\"item\"   value=\"$item\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"cmde\"   value=\"$cmde\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"IDdata\" value=\"$IDdata\" /></p>
+			");
+
+	// lecture du e-groupe
+	$Query  = "select egroup._IDitem, egroup_data._IDmod, egroup_data._private, egroup_data._IDdata ";
+	$Query .= "from egroup, egroup_data ";
+	$Query .= "where egroup_data._IDdata = '$IDdata' ";
+	$Query .= "AND egroup_data._IDgroup = egroup._IDgroup ";
+	$Query .= "limit 1";
+
+	$result = mysql_query($Query, $mysql_link);
+	$group  = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+	// pour savoir le nombre de membres
+	$res = mysql_query("select _IDuser from egroup_user where _IDdata = '$IDdata' AND _access > 0", $mysql_link);
+	$nbf = ( $res ) ? mysql_numrows($res) : 0 ;				
+
+	print("<div style=\"position: absolute;\">". $msg->read($EGROUP_NBMEMBER, strval($nbf)) ."</div>");
+
+	print("<div style=\"margin-left: 20%; text-align: right;\">&nbsp;");
+	if ( $group[1] == $_SESSION["CnxID"] AND $group[2] == "O" ) {
+		print("[");
+		print("<a href=\"".myurlencode("index.php?item=1&cmde=acl&ident=e-group&IDident=$group[3]")."\">".$msg->read($EGROUP_ACL)."</a>");
+		print("|<a href=\"".myurlencode("index.php?item=$item&cmde=$cmde&IDdata=$IDdata&IDitem=$group[0]&submit=invite")."\">".$msg->read($EGROUP_INVITATION)."</a>");
+		print("|<a href=\"".myurlencode("index.php?item=$item&cmde=$cmde&IDdata=$IDdata&IDitem=$group[0]&submit=revoke")."\">".$msg->read($EGROUP_REVOKE)."</a>");
+		print("]");
+		}
+	print("</div>");
+
+	print("<hr/>");
+
+	print("
+		<table class=\"width100\">
+		  <tr style=\"background-color:#C0C0C0;\">
+                <td class=\"align-center\" style=\"width:1%;\">
+			<img src=\"".$_SESSION["ROOTDIR"]."/images/corb.gif\" title=\"". $msg->read($EGROUP_DELETE) ."\" alt=\"". $msg->read($EGROUP_DELETE) ."\" />
+                </td>
+
+                <td class=\"align-center\" style=\"width:1%;\">
+			<img src=\"".$_SESSION["ROOTDIR"]."/images/document.gif\" title=\"". $msg->read($EGROUP_PUBLISHCV) ."\" alt=\"". $msg->read($EGROUP_PUBLISHCV) ."\" />
+                </td>
+
+                <td class=\"align-center\" style=\"width:1%;\">
+			<img src=\"".$_SESSION["ROOTDIR"]."/images/group.gif\" title=\"". $msg->read($EGROUP_CATEGORY) ."\" alt=\"". $msg->read($EGROUP_CATEGORY) ."\" />
+                </td>
+
+                <td class=\"align-left\" style=\"width:38%;\">
+			". $msg->read($EGROUP_NAME) ."
+                </td>
+
+                <td class=\"align-center\" style=\"width:20%;\">
+			". $msg->read($EGROUP_REGSINCE) ."
+                </td>
+
+                <td class=\"align-center\" style=\"width:20%;\">
+			". $msg->read($EGROUP_LASTACCESS) ."
+                </td>
+
+                <td class=\"align-center\" style=\"width:20%;\">
+			<label for=\"IDtype\">
+		  	<select id=\"IDtype\" name=\"IDtype\" onchange=\"document.forms.formulaire.submit()\" style=\"font-size: 9px;\">
+		");
+
+	// affichage des statuts
+	$query  = "select _IDaccess, _ident from egroup_access ";
+	$query .= "where _lang = '".$_SESSION["lang"]."' ";
+	$query .= "order by _IDaccess";
+
+	$result = mysql_query($query, $mysql_link);
+	$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+	$status = Array();
+
+	while ( $row ) {
+		$status = $status + Array($row[0] => $row[1]);
+
+		$row = remove_magic_quotes(mysql_fetch_row($result));
+		}
+
+	print("<option value=\"-1000\">". $msg->read($EGROUP_ALLSTATUS) ."</option>");
+
+	foreach ($status as $clef => $valeur)
+		printf("<option value=\"$clef\" %s>$valeur</option>", ($IDtype == $clef) ? "selected=\"selected\"" : "");
+
+	print("
+		  	</select>
+		  	</label>
+                </td>
+		  </tr>
+		");
+
+	// affichage des membres
+	$query  = "select distinctrow ";
+	$query .= "user_id._ID, user_id._IDgrp, user_id._name, user_id._lang, ";
+	$query .= "egroup_user._date, egroup_user._access, egroup_user._lastcnx, egroup_user._cnx, egroup_user._invite ";
+	$query .= "from user_id, egroup_user ";
+	$query .= "where egroup_user._IDdata = '$IDdata' ";
+	$query .= "AND user_id._ID = egroup_user._ID ";
+	$query .= ( $IDtype != -1000 ) ? "AND egroup_user._access = '$IDtype' " : "" ;
+	$query .= "order by user_id._name, user_id._fname";
+
+	$result = mysql_query($query, $mysql_link);
+	$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+	$i = 0;
+	while ( $row ) {
+		$about = "";
+		$bgcol = ( $i++ % 2 ) ? "item" : "menu" ;
+
+		if ( getAccess($row[1]) == 1 ) {
+			// lecture de l'élève
+			$query  = "select user_id._name, user_id._fname, campus_classe._ident ";
+			$query .= "from user_id, campus_classe ";
+			$query .= "where user_id._ID = '$row[0]' AND user_id._IDgrp = '1' ";
+			$query .= "AND user_id._IDclass = campus_classe._IDclass ";
+			$query .= "limit 1";
+
+			$return = mysql_query($query, $mysql_link);
+			$myrow  = ( $return ) ? remove_magic_quotes(mysql_fetch_row($return)) : 0 ;
+
+			if ( $myrow ) {
+				// infos complémentaires
+ 				$about  = "<a href=\"#\" class=\"overlib\">";
+				$about .= "<img src=\"".$_SESSION["ROOTDIR"]."/images/spip/aide.gif\" title=\"\" alt=\"\" />";
+				$about .= "<span>$myrow[0] $myrow[1]<br/>$myrow[2]</span>";
+				$about .= "</a>";
+				}
+			}
+
+		// lecture du groupe
+		$return = mysql_query("select _ident from user_group where _IDgrp = '$row[1]'AND _lang = '".$_SESSION["lang"]."' limit 1", $mysql_link);
+		$groupe = ( $return ) ? remove_magic_quotes(mysql_fetch_row($return)) : 0 ;
+
+		// envoie post-it
+		$name   = getUserName($row[0]);
+
+		// qui est le modérateur
+		$mod    = ( $row[5] > 0 AND $row[5] & 4 )
+			? "<img src=\"".$_SESSION["ROOTDIR"]."/images/stats/mod.gif\" title=\"". stripHTMLtags($msg->read($EGROUP_MODO)) ."\" alt=\"". stripHTMLtags($msg->read($EGROUP_MODO)) ."\" />"
+			: "" ;
+
+		if ( $auth[0]& 4 ) {
+			if ( $_SESSION["CnxID"] == $row[0] )
+				$select = $msg->read($EGROUP_OWNER);
+			else {
+				$select  = "<label for=\"action_$i\">";
+				$select .= "<select id=\"action_$i\" name=\"action[]\">";
+				foreach ($status as $clef => $valeur) {
+					$check   = ($row[5] == $clef) ? "selected=\"selected\"" : "";
+					$select .= "<option value=\"$clef\" $check>$valeur</option>";
+					}
+				$select .= "</select>";
+				$select .= "</label>";
+
+				$select .= "<p class=\"hidden\"><input type=\"hidden\" name=\"user[]\" value=\"$row[0]\" /></p>";
+				}
+			}
+		else
+			$select = $status[ $row[5] ];
+
+		// lecture du CV
+		$query  = "select _IDcv from cv ";
+		$query .= "where _IDuser = '$row[0]' ";
+		$query .= "AND _visible = 'O' ";
+		$query .= "limit 1";
+
+		$return = mysql_query($query, $mysql_link);
+		$myrow  = ( $return ) ? mysql_fetch_row($return) : 0 ;
+
+		// accès aux CV
+		$icon = ( $myrow )
+			? "<img src=\"".$_SESSION["ROOTDIR"]."/images/register.gif\" title=\"".$msg->read($EGROUP_ACCESSCV)."\" alt=\"".$msg->read($EGROUP_ACCESSCV)."\" />"
+			: "<img src=\"".$_SESSION["ROOTDIR"]."/images/unregister.gif\" title=\"".$msg->read($EGROUP_ACCESSCV)."\" alt=\"".$msg->read($EGROUP_ACCESSCV)."\" />" ;
+		$cv   = ( $row[0] == $_SESSION["CnxID"] )
+			? "<a href=\"index.php?item=40&amp;cmde=post\">$icon</a>"
+			: ($myrow
+				? "<a href=\"index.php?item=40&amp;cmde=demande&amp;IDcv=$myrow[0]\">$icon</a>"
+				: $icon) ;
+
+		// invitation envoyée
+		$mail = ( $row[8] != "0000-00-00 00:00:00" )
+			? "<img src=\"".$_SESSION["ROOTDIR"]."/images/email.gif\" title=\"".$msg->read($EGROUP_INVITEPOST, date2longfmt($row[8]))."\" alt=\"".$msg->read($EGROUP_INVITEPOST, date2longfmt($row[8]))."\" />"
+			: "" ;
+
+		// suppression membre
+		$isok = ( $auth[1] == $_SESSION["CnxID"] AND $row[0] != $_SESSION["CnxID"] ) ? "" : "disabled=\"disabled\"" ;
+
+		print("
+			<tr class=\"$bgcol\">
+			  <td class=\"align-center\">
+				<label for=\"user_$row[0]\"><input type=\"checkbox\" id=\"user_$row[0]\" name=\"cb[]\" value=\"$row[0]\" $isok /></label>
+			  </td>
+			  <td class=\"align-center\">$cv</td>
+			  <td class=\"align-center\"><img src=\"".$_SESSION["ROOTDIR"]."/images/smiley/$row[1].gif\" title=\"$groupe[0]\" alt=\"$groupe[0]\" /></td>
+			  <td>
+				<img src=\"".$_SESSION["ROOTDIR"]."/images/lang/ico-$row[3].png\" title=\"$row[3]\" alt=\"$row[3]\" /> $name ($row[7]) $mail $about $mod
+			  </td>
+			  <td class=\"align-center\">".date2longfmt($row[4])."</td>
+			  <td class=\"align-center\">".date2longfmt($row[6])."</td>
+			  <td class=\"align-center\">$select</td>
+			</tr>
+			");
+
+		$row = remove_magic_quotes(mysql_fetch_row($result));
+		}
+
+	if ( $auth[0] & 4)
+		print("
+	              <tr>
+				<td colspan=\"7\"><hr/></td>
+			  </tr>
+
+	              <tr>
+				<td colspan=\"6\" class=\"valign-middle align-right\">". $msg->read($EGROUP_VALIDATE) ."</td>
+				<td class=\"align-center\"><input type=\"image\" src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/valid.gif\" name=\"valid\" alt=\"".$msg->read($EGROUP_INPUTOK)."\" /></td>
+			  </tr>");
+
+	print("</table>");
+
+	print("</form>");
+      ?>
+
+</div>

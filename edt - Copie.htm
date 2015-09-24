@@ -1,0 +1,534 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2006-2007 by Dominique Laporte(C-E-D@wanadoo.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : edt.htm
+ *		projet   : la page des emplois du temps des salles
+ *
+ *		version  : 1.0
+ *		auteur   : laporte
+ *		creation : 7/10/06
+ *		modif    : 
+ */
+
+
+$IDcentre = ( @$_POST["IDcentre"] )					// Identifiant du centre
+	? (int) $_POST["IDcentre"]
+	: (int) (@$_GET["IDcentre"] ? $_GET["IDcentre"] : $_SESSION["CnxCentre"]) ;
+$IDedt    = ( @$_POST["IDedt"] )					// type d'edt
+	? (int) $_POST["IDedt"]
+	: (int) @$_GET["IDedt"];
+$IDitem   = ( @$_POST["IDitem"] )					// Identifiant de la salle, catégorie ou groupe classe
+	? (int) $_POST["IDitem"]
+	: (int) @$_GET["IDitem"] ;
+$IDclass  = ( @$_POST["IDclass"] )					// Identifiant de la classe
+	? (int) $_POST["IDclass"]
+//	: (int) @$_GET["IDclass"] ;
+	: (int) (@$_GET["IDclass"] ? $_GET["IDclass"] : $IDitem) ;
+$IDuser   = ( @$_POST["IDuser"] )					// Identifiant de l'utilisateur
+	? (int) $_POST["IDuser"]
+	: (int) @$_GET["IDuser"] ;
+$IDdata   = (int) @$_GET["IDdata"];					// Identifiant de l'edt
+$ident    = addslashes(trim(@$_POST["ident"]));			// Identifiant de la salle
+
+$submit   = ( @$_POST["submit"] )					// ajout salle
+	? $_POST["submit"]
+	: @$_GET["submit"] ;
+
+
+//---------------------------------------------------------------------------
+function getRowspan($delay, $horaire, $idx)
+{
+	/*
+	 * fonction : détermine le nombre de cellules fusionnées pour l'edt
+	 * out : nombre de cellules fusionnées
+	 */
+
+	// la durée de réservation
+	list($h, $m) = explode(":", $delay);
+
+	$rowspan = 1;
+	for ($i = $idx, $j = $idx+1; @$horaire[$i]; $i++, $j++) {
+		list($h1, $m1) = explode(":", $horaire[$i]);
+		list($h2, $m2) = @$horaire[$j] ? explode(":", $horaire[$j]) : explode(":", "1:0") ;
+
+		$dh = $h2 - $h1;
+		$dm = $m2 - $m1;
+
+		if ( $h AND $m < $dm ) {
+			$h--;
+			$m += 60;
+			}
+		else
+			if ( $h == 0 AND $dh ) {
+				$dh--;
+				$dm += 60;
+				}
+			
+		$h -= ( $h ) ? $dh : 0 ;
+		$m -= ( $m ) ? $dm : 0 ;
+
+		if ( $h <= 0 AND $m <= 0 )
+			break;
+		else
+			$rowspan++;
+		}
+
+	return $rowspan;
+}
+//---------------------------------------------------------------------------
+
+?>
+
+
+<table summary="" width="100%" class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat:repeat;" cellspacing="0" cellpadding="0">
+  <tr>
+    <td style="width:100%;" align="center">
+
+	<form id="edt" action="index.php" method="post">
+	<?php
+		print("
+			<p class=\"hidden\"><input type=\"hidden\" name=\"item\"     value=\"$item\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"cmde\"     value=\"$cmde\" /></p>
+			");
+	?>
+
+	<p style="margin:0px;"><?php print($msg->read($EDT_LIST)); ?>
+
+	<label for="IDedt">
+  	<select id="IDedt" name="IDedt" onchange="document.forms.edt.submit()">
+	<?php
+		// sélection des edt
+		$Query  = "select _IDmod, _IDgrprd, _IDgrpwr, _titre, _IDweek, _horaire, _IDedt, _IDmod from edt ";
+		$Query .= "where _visible = 'O' AND _lang = '".$_SESSION["lang"]."' ";
+		$Query .= "AND (_IDgrprd & ".pow(2, $_SESSION["CnxGrp"] - 1).") " ;
+		$Query .= "order by _IDedt";
+
+		$result = mysql_query($Query, $mysql_link);
+		$edt    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+		// initialisation
+		if ( $IDedt == 0 )
+			$IDedt = $edt[6];
+
+		while ( $edt ) {			
+			if ( $IDedt == $edt[6] ) {
+				$idmod = $edt[7];
+				$grprd = $edt[1];
+				$grpwr = $edt[2];
+				$week  = $edt[4];
+				$time  = $edt[5];
+
+				print("<option selected=\"selected\" value=\"$edt[6]\">$edt[3]</option>");
+				}
+			else
+				print("<option value=\"$edt[6]\">$edt[3]</option>");
+
+			$edt = remove_magic_quotes(mysql_fetch_row($result));
+			}				
+	?>
+	</select>
+	</label>
+	</p>
+
+	</form>
+
+    </td>
+  </tr>
+</table>
+
+<div class="maincontent">
+
+ <?php
+	// vérification des autorisations
+	verifySessionAccess($idmod, $grprd);
+
+	// initialisation
+	if ( $IDitem < 0 ) {
+		$IDuser = (int) abs($IDitem / 100);
+		$IDitem = abs($IDitem + $IDuser);
+		}
+
+	if ( strlen($submit) )
+		switch ( $submit ) {
+			case "del" :	// suppression d'un edt
+				if ( ($_SESSION["CnxAdm"] == 255 OR ($grprd & pow(2, $_SESSION["CnxGrp"] - 1))) AND $IDdata ) {
+					$Query  = "delete from edt_data ";
+					$Query .= "where _IDdata = '$IDdata' ";
+					$Query .= "limit 1";
+
+					mysql_query($Query, $mysql_link);
+					}
+				break;
+
+			case "erase" :	// suppression salle
+				if ( $_SESSION["CnxAdm"] == 255 ) {
+					$Query  = "delete from edt_items ";
+					$Query .= "where _IDitem = '$IDitem' AND _lang = '".$_SESSION["lang"]."' ";
+					$Query .= "limit 1";
+
+					if ( mysql_query($Query, $mysql_link) )
+						$IDitem = 0;
+					}
+				break;
+
+			default :
+				if ( $_SESSION["CnxAdm"] == 255 AND strlen($ident) ) {
+					$Query = "";
+
+					// ajout salle
+					if ( $submit == $msg->read($EDT_APPEND) ) {
+						$Query  = "insert into edt_items ";
+						$Query .= "values('".sql_getunique("edt_items")."', '$IDcentre', '$ident', '".$_SESSION["lang"]."')";
+						}
+
+					// modification salle
+					if ( $submit == $msg->read($EDT_MODIFICATION) ) {
+						$Query  = "update edt_items ";
+						$Query .= "set _title = '$ident' ";
+						$Query .= "where _IDitem = '$IDitem' AND _lang = '".$_SESSION["lang"]."' ";
+						$Query .= "limit 1";
+						}
+
+					if ( strlen($Query ) )
+						mysql_query($Query, $mysql_link);
+					}
+				break;
+			}
+?>
+
+		<form id="formulaire" action="index.php" method="post">
+		<?php
+			print("
+				<p class=\"hidden\"><input type=\"hidden\" name=\"item\"     value=\"$item\" /></p>
+				<p class=\"hidden\"><input type=\"hidden\" name=\"cmde\"     value=\"$cmde\" /></p>
+				<p class=\"hidden\"><input type=\"hidden\" name=\"IDedt\"    value=\"$IDedt\" /></p>
+				");
+		?>
+
+		<hr style="width:80%; text-align:center;" />
+
+		<table  summary="" width="100%" cellspacing="4" cellpadding="0">
+		  <tr>
+			<td style="width:50%;" align="right">
+			    	<?php print($msg->read($EDT_CHOOSECENTER)); ?> 
+			</td>
+			<td style="width:50%;">
+				<label for="IDcentre">
+			  	<select id="IDcentre" name="IDcentre" onchange="document.forms.formulaire.submit()">
+				<?php
+					// lecture des centres constitutifs
+					$query  = "select _IDcentre, _ident from config_centre ";
+					$query .= "where _visible = 'O' AND _lang = '".$_SESSION["lang"]."' ";
+					$query .= "order by _IDcentre";
+
+					$result = mysql_query($query, $mysql_link);
+					$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+					if ( !$IDcentre )
+						$IDcentre = $row[0];
+
+					while ( $row ) {			
+						if ( $IDcentre == $row[0] )
+							print("<option selected=\"selected\" value=\"$row[0]\">$row[1]</option>");
+						else
+							print("<option value=\"$row[0]\">$row[1]</option>");
+
+						$row = remove_magic_quotes(mysql_fetch_row($result));
+						}				
+				?>
+				</select> <img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/home.gif" title="" alt="" />
+				</label>
+			</td>
+		  </tr>
+
+		  <tr>
+			<td align="right">
+			<?php
+				switch ( $IDedt ) {
+					case 1 :
+					    	print($msg->read($EDT_LOCATION) ." ");
+						break;
+					case 2 :
+					    	print($msg->read($EDT_USER) ." ");
+						break;
+					default :
+					    	print($msg->read($EDT_CLASSROOM) ." ");
+						break;
+					}
+			?>
+			</td>
+			<td>
+			<?php
+				if ( $submit == "new" OR $submit == "update" ) {
+					$query = "";
+					$value = ( $submit == "new" ) ? $msg->read($EDT_APPEND) : $msg->read($EDT_MODIFICATION) ;
+
+					switch ( $IDedt ) {
+						case 1 :	// les salles
+							$query  = "select _title from edt_items ";
+							$query .= "where _IDcentre = '$IDcentre' ";
+							$query .= "AND _lang = '".$_SESSION["lang"]."' AND _IDitem = '$IDitem' ";
+							$query .= "limit 1";
+							break;
+						default :	// les classes
+							break;
+						}
+
+					$result = ( strlen($query) ) ? mysql_query($query, $mysql_link) : 0 ;
+					$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+					print("<label for=\"ident\"><input type=\"text\" id=\"ident\" name=\"ident\" size=\"20\" value=\"$row[0]\" /></label> <input type=\"submit\" name=\"submit\" value=\"$value\" style=\"font-size: 9px;\" />");
+					}
+				else {
+					print("
+						<label for=\"IDitem\">
+						<select id=\"IDitem\" name=\"IDitem\" onchange=\"document.forms.formulaire.submit()\">
+							<option value=\"0\">&nbsp;</option>");
+
+					switch ( $IDedt ) {
+						case 1 :	// les salles
+							$query  = "select _IDitem, _title from edt_items ";
+							$query .= "where _IDcentre = '$IDcentre' ";
+							$query .= "AND _lang = '".$_SESSION["lang"]."' ";
+							$query .= "order by _title";
+							break;
+						case 2 :	// le personnel
+							$query  = "select _IDgrp, _ident from user_group ";
+							$query .= "where _IDcat = '2' AND _visible = 'O' ";
+							$query .= "AND _lang = '".$_SESSION["lang"]."' ";
+							$query .= "order by _ident";
+							break;
+						default :	// les classes
+							$query  = "select _IDclass, _ident from campus_classe ";
+							$query .= "where _IDcentre = '$IDcentre' AND _visible = 'O' ";
+							$query .= "order by _text";
+							break;
+						}
+
+					$result = mysql_query($query, $mysql_link);
+					$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+					$found  = false;
+
+					while ( $row ) {			
+						if ( $IDedt == 2 ) {
+							$query  = "select _ID, _name, _fname from user_id ";
+							$query .= "where _IDgrp = '$row[0]' AND _IDcentre = '$IDcentre' ";
+							$query .= "order by _name";
+
+							$return = mysql_query($query, $mysql_link);
+							$myrow  = ( $return ) ? remove_magic_quotes(mysql_fetch_row($return)) : 0 ;
+
+							if ( $myrow  ) {			
+								print("<optgroup label=\"$row[1]\">");
+
+								while ( $myrow  ) {			
+									$found  = ( $IDuser == $myrow[0] ) ? true : $found ;
+									$select = ( $IDuser == $myrow[0] ) ? "selected=\"selected\"" : "" ;
+									$value  = ($myrow[0] * 100) + $row[0];
+
+									print("<option value=\"-$value\" $select>".formatUserName($myrow[1], $myrow[2])."</option>");
+
+									$myrow  = remove_magic_quotes(mysql_fetch_row($return));
+									}
+
+								print("</optgroup>");
+								}				
+							}
+						else {
+							$found  = ( $IDitem == $row[0] ) ? true : $found ;
+							$select = ( $IDitem == $row[0] ) ? "selected=\"selected\"" : "" ;
+
+							print("<option value=\"$row[0]\" $select>$row[1]</option>");
+							}
+
+						$row = remove_magic_quotes(mysql_fetch_row($result));
+						}				
+
+					// reset sur changement dans la liste
+					if ( !$found )
+						$IDuser = $IDitem = 0;
+
+					print("</select> ");
+					print("</label> ");
+
+					// gestion salles
+					if ( $_SESSION["CnxAdm"] == 255 AND $IDedt == 1 ) {
+						print("<a href=\"".myurlencode("index.php?item=$item&IDcentre=$IDcentre&submit=new")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/ajouter.gif\" title=\"".$msg->read($EDT_APPEND)."\" alt=\"".$msg->read($EDT_APPEND)."\" /></a> ");
+
+						if ( $IDitem )
+							print(
+								"<a href=\"".myurlencode("index.php?item=$item&IDcentre=$IDcentre&IDitem=$IDitem&submit=update")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/stats/post.gif\" title=\"".$msg->read($EDT_MODIFICATION)."\" alt=\"".$msg->read($EDT_MODIFICATION)."\" /></a> " . 
+								"<a href=\"".myurlencode("index.php?item=$item&IDcentre=$IDcentre&IDitem=$IDitem&submit=erase")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/corb.gif\" title=\"".$msg->read($EDT_DELETE)."\" alt=\"".$msg->read($EDT_DELETE)."\" /></a>"
+								);
+						}
+					else
+						print("<img src=\"".$_SESSION["ROOTDIR"]."/images/group.gif\" title=\"\" alt=\"\" />");
+					}
+			?>
+			</td>
+		  </tr>
+		</table>
+
+		<hr style="width:80%; text-align:center;" />
+
+		</form>
+
+	      <table  summary="" border="1" width="100%">
+	        <tr style="background-color:<?php print($_SESSION["CfgColor"]); ?>">
+	          <td style="width:2%;"></td>
+			<?php
+				$day = explode(",", $msg->read($EDT_DAYS)); 
+
+				for ($i = 0; $i < count($day); $i++)
+					if ( $week & pow(2, $i) )
+						print("
+							<td style=\"width:14%; color:#FFFFFF;\" align=\"center\">
+								<strong>$day[$i]</strong>
+							</td>");
+			?>
+	        </tr>
+
+		<?php
+			$modify  = $delete = "";
+			$horaire = explode(";", $time);
+
+			$perms   = (bool) (($_SESSION["CnxAdm"] == 255 OR ($grpwr & pow(2, $_SESSION["CnxGrp"] - 1))) AND $IDitem);
+			$perms   = ( $IDedt == 2 AND $_SESSION["CnxAdm"] != 255 )
+				? $perms AND ($_SESSION["CnxID"] == $IDuser)
+				: $perms ;
+
+			$plage   = Array();
+			for ($i = 0; $i < count($horaire) - 1; $i++)
+				for ($j = 0; $j < count($day); $j++)
+					$plage[$i][$j] = 0;
+
+			for ($i = 0; $i < count($horaire) - 1; $i++) {
+				print("<tr>");
+
+				print("
+					<td valign=\"top\" align=\"center\" style=\"background-color:#c0c0c0;\">
+						$horaire[$i]
+					</td>
+					");
+
+				for ($j = 0; $j < count($day); $j++)
+					if ( ($week & pow(2, $j)) AND ($plage[$i][$j] == 0) ) {
+
+						$query   = "select _IDdata, _IDmat, _IDclass, _ID, _semaine, _delais, _IDitem, _group from edt_data ";
+						$query  .= "where _IDcentre = '$IDcentre' ";
+//						$query  .= ( $IDedt == 1 ) ? "AND _IDitem AND _IDitem = '$IDitem' " : "AND _IDedt > '1' " ;
+						$query  .= ( $IDedt == 1 ) ? "AND _IDitem AND _IDitem = '$IDitem' " : "" ;
+						$query  .= ( $IDedt == 2 ) ? "AND _ID AND _ID = '$IDuser' " : "" ;
+						$query  .= ( $IDedt == 3 ) ? "AND _IDclass AND _IDclass = '$IDitem' " : "" ;
+						$query  .= "AND _jour = '$j' AND _heure = '$i' ";
+						$query  .= "AND _visible = 'O' ";
+						$query  .= "order by _semaine";
+
+						$result  = mysql_query($query, $mysql_link);
+						$row     = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+						$rowspan = 1;
+						$text    = "";
+
+						while ( $row ) {
+							$delete = ( $perms )
+								? "<a href=\"".myurlencode("index.php?item=$item&IDedt=$IDedt&IDcentre=$IDcentre&IDitem=$IDitem&IDclass=$IDclass&IDuser=$IDuser&IDdata=$row[0]&submit=del")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/corb.gif\" title=\"". $msg->read($EDT_DELETE) ."\" alt=\"". $msg->read($EDT_DELETE) ."\" /></a>"
+								: "" ;
+
+							$return = mysql_query("select _titre from campus_data where _IDmat = '$row[1]' AND _lang = '".$_SESSION["lang"]."' limit 1", $mysql_link);
+							$myrow  = ( $return ) ? remove_magic_quotes(mysql_fetch_row($return)) : 0 ;
+
+							$link   = ( $perms )
+								? "<a href=\"#\" onclick=\"popWin('edt.php?sid=".myurlencode($_SESSION["sessID"]."&item=$item&IDedt=$IDedt&IDcentre=$IDcentre&IDitem=$IDitem&IDclass=$IDclass&IDuser=$IDuser&IDdata=$row[0]&h=$i&j=$j&lang=".$_SESSION["lang"])."', '400', '340');\">$myrow[0]</a>"
+								: "$myrow[0]" ;
+
+							if ( $row[4] ) {
+								// recherche de la semaine
+								$Query  = "select _ident from edt_week ";
+								$Query .= "where _IDweek = '$row[4]' " ;
+								$Query .= "AND _lang = '".$_SESSION["lang"]."' ";
+								$Query .= "limit 1" ;
+
+								$return = mysql_query($Query, $mysql_link);
+								$myweek = ( $return ) ? remove_magic_quotes(mysql_fetch_row($return)) : 0 ;
+
+								if ( $myweek )
+				   	     				$text .= "<span style=\"color:#FF0000;\">($myweek[0])</span> ";
+								}
+
+							$text  .= "<strong>$link</strong>$delete<br/>";
+
+							$return = mysql_query("select _ident from campus_classe where _IDclass = '$row[2]' limit 1", $mysql_link);
+							$myrow  = ( $return ) ? remove_magic_quotes(mysql_fetch_row($return)) : 0 ;
+
+							$text  .= $myrow[0];
+							$text  .= ( $row[3] ) ? "<br/><strong>".getUserName($row[3])."</strong>" : "" ;
+
+							if ( $row[6] AND $IDedt != 1 ) {
+								// recherche de la salle
+								$Query  = "select _title from edt_items ";
+								$Query .= "where _IDitem = '$row[6]' ";
+								$Query .= "AND _lang = '".$_SESSION["lang"]."' ";
+								$Query .= "limit 1" ;
+
+								$return = mysql_query($Query, $mysql_link);
+								$myrow  = ( $return ) ? remove_magic_quotes(mysql_fetch_row($return)) : 0 ;
+
+			   	     				$text  .= "<br/>$myrow[0]";
+								}
+
+							if ( $row[7] )
+			   	     				$text .= "<br/><span style=\"color:#0000FF;\">(". $msg->read($EDT_IDGROUP, strval($row[7])). ")</span> ";
+
+							$text  .= "<hr style=\"width:50%; text-align:center;\" />";
+
+							// la durée de réservation
+							$rspan = getRowspan($row[5], $horaire, $i);
+
+							if ( $rspan > $rowspan )
+								$rowspan = $rspan;
+
+							$row    = mysql_fetch_row($result);
+							}
+
+						$color = ( $text ) ? "#eeeeee" : "#ffffff" ;
+						$add   = ( $perms AND ($IDuser OR $IDedt != 2) )
+							? "<span class=\"x-small\">[<a href=\"#\" onclick=\"popWin('edt.php?sid=".myurlencode($_SESSION["sessID"]."&item=$item&IDedt=$IDedt&IDcentre=$IDcentre&IDitem=$IDitem&IDuser=$IDuser&IDclass=$IDclass&IDdata=0&h=$i&j=$j&lang=".$_SESSION["lang"])."', '400', '340');\">".$msg->read($EDT_APPEND)."</a>]</span>"
+							: "" ;
+
+						print("
+							<td rowspan=\"$rowspan\" valign=\"top\" align=\"center\" style=\"background-color:$color;\" onmouseover=\"style.backgroundColor='#FF9900';\" onmouseout=\"style.backgroundColor='$color';\">
+								$text<br/>$add
+							</td>
+							");
+
+						for ($k = 0; $k < $rowspan; $k++)
+							$plage[$i + $k][$j]++;
+						}
+
+				print("</tr>");
+				}
+		?>
+	      </table>
+
+</div>

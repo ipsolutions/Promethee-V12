@@ -1,0 +1,161 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2005-2007 by Dominique Laporte(C-E-D@wanadoo.fr)
+   Copyright (c) 2006 by Hugues Lecocq(hugues.lecocq@laposte.net)
+   Copyright (c) 2006 by Nordine Zetoutou (nordine.zetoutou@educagri.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : fil_visu.htm
+ *		projet   : la page de visualisation des annonces
+ *
+ *		version  : 1.1
+ *		auteur   : laporte
+ *		creation : 4/12/05
+ *		modif    : 15/06/06 - par hugues lecocq
+ *                     migration PHP5 
+ *		           17/07/06 - Nordine Zetoutou
+ * 	                 migration des balises HTML en XHTML 1.0 strict
+ */
+
+
+$submit = ( @$_POST["submit"] )		// bouton de validation
+	? $_POST["submit"]
+	: @$_GET["submit"] ;
+$IDfil  = ( @$_POST["IDfil"] )		// identifiant des fils
+	? $_POST["IDfil"]
+	: @$_GET["IDfil"] ;
+$year   = ( @$_POST["year"] )
+	? $_POST["year"]
+	: @$_GET["year"] ;
+$month  = ( @$_POST["month"] )
+	? $_POST["month"]
+	: @$_GET["month"] ;
+$day    = ( @$_POST["day"] )
+	? $_POST["day"]
+	: @$_GET["day"] ;
+?>
+
+
+<?php
+	require_once "include/smileys.php";
+	require_once "include/spip.php";
+
+	// seul le big chef peut supprimer une annonce
+	if ( $_SESSION["CnxAdm"] == 255 )
+		switch ( $submit ) {
+			case "del" :	// on efface l'annonce
+				if ( !mysql_query("delete from flash_fil where _IDfil = '$IDfil'", $mysql_link) )
+					mysql_error($mysql_link);
+				break;
+
+			default :
+				break;
+			}
+
+	// lecture des annonces
+	$query  = "select _IDfil, _ID, _IP, _IDflash, _date, _texte, _title, _img, _hit from flash_fil ";
+	$query .= "where _IDflash = '0' ";
+	$query .= "AND _date = '$year-$month-$day 00:00:00' ";
+	$query .= ( $_SESSION["CnxAdm"] == 255 ) ? "" : "AND (_IDgrp & ".pow(2, $_SESSION["CnxGrp"] -1).") " ;
+	$query .= "order by _IDfil desc";
+
+	$result = mysql_query($query, $mysql_link);
+	$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+	while ( $row ) {
+		mysql_query("update flash_fil set _hit = _hit +1 where _IDfil = '$row[0]'", $mysql_link);
+
+		$mydate = explode(" ", $row[4]);
+
+		// suppression des annonces
+		$req    = $msg->read($FIL_DELANNOUNCE);
+		$del    = ( $_SESSION["CnxAdm"] == 255 )
+			? "<a href=\"index.php?item=$item&amp;IDfil=$row[0]&amp;year=$year&amp;month=$month&amp;day=$day&amp;cmde=visu&amp;submit=del\" onclick=\"return confirmLink(this, '$req');\"><img src=\"".$_SESSION["ROOTDIR"]."/images/corb.gif\" title =\"$req\" alt=\"\" /></a>"
+			: "" ;
+
+		// modification des annonces
+		$maj    = ( $_SESSION["CnxAdm"] == 255 )
+			? "<a href=\"index.php?item=$item&amp;IDfil=$row[0]&amp;year=$year&amp;month=$month&amp;day=$day&amp;cmde=post\"><img src=\"".$_SESSION["ROOTDIR"]."/images/stats/post.gif\" title=\"".$msg->read($FIL_UPDTANNOUNCE)."\" alt=\"\" /></a>"
+			: "" ;
+
+		print("
+			<table class=\"width100\">
+			  <tr>
+			     <td colspan=\"4\" style=\"height:1px; background-color:#AAAAAA;\"></td>
+			     <td style=\"height:1px; width:5px; background-color:#FFFFFF;\"></td>
+			  </tr>
+			  <tr>
+			     <td style=\"width:1px; background-color:#AAAAAA;\"></td>
+			     <td rowspan=\"2\" colspan=\"2\" style=\"background-color:#F9F9F9;\">
+				<span class=\"large\" style=\"color:#FFBA27;\">&nbsp;<strong>$row[6]</strong></span> $maj $del<br/>
+				&nbsp;".$msg->read($FIL_SENTBY, Array(date2longfmt($mydate[0]), getUserName($row[1]), _getHostName($row[2])))." <span class=\"x-small\">".$msg->read($FIL_HIT, strval($row[8]))."</span>
+			     </td>
+			     <td style=\"width:1px; background-color:#AAAAAA;\"></td>
+			     <td style=\"width:5px; height:4px; background-color:#FFFFFF;\"></td>
+			  </tr>
+			  <tr>
+			     <td style=\"background-color:#AAAAAA; width:1px;\"></td>
+			     <td style=\"background-color:#AAAAAA; width:1px;\"></td>
+			     <td style=\"background-color:#F0F0F0; width:5px; height:23px;\"></td>
+			  </tr>
+			  <tr>
+			     <td style=\"width:1px ;background-color:#AAAAAA;\"></td>
+			     <td colspan=\"2\" style=\"height:1px; background-color:#AAAAAA;\"></td>
+			     <td style=\"width:1px; background-color:#AAAAAA;\"></td>
+			     <td style=\"background-color:#F0F0F0; width:5px;\"></td>
+			  </tr>
+			  <tr>
+			     <td style=\"width:1px; background-color:#AAAAAA;\"></td>
+			     <td colspan=\"2\" style=\"background-color:#FFFFFF;\">
+
+			      <table>
+			       <tr>
+				    <td style=\"width:1%\" class=\"valign-top\">
+					<img src=\"".$_SESSION["ROOTDIR"]."/images/spip/annonces/$row[7]\" title=\"\" alt=\"\" />
+				    </td>
+				    <td class=\"valign-top\">
+					". replace_smile(find_typo($row[5], $note)) ."
+				    </td>
+			       </tr>
+			      </table>
+
+			     </td>
+			     <td style=\"width:1px; background-color:#AAAAAA;\"></td>
+			     <td style=\"background-color:#F0F0F0; width:5px;\"></td>
+			  </tr>
+			  <tr>
+			     <td style=\"width:1px; background-color:#AAAAAA;\"></td>
+			     <td colspan=\"2\" style=\"height:1px; background-color:#AAAAAA;\"></td>
+			     <td style=\"width:1px; background-color:#AAAAAA;\"></td>
+			     <td style=\"background-color:#F0F0F0; width:5px;\"></td>
+			  </tr>
+			  <tr>
+			     <td style=\"background-color:#FFFFFF; width:1px; height:5px;\"></td>
+			     <td style=\"background-color:#FFFFFF; width:4px; height:5px;\"></td>
+			     <td style=\"background-color:#F0F0F0; width:538px; height:5px;\"></td>
+			     <td style=\"background-color:#F0F0F0; width:1px; height:5px;\"></td>
+			     <td style=\"background-color:#F0F0F0; width:5px; height:5px;\"></td>
+			  </tr>
+			</table><br/>
+			");
+
+		$row = remove_magic_quotes(mysql_fetch_row($result));
+		}
+?>

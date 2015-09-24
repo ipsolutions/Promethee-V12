@@ -1,0 +1,521 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2007-2008 by Dominique Laporte(C-E-D@wanadoo.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : ctn_agenda.htm
+ *		projet   : la page de visualisation des devoirs et contrôles
+ *
+ *		version  : 1.0
+ *		auteur   : laporte
+ *		creation : 24/11/07
+ *		modif    : 
+ */
+
+
+$IDcentre = ( @$_POST["IDcentre"] )				// Identifiant du centre
+	? (int) $_POST["IDcentre"]
+	: (int) (@$_GET["IDcentre"] ? $_GET["IDcentre"] : $_SESSION["CnxCentre"]) ;
+$IDclass  = ( strlen(@$_POST["IDclass"]) )		// sélection de la classe
+	? (int) $_POST["IDclass"]
+	: (int) (@$_GET["IDclass"] ? $_GET["IDclass"] : $_SESSION["CnxClass"]) ;
+$IDgroup  = ( @$_POST["IDgroup"] )				// ID du e-groupe
+	? (int) $_POST["IDgroup"]
+	: (int) @$_GET["IDgroup"] ;
+$year    = ( @$_POST["year"] )
+	? (int) $_POST["year"]
+	: (int) (@$_GET["year"] ? $_GET["year"] : date("Y")) ;
+$month   = ( strlen(@$_POST["month"]) )
+	? (int) $_POST["month"]
+	: (int) (strlen(@$_GET["month"]) ? $_GET["month"] : date("m") - 1) ;
+$day     = ( @$_POST["day"] )
+	? (int) $_POST["day"]
+	: (int) @$_GET["day"] ;
+$week    = ( @$_POST["week"] )
+	? (int) $_POST["week"]
+	: (int) @$_GET["week"] ;
+?>
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($CTN_LIST)); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+<?php
+	// vérification des droits
+	$query  = "select _IDmod, _IDgrprd, _IDctn from ctn ";
+	$query .= "where _IDclass = '$IDclass' AND _IDgroup = '$IDgroup' ";
+	$query .= "limit 1";
+
+	$result = mysql_query($query, $mysql_link);
+	$auth   = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+	// vérification des autorisations
+	if ( $IDclass )
+		verifySessionAccess($auth[0], $auth[1]);
+?>
+
+	<form id="formulaire" action="" method="post">
+
+		<hr style="width:80%;" />
+
+		<table class="width100">
+		  <tr>
+			<td style="width:50%;" class="align-right valign-middle">
+			    	<?php print($msg->read($CTN_CHOOSECLASS)); ?>
+			</td>
+			<td style="width:50%;">
+				<label for="IDclass">
+		  		<select id="IDclass" name="IDclass" onchange="document.forms.formulaire.submit()">
+					<option selected="selected" value="0">&nbsp;</option>
+				<?php
+					// affichage des classes
+					$query  = "select distinctrow ctn._IDclass, campus_classe._ident from ctn, campus_classe ";
+					$query .= "where campus_classe._visible = 'O' ";
+					$query .= "AND ctn._IDgroup = '$IDgroup' ";
+					$query .= "AND campus_classe._IDcentre = '$IDcentre' ";
+					$query .= "AND campus_classe._IDclass = ctn._IDclass ";
+
+					$result = mysql_query($query, $mysql_link);
+					$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+					while ( $row ) {
+						printf("<option value=\"$row[0]\" %s>$row[1]</option>", $IDclass == $row[0] ? "selected=\"selected\"" : "");
+
+						$row = remove_magic_quotes(mysql_fetch_row($result));
+						}
+				?>
+				</select> <img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/group.gif" title="" alt="" />
+				</label>
+			</td>
+		  </tr>
+		</table>
+
+		<hr style="width:80%;" />
+
+		<!-- liste des évènements sur l'année -->
+		<p style="margin:0px; background-color:#C0C0C0;">
+			<?php print($msg->read($CTN_LISTEVENTS)); ?>
+			<span style="cursor: pointer;" onclick="$('request')._display.toggle(); return false;"><img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/updown.png" title="" alt="" /></span>
+		</p>
+
+		<div id="request" style="display:none;">
+
+			<table class="width100">
+			  <tr>
+				<td style="width:14%;"></td>
+				<?php
+					$list = explode(",", $msg->read($CTN_MONTH));
+
+					for ($i=0; $i < count($list); $i++)
+						print("<td style=\"width:7%;\" class=\"align-center\">$list[$i]</td>");
+				?>
+			  </tr>
+
+		<?php
+			// lectures des années
+			$query   = "select distinctrow max(ctn_data._todo), min(ctn_data._todo) ";
+			$query  .= "from ctn_data, ctn_items ";
+			$query  .= "where ctn_data._IDitem = ctn_items._IDitem ";
+			$query  .= "AND ctn_items._IDctn = '$auth[2]' ";
+
+			$return  = mysql_query($query, $mysql_link);
+			$myrow   = ( $return ) ? mysql_fetch_row($return) : 0 ;
+
+			// construction du tableau
+			$y_end   = (int) substr($myrow[0], 0, 4);
+			$y_start = (int) substr($myrow[1], 0, 4);
+
+			for ($i = $y_end; $i AND $i >= $y_start; $i--) {
+				print("<tr>");
+
+				// suppression de l'année
+				$req  = $msg->read($CTN_DELYEAR);
+				$del  = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $idmod )
+					? ($IDclass
+						? "<a href=\"".myurlencode("index.php?item=$item&cmde=$cmde&IDclass=$IDclass&IDgroup=$IDgroup&year=$i&submit=clear")."\" onclick=\"return confirmLink(this, '$req');\"><img src=\"".$_SESSION["ROOTDIR"]."/images/corb.gif\" title=\"". $msg->read($CTN_ERASE) ."\" alt=\"\" /></a>"
+						: "")
+					: "" ;
+
+				print("<td style=\"width:14%;\" class=\"align-right\">$i $del</td>");
+
+				for ($m = 1; $m <= 12; $m++) {
+					// détermination du nombre des évènements
+					$query  = "select distinctrow ctn_data._IDdata ";
+					$query .= "from ctn_data, ctn_items ";
+					$query .= "where ctn_data._IDitem = ctn_items._IDitem ";
+					$query .= "AND (_todo between '$i-$m-01 00:00:01' AND '$i-$m-31 23:59:59') ";
+					$query .= "AND ctn_items._IDctn = '$auth[2]' ";
+
+					$res    = mysql_query($query, $mysql_link);
+					$nb     = ( $res ) ? mysql_affected_rows($mysql_link) : 0 ;
+
+					$mois   = $m - 1;
+					$link   = ( $nb )
+						? "<a href=\"".myurlencode("index.php?item=$item&cmde=$cmde&IDclass=$IDclass&IDgroup=$IDgroup&month=$mois&year=$i")."\">$nb</a>"
+						: "" ;
+
+					print("<td class=\"align-center\" style=\"width:7%;background-color:#eeeeee;\">$link</td>");
+           				}
+
+				print("</tr>");
+				}
+		?>
+
+			</table>
+		  </div>
+
+		<hr />
+
+	</form>
+
+<table class="width100">
+  <tr>
+     <td style="width:40%;" class="valign-top">
+
+	<form id="date" action="index.php" method="post">
+		<p class="hidden"><input type="hidden" name="item" value="<?php print("$item"); ?>" /></p>
+		<p class="hidden"><input type="hidden" name="cmde" value="<?php print("$cmde"); ?>" /></p>
+
+        <table class="width100">
+          <tr>
+            <td class="align-right">
+		<?php
+			// calcul mois et année précédente
+			$prev_month = ( $month ) ? $month - 1 : 11 ;
+			$prev_year  = ( $prev_month == 11 ) ? $year - 1 : $year ;
+
+			print("[<a href=\"".myurlencode("index.php?item=$item&cmde=$cmde&IDclass=$IDclass&IDgroup=$IDgroup&month=$prev_month&year=$prev_year")."\">«</a>]");
+
+			$mois = explode(",", $msg->read($CTN_MONTHFULL));
+
+			print("<label for=\"month\">");
+			print("<select id=\"month\" name=\"month\" onchange=\"document.forms.date.submit()\">");
+
+			for ($i = 0; $i < 12; $i++)
+				printf("<option value=\"$i\" %s>$mois[$i]</option>", ($i == $month) ? "selected=\"selected\"" : "");
+
+			print("</select>");
+			print("</label>");
+		?>
+            </td>
+
+            <td class="align-left">
+		<?php
+			$start = 2002;
+			$end   = $year + 2;
+
+			print("<label for=\"year\">");
+			print("<select id=\"year\" name=\"year\" onchange=\"document.forms.date.submit()\">");
+
+			for ($i = $start; $i <= $end; $i++)
+				printf("<option value=\"$i\" %s>$i</option>", $i == $year ? "selected=\"selected\"" : "");
+
+			print("</select>");
+			print("</label>");
+
+			// calcul mois et année suivante
+			$next_month = ( $month == 11 ) ? 0 : $month + 1 ;
+			$next_year  = ( $next_month ) ? $year : $year + 1;
+
+			print("[<a href=\"".myurlencode("index.php?item=$item&cmde=$cmde&IDclass=$IDclass&IDgroup=$IDgroup&month=$next_month&year=$next_year")."\">»</a>]");
+		?>
+            </td>
+          </tr>
+        </table>
+
+      </form>
+      <br/>
+
+      <table class="width100">
+        <tr style="background-color:<?php print($_SESSION["CfgColor"]); ?>">
+          <td style="width:9%;" class="align-center">&nbsp;</td>
+	<?php
+		$list = explode(",", $msg->read($CTN_DAYS));
+
+		for ($i=0; $i < count($list); $i++)
+			print("<td style=\"width:13%;\" class=\"align-center\"><span style=\"color:#FFFFFF;\"><strong>$list[$i]</strong></span></td>");
+	?>
+        </tr>
+
+	<?php
+		// nombre de jours dans le mois
+		$nbdays   = getmaxdays($year, $month + 1);
+
+		// n° semaine du mois
+		$weekday  = date("W", mktime(1, 1, 1, $month + 1, 1, $year));
+		if ( !$weekday )
+		    	$weekday = 1;
+
+		// 1er jour du mois
+		$firstday = date("w", mktime(1, 1, 1, $month + 1, 1, $year));
+		if ( !$firstday )
+		    	$firstday = 7;
+
+		// date du jour
+		if ( !$day )
+			if ( $year == date("Y") AND $month == date("m") - 1 )
+				$day = date("d");
+			else
+				$day = 1;
+
+		// construction du calendrier
+		$j    = 1;
+		$jour = 1;
+		while ( $jour <= $nbdays ) {
+			for ($i = 1; $i <= 7; $i++) {
+				if ( $i == 1 ) {
+					$wlink = "<a href=\"".myurlencode("index.php?item=$item&cmde=$cmde&IDclass=$IDclass&IDgroup=$IDgroup&year=$year&month=$month&day=$jour&week=$weekday")."\">". $weekday++ ."</a>";
+					print("<tr><td class=\"align-center\" style=\"background-color:#EEEEEE;\"><strong>$wlink</strong></td>");
+					}
+
+				// index du jour sélectionné
+				if ( $day == $jour )
+					$dayidx = $j % 7;
+
+				// date du calendrier
+				$lejour = ( $j >= $firstday AND $jour <= $nbdays ) ? $jour : 0 ;
+				$lemois = $month + 1;
+
+				$date   = ( $j >= $firstday AND $jour <= $nbdays )
+					? "<a href=\"".myurlencode("index.php?item=$item&cmde=$cmde&IDclass=$IDclass&IDgroup=$IDgroup&year=$year&month=$month&day=$jour")."\">". $jour++ ."</a>"
+					: "&nbsp;" ;
+				$j++;
+
+				// choix des couleurs
+				if ( $date == "&nbsp;" )
+					$color = "#EEEEEE";
+				else
+					if ( $year < date("Y") )
+						$color = "#C0C0C0";
+					else
+						if ( $year > date("Y") )
+							$color = "#FFFFFF";
+						else
+							if ( $month < date("m") - 1 )
+								$color = "#C0C0C0";
+							else
+								if ( $month > date("m") - 1 )
+									$color = "#FFFFFF";
+								else
+									if ( $jour <= date("d") )
+										$color = "#C0C0C0";
+									else
+										if ( $jour > date("d") + 1 )
+											$color ="#FFFFFF";
+										else
+											$color = "#FFCC66";
+
+				// sélection des évènements par jour (contrôles)
+				$query  = "select distinctrow ctn_data._IDdata ";
+				$query .= "from ctn_data, ctn_items ";
+				$query .= "where ctn_data._IDitem = ctn_items._IDitem ";
+				$query .= "AND (_todo between '$year-$lemois-$lejour 00:00:00' AND '$year-$lemois-$lejour 23:59:59') ";
+				$query .= "AND ctn_items._IDctn = '$auth[2]' ";
+				$query .= "AND ctn_data._type = '2'";
+
+				$result = mysql_query($query, $mysql_link);
+				$nbelem = ( $result ) ? mysql_numrows($result) : 0 ;
+
+				$haute  = ( $nbelem AND $date != "&nbsp;" )
+					? "<br/><img src=\"".$_SESSION["ROOTDIR"]."/images/H.gif\" title=\"\" alt=\"\" /><span class=\"x-small\">x$nbelem</span>"
+					: "" ;
+
+				// sélection des évènements par jour (devoirs)
+				$query  = "select distinctrow ctn_data._IDdata ";
+				$query .= "from ctn_data, ctn_items ";
+				$query .= "where ctn_data._IDitem = ctn_items._IDitem ";
+				$query .= "AND (_todo between '$year-$lemois-$lejour 00:00:00' AND '$year-$lemois-$lejour 23:59:59') ";
+				$query  .="AND ctn_items._IDctn = '$auth[2]' ";
+				$query .= "AND ctn_data._type = '1'";
+
+				$result = mysql_query($query, $mysql_link);
+				$nbelem = ( $result ) ? mysql_numrows($result) : 0 ;
+
+				$basse  = ( $nbelem AND $date != "&nbsp;" )
+					? "<br/><img src=\"".$_SESSION["ROOTDIR"]."/images/B.gif\" title=\"\" alt=\"\" /><span class=\"x-small\">x$nbelem</span>"
+					: "" ;
+
+				print("
+					<td class=\"valign-top align-center\" style=\"background-color:$color\" onmouseover=\"style.backgroundColor='#FF9900';\" onmouseout=\"style.backgroundColor='$color';\">
+						$date$haute$basse
+					</td>
+					");
+
+				if ( $i == 7 )
+					print("</tr>");
+				}
+
+			if ( $week == $weekday - 1 )
+				$fin = $jour;
+			}
+	?>
+      </table>
+    </td>
+
+    <td style="width:60%;" class="valign-top">
+	<?php
+    		//affichage de la date sélectionnée
+		$wday   = explode(",", $msg->read($CTN_DAYSFULL));
+		$isweek = ( $week ) ? $msg->read($CTN_WEEKOF)." " : "" ;
+		$lemois = $month + 1;
+
+		$list   = explode(",", $msg->read($CTN_TODO));
+
+    		print("
+    			$isweek<strong>$wday[$dayidx] $day $mois[$month] $year</strong> 
+    			[<a href=\"".myurlencode("index.php?item=$item&cmde=$cmde&IDclass=$IDclass&IDgroup=$IDgroup&year=".date("Y")."&month=".(date("m") - 1))."\">". $msg->read($CTN_TODAY) ."</a>]
+    			<br/><br/>
+    			");
+
+         	// lecture des évènements
+		$query  = "select distinctrow ";
+		$query .= "ctn_items._IDitem, ctn_items._IDmat, ctn_items._ID, ctn_items._IP, ctn._IDclass, ctn_items._title, ";
+		$query .= "ctn_data._type, ctn_data._todo, ctn_data._text ";
+		$query .= "from ctn, ctn_items, ctn_data ";
+		$query .= "where ctn_data._type ";
+		$query .= "AND ctn_items._IDitem = ctn_data._IDitem ";
+		$query .= "AND ctn_items._IDctn = '$auth[2]' ";
+		$query .= "AND ctn_items._IDctn = ctn._IDctn ";
+		$query .= ( $week )
+			? "AND ctn_data._todo < '$year-$lemois-$fin 00:00:00' "
+			: "AND ctn_data._todo <= '$year-$lemois-$day 23:59:59' " ;
+		$query .= "AND ctn_data._todo >= '$year-$lemois-$day 00:00:00' ";
+		$query .= "order by ctn_data._todo";
+
+		$result = mysql_query($query, $mysql_link);
+		$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+		while ( $row ) {
+			// lecture de l'expéditeur et de la station émettrice
+			$who    = getUserName($row[2]) . " " . _getHostName($row[3]);
+
+	         	// lecture de la matière
+			$query  = "select _titre from campus_data ";
+			$query .= "where _IDmat = '$row[1]' ";
+			$query .= "AND _lang = '".$_SESSION["lang"]."' ";
+			$query .= "limit 1";
+
+			$return = mysql_query($query, $mysql_link);
+			$matter = ( $return ) ? remove_magic_quotes(mysql_fetch_row($return)) : 0 ;
+
+	         	// lecture de la classe
+			$query  = "select _ident from campus_classe ";
+			$query .= "where _IDclass = '$row[4]' ";
+			$query .= "limit 1";
+
+			$return = mysql_query($query, $mysql_link);
+			$myrow  = ( $return ) ? remove_magic_quotes(mysql_fetch_row($return)) : 0 ;
+
+			$idx    = $row[6] - 1;
+			$img    = ( $idx ) ? "H.gif" : "B.gif" ;
+			$todo   = "<img src=\"".$_SESSION["ROOTDIR"]."/images/$img\" title=\"\" alt=\"\" /><br/>";
+			$todo  .= "<strong>$list[$idx]</strong>";
+
+			print("
+		            <table class=\"width100\">
+		              <tr style=\"background-color:#C0C0C0;\">
+		                <td class=\"valign-top align-right\" style=\"width:20%;\">
+		                  ".$msg->read($CTN_GETMATTER)."<br/>
+		                  ".$msg->read($CTN_GETCLASS)."<br/>
+	            	      ".$msg->read($CTN_AUTHOR)."<br/>
+	                  	".$msg->read($CTN_POSTED)."
+		                </td>
+		                <td class=\"valign-top align-left\" style=\"width:80%;\">
+	      	            $matter[0]<br/>
+		                  $myrow[0]<br/>
+		                  $who<br/>
+	            	      ". date2longfmt($row[7]) ."
+	      	          </td>
+	            	  </tr>
+
+				  <tr>
+				    <td style=\"border: 1px solid #c0c0c0;\" class=\"valign-top align-center\">
+					$todo
+				    </td>
+				    <td style=\"border: 1px solid #c0c0c0;\" class=\"valign-top\">
+					");
+
+	    		// le message
+			print("<strong>$row[5]</strong><br/>$row[8]");
+
+			print("
+	      	          </td>
+	            	  </tr>
+				");
+
+			// recherche des PJ
+			$res = mysql_query("select _IDpj, _title, _ext, _size from ctn_pj where _IDitem = '$row[0]' AND _type = '$row[6]'", $mysql_link);
+			$doc = ( $res ) ? remove_magic_quotes(mysql_fetch_row($res)) : 0 ;
+
+			if ( mysql_affected_rows($mysql_link) ) {
+				print("
+		            	  <tr>
+					    <td style=\"border: 1px solid #c0c0c0;\" class=\"valign-top align-center\">
+					    	<img src=\"".$_SESSION["ROOTDIR"]."/images/spip/pj.gif\" title=\"\" alt=\"\" />
+					    </td>
+
+					    <td style=\"border: 1px solid #c0c0c0;\" class=\"valign-middle\">");
+
+				while ( $doc ) {
+					// description
+					$desc  = $msg->read($CTN_SIZE, strval($doc[3]));
+
+					print("
+				    		<img src=\"".$_SESSION["ROOTDIR"]."/images/mime/$doc[2].gif\" title=\"\" alt=\"\" />
+				    		". $msg->read($CTN_ATTACHEDOC, Array("$DOWNLOAD/ctn/$doc[0].$doc[2]", $desc)) ."
+					    	<br/>
+						");
+
+					$doc = remove_magic_quotes(mysql_fetch_row($res));
+					}
+
+				print("
+					    </td>
+		            	  </tr>");
+				}
+
+			print("</table>");
+
+			$row = remove_magic_quotes(mysql_fetch_row($result));
+			}
+	?>
+
+    </td>
+  </tr>
+</table>
+
+<hr/>
+
+<table class="width100">
+  <tr>
+	<td style="width:10%;" class="valign-middle">
+		<?php print("<a href=\"index.php?item=$item&amp;IDclass=$IDclass&amp;IDgroup=$IDgroup\"><img src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/cancel.gif\" title=\"\" alt=\"".$msg->read($CTN_INPUTCANCEL)."\" /></a>"); ?>
+	</td>
+	<td class="valign-middle">
+		<?php print($msg->read($CTN_VISUALIZE)); ?>
+	</td>
+  </tr>
+</table>
+
+</div>

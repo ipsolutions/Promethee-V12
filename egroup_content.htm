@@ -1,0 +1,229 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2007-2008 by Dominique Laporte(C-E-D@wanadoo.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : egroup_content.htm
+ *		projet   : le menu des e-groupes
+ *
+ *		version  : 1.0
+ *		auteur   : laporte
+ *		creation : 24/02/07
+ *		modif    : 
+ */
+
+
+$IDegroup = ( @strlen(@$_POST["IDegroup"]) )		// ID du e-groupe
+	? (int) $_POST["IDegroup"]
+	: (int) (strlen(@$_GET["IDegroup"]) ? $_GET["IDegroup"] : $_SESSION["egroup"]) ;
+$IDmenu   = ( @$_POST["IDmenu"] )		// ID du menu
+	? (int) $_POST["IDmenu"]
+	: (int) @$_GET["IDmenu"] ;
+
+$submit   = (@$_POST["submit"] )			// bouton de validation
+	? $_POST["submit"]
+	: @$_GET["submit"] ;
+?>
+
+
+<?php
+	require_once "include/egroup.php";
+	require_once "include/user.php";
+
+	// gestion des ACL pour e-groupe privés
+	$acl = new user_acl("egroup");
+
+	// chargement de la langue
+	require "msg/egroup.php";
+	require_once "include/TMessage.php";
+
+	$msg = new TMessage($_SESSION["ROOTDIR"]."/msg/".$_SESSION["lang"]."/egroup.php");
+
+	$_SESSION["egroup"] = $IDegroup;
+
+	// recherche du modérateur du e-groupe
+	$query  = "select egroup_data._IDmod, egroup_data._private, egroup_data._auto, egroup._IDitem, egroup._IDparent, egroup._IDgroup ";
+	$query .= "from egroup_data, egroup ";
+	$query .= "where egroup_data._IDdata = '".$_SESSION["egroup"]."' ";
+	$query .= "AND egroup_data._IDgroup = egroup._IDgroup ";
+	$query .= "limit 1";
+
+	$result = mysql_query($query, $mysql_link);
+	$row    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+	// modérateur du e-groupe
+	$IDmod    = (int) @$row[0];
+	$ispriv   = @$row[1];
+	$isauto   = @$row[2];
+	$IDitem   = (int) @$row[3];
+	$IDparent = (int) @$row[4];
+	$IDgroup  = (int) @$row[5];
+
+	$menu     = 0;
+
+	// l'utilisateur à sélectionné des menus
+	switch ( $submit ) {
+		case "visible" :
+		case "invisible" :
+			$value = (int) @$_GET["egroup_value"];
+
+			if ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $IDmod ) {
+				$query  = "update egroup_data ";
+				$query .= ( $submit == "visible" ) ? "set _IDmenu = _IDmenu - $value " : "set _IDmenu = _IDmenu + $value " ;
+				$query .= "where _IDdata = '".$_SESSION["egroup"]."' ";
+				$query .= "limit 1";
+
+				mysql_query($query, $mysql_link);
+				}
+			break;
+		default :
+			break;
+		}
+
+	$mytext .= "
+		<form id=\"egroup\" action=\"index.php\" method=\"post\">
+			<p class=\"hidden\"><input type=\"hidden\" name=\"item\"     value=\"17\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"cmde\"     value=\"show\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"IDegroup\" value=\"$IDegroup\" /></p>";
+
+	// on sélectionne les e-groupes
+	$Query  = "select egroup_data._IDdata, egroup_data._ident, egroup_data._IDmenu ";
+	$Query .= "from egroup_data, egroup_user ";
+	$Query .= "where egroup_user._ID = '".$_SESSION["CnxID"]."' ";
+	$Query .= "AND egroup_user._access > 0 ";
+	$Query .= "AND egroup_data._IDdata = egroup_user._IDdata ";
+	$Query .= "order by egroup_data._ident";
+
+	$result = mysql_query($Query, $mysql_link);
+	$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+	$IDdata  = $row[0];
+	$mymenu  = $row[2];
+	$private = ( $ispriv == "O" AND $isauto == "O" AND ($_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $IDmod) )
+		? "<a href=\"".myurlencode("index.php?item=1&cmde=acl&ident=egroup&IDident=".$_SESSION["egroup"])."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/invisible.gif\" title=\"\" alt=\"\" /></a>"
+		: "" ;
+
+	$mytext .= "<div class=\"center\">
+			$private
+			<label for=\"IDegroup\">
+			<select 
+				id=\"IDegroup\" name=\"IDegroup\" 
+		            style=\"font-size: 11px; font-family: Arial\" 
+		            onchange=\"document.forms.egroup.submit()\">
+		            <option value=\"-1\" selected=\"selected\">".$msg->read($EGROUP_CHOOSEGROUP)."</option>";
+
+	while ( $row ) {
+		if ( $_SESSION["egroup"] == $row[0] ) {
+			$check = "selected=\"selected\"";
+			$menu  = $row[2];
+			}
+		else
+			$check = "";
+
+		$mytext .= "<option value=\"$row[0]\" $check>$row[1]</option>";
+
+		$row   = remove_magic_quotes(mysql_fetch_row($result));
+		}
+
+	// gestion des e-groupes par le webmaster ou le modérateur
+	$link = ( $IDegroup > 0 AND ($_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $IDmod) )
+		? "<a href=\"".myurlencode("index.php?item=17&cmde=new&IDitem=$IDitem&IDparent=$IDparent&IDdata=".$_SESSION["egroup"]."&IDgroup=$IDgroup")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/stats/post.gif\" title=\"".$msg->read($EGROUP_MODIFY)."\" alt=\"".$msg->read($EGROUP_MODIFY)."\" /></a>" 
+		: "<img src=\"".$_SESSION["ROOTDIR"]."/images/egroup.png\" title=\"\" alt=\"\" />" ;
+
+	$mytext .= "</select> $link
+			</label>
+			</div>";
+
+	// l'utilisateur a sélectionné un e-groupe
+	if ( (int) @$_SESSION["egroup"] > 0 ) {
+
+		$mytext .= "<hr style=\"width:80%;\" />";
+
+		$mytext .= "
+			<div class=\"menu\">
+				<img src=\"".$_SESSION["CfgPuce"]."\" title=\"\" alt=\"*\" />
+				<a href=\"index.php?item=17&amp;cmde=show&amp;IDitem=$IDitem&amp;IDdata=".$_SESSION["egroup"]."\">". $msg->read($EGROUP_HOME) ."</a>
+			</div>";
+
+		// lecture des modules autorisés
+		$query  = "select _IDmenu, _ident, _link, _backoffice from egroup_menu ";
+		$query .= "where _IDitem = '$IDitem' ";
+		$query .= "AND _visible = 'O' AND _lang = '".$_SESSION["lang"]."' ";
+		$query .= "order by _ident asc";
+
+		$result = mysql_query($query, $mysql_link);
+		$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+		$i = 1;
+		while ( $row ) {
+			$color = ( $i % 2 ) ? "item" : "menu" ;
+
+			// validation d'une rubrique
+			$image = ( $menu & pow(2, $row[0] - 1) ) ? "visible" : "invisible" ;
+
+			// message d'avertissement
+			$info  = ( $menu & pow(2, $row[0] - 1) )
+				? $msg->read($EGROUP_INVISIBLE)
+				: $msg->read($EGROUP_VISIBLE) ;
+
+			$href  = myurlencode("index.php?item=17&cmde=show&IDitem=$IDitem&IDdata=".$_SESSION["egroup"]."&egroup_value=".pow(2, $row[0] - 1)."&submit=$image");
+
+			// rendre un item visible/invisible
+			$icon  = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $IDmod )
+				? "<a href=\"$href\" onclick=\"return confirmLink(this, '$info');\"><img src=\"".$_SESSION["ROOTDIR"]."/images/$image.gif\" title=\"$info\" alt=\"$info\" /></a>"
+				: "<img src=\"".$_SESSION["CfgPuce"]."\" title=\"\" alt=\"*\" />" ;
+
+			// les rédacteurs ont accès à tous les menus (visibles et invisibles)
+			$link  = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $IDmod OR isegroupsRegistered($IDdata) OR $ispriv != "O" OR $acl->isMember($IDdata, $_SESSION["CnxID"]) )
+				? "<a href=\"".myurlencode("index.php?$row[2]&salon=::egroup_".$_SESSION["egroup"]."&IDgroup=".$_SESSION["egroup"])."\">$row[1]</a>"
+				: $row[1] ;
+
+			$tools = ( ($_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $IDmod) AND $row[3] == "O" )
+				? "<a href=\"".myurlencode("index.php?item=17&cmde=mvc&serv=".getServiceNumber($row[2]))."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/tools.gif\" title=\"\" alt=\"\" /></a>" 
+     		    		: "" ;
+
+//			if ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $IDmod OR ($mymenu & pow(2, $row[0] - 1)) ) {
+			if ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $IDmod OR ($menu & pow(2, $row[0] - 1)) ) {
+				$mytext .= "
+					<div class=\"$color\">
+						<div style=\"float:right;\">
+							$tools
+				        	</div>
+
+						$icon $link
+					</div>";
+
+				$i++;
+				}
+
+			$row   = remove_magic_quotes(mysql_fetch_row($result));
+			}
+
+		$color = ( $i++ % 2 ) ? "item" : "menu" ;
+
+		$mytext .= "
+			<div class=\"$color\">
+				<img src=\"".$_SESSION["CfgPuce"]."\" title=\"\" alt=\"*\" /> <a href=\"index.php?item=17&amp;IDegroup=-1\">".$msg->read($EGROUP_QUIT)."</a>
+			</div>";
+		}	// end if
+
+	$mytext .= "</form>";
+?>
+

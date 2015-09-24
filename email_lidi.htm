@@ -1,0 +1,415 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2007 by Dominique Laporte(C-E-D@wanadoo.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : email_lidi.htm
+ *		projet   : gestion des annuaires
+ *
+ *		version  : 1.0
+ *		auteur   : laporte
+ *		creation : 20/01/07
+ *		modif    : 
+ */
+
+
+$IDcentre = ( strlen(@$_POST["IDcentre"]) )		// Identifiant du centre
+	? (int) $_POST["IDcentre"]
+	: (int) $_SESSION["CnxCentre"] ;
+$IDlidi   = ( @$_POST["IDlidi"] )     			// identifiant de la liste de diffusion			
+	? (int) $_POST["IDlidi"]
+	: (int) @$_GET["IDlidi"] ; 
+$list     = addslashes(trim(@$_POST["list"]));     	// nom de la liste de diffusion			
+$public   = @$_POST["public"];				// item public de la liste de diffusion		
+$IDdst    = @$_POST["IDdst"];					// identifiant du groupe			
+$cb       = @$_POST["cb"];					// identifiants des mambres
+
+$submit   = ( @$_POST["valid_x"] )				// bouton de validation
+	? $_POST["valid_x"]
+	: @$_GET["valid"] ; 
+?>
+
+
+<?php
+	// initialisation
+	$error = 0;
+
+	// lecture des droits
+	$Query  = "select _IDgrpwr from postit ";
+	$Query .= "where _IDcentre = '".$_SESSION["CnxCentre"]."' ";
+	$Query .= "limit 1";
+
+	$result = mysql_query($Query, $mysql_link);
+	$auth   = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+	// vérification des autorisations
+	verifySessionAccess(0, $auth[0]);
+
+	// l'utilisateur a validé
+	if ( $submit )
+		switch ( $submit ) {
+			case "del" :
+				$query  = "delete from postit_lidi ";
+				$query .= "where _IDlidi = '$IDlidi' ";
+				$query .= "AND _ID = '".$_SESSION["CnxID"]."' ";
+				$query .= "limit 1";
+
+				mysql_query($query, $mysql_link);
+				break;
+
+			default :
+				// vérification saisie
+				$error = ( strlen($list) ) ? 0 : 1 ;
+
+				if ( !$error ) {
+					if ( $IDlidi ) {
+						$query  = "update postit_lidi ";
+						$query .= "set _nom = '$list', _public = '$public' ";
+						$query .= "where _IDlidi = '$IDlidi' ";
+						$query .= "limit 1";
+						}
+					else {
+						$query  = "insert into postit_lidi ";
+						$query .= "values('', '".$_SESSION["CnxID"]."', '$list', 'N', '$public', 'N')";
+						}
+
+					if ( mysql_query($query, $mysql_link) ) {
+						if ( !$IDlidi )
+							$IDlidi = mysql_insert_id();
+
+						mysql_query("delete from postit_address where _IDlidi = '$IDlidi' limit 1", $mysql_link);
+
+						for ($i = 0; $i < count($cb); $i++)
+							if ( @$cb[$i] )
+								mysql_query("insert into postit_address values('$IDlidi', '$cb[$i]')", $mysql_link);
+						}
+					else
+						sql_error($mysql_link);
+					}
+				break;
+			}
+
+	// initialisation
+	$result = mysql_query("select _nom, _public from postit_lidi where _IDlidi = '$IDlidi' limit 1", $mysql_link);
+	$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+	$list   = $row[0];
+	$public = ( $row[1] ) ? $row[1] : "N" ;
+?>
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($EMAIL_LIDI)); ?><br/>
+		<?php print($msg->read($EMAIL_FORMFEED)); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+
+	<form id="formulaire" action="index.php" method="post">
+	<?php
+		print("
+			<p class=\"hidden\"><input type=\"hidden\" name=\"item\"  value=\"$item\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"cmde\"  value=\"$cmde\" /></p>
+			");
+	?>
+
+        <table  class="width100">
+          <tr>
+            <td colspan="2">
+			<?php print($msg->read($EMAIL_CENTER)); ?>
+			<label for="IDcentre">
+		  	<select id="IDcentre" name="IDcentre" onchange="document.forms.formulaire.submit()">
+				<option value="0"><?php print($msg->read($EMAIL_ALLCENTER)); ?></option>
+				<?php
+					// lecture des centres constitutifs
+					$query  = "select _IDcentre, _ident from config_centre ";
+					$query .= "where _visible = 'O' AND _lang = '".$_SESSION["lang"]."' ";
+					$query .= "order by _IDcentre";
+
+					$result = mysql_query($query, $mysql_link);
+					$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+					while ( $row ) {			
+						if ( $IDcentre == $row[0] )
+							print("<option selected=\"selected\" value=\"$row[0]\">$row[1]</option>");
+						else
+							print("<option value=\"$row[0]\">$row[1]</option>");
+
+						$row = remove_magic_quotes(mysql_fetch_row($result));
+						}				
+				?>
+			</select> <img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/home.gif" title="" alt="" />
+			</label><br/>
+		<?php
+			// adresse professionnelle
+			$texte = "";
+
+			if ( $IDcentre ) {
+				$query  = "select _adresse, _tel, _fax, _web, _email from config_centre ";
+				$query .= "where _IDcentre = '$IDcentre' AND _lang = '".$_SESSION["lang"]."' limit 1";
+
+				$return = mysql_query($query, $mysql_link);
+				$row    = ( $return ) ? remove_magic_quotes(mysql_fetch_row($return)) : 0 ;
+
+				// si les coordonnées du centre ne sont as renseignées
+				// on prend celle de la plateforme
+				$adr    = ( $row[0] ) ?  $row[0] : $_SESSION["CfgAdr"] ;
+				$tel    = ( $row[0] ) ?  $row[1] : $_SESSION["CfgTel"] ;
+				$fax    = ( $row[0] ) ?  $row[2] : $_SESSION["CfgFax"] ;
+
+				$texte  = $adr;
+				$texte .= ( strlen($tel) ) ? "<br/><img src=\"".$_SESSION["ROOTDIR"]."/images/tel.gif\" title=\"\" alt=\"\" /> $tel" : "" ;
+				$texte .= ( strlen($fax) ) ? " - <img src=\"".$_SESSION["ROOTDIR"]."/images/fax.gif\" title=\"\" alt=\"\" /> $fax" : "" ;
+				}
+
+			print("$texte");
+		?>
+		</td>
+          </tr>
+
+          <tr>
+            <td colspan="2"><hr/></td>
+          </tr>
+
+          <tr>
+            <td colspan="2" style="background-color:#cecece;">
+			<strong>.</strong> <?php print($msg->read($EMAIL_LIST)); ?>
+			<label for="IDlidi">
+		  	<select id="IDlidi" name="IDlidi" onchange="document.forms.formulaire.submit()">
+				<option value="0"><?php print($msg->read($EMAIL_NEWLIST)); ?></option>
+				<?php
+					$query  = "select _IDlidi, _nom from postit_lidi ";
+					$query .= "where _ID = '".$_SESSION["CnxID"]."' ";
+					$query .= "order by _nom";
+
+					$result = mysql_query($query, $mysql_link);
+					$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+					while ( $row ) {			
+						if ( $IDlidi == $row[0] )
+							print("<option selected=\"selected\" value=\"$row[0]\">$row[1]</option>");
+						else
+							print("<option value=\"$row[0]\">$row[1]</option>");
+
+						$row = remove_magic_quotes(mysql_fetch_row($result));
+						}
+
+					$delete = ( $IDlidi )
+						? "<a href=\"".myurlencode("index.php?item=$item&cmde=$cmde&IDlidi=$IDlidi&valid=del")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/corb.gif\" title=\"\" alt=\"\" /></a>"
+						: "" ;
+
+				?>
+			</select> <?php print("$delete"); ?>
+			</label>
+		</td>
+          </tr>
+
+	<?php
+		// saisie de la liste
+		if ( $error )
+			print("    
+			    <tr>
+			   	   <td style=\"text-align: justify;\" class=\"valign-middle\" colspan=\"2\">
+			   	     <span style=\"color:#FF0000;\">". $msg->read($EMAIL_ERRLIST) ."</span>
+				   </td>
+			    </tr>
+			    	");
+	?>
+
+          <tr>
+            <td style="width:30%;" class="align-rigght"><?php print($msg->read($EMAIL_NAMELIST)); ?></td>
+            <td style="width:70%;">
+		<?php
+			print("<label for=\"list\"><input type=\"text\" id=\"list\" name=\"list\" size=\"40\" value=\"$list\" /></label>");
+		?>
+		</td>
+          </tr>
+
+          <tr>
+            <td class="align-right"><?php print($msg->read($EMAIL_PUBLICLIST)); ?></td>
+            <td>
+			<label for="public">
+			<?php
+				if ( $public == "O" )
+					print("<input type=\"checkbox\" id=\"public\" name=\"public\" value=\"O\" checked=\"checked\" />");
+				else
+					print("<input type=\"checkbox\" id=\"public\" name=\"public\" value=\"O\" />");
+			?>
+			<?php print($msg->read($EMAIL_PUBLICUSE)); ?>
+			</label>
+		</td>
+          </tr>
+        </table>
+
+        <table  class="width100">
+          <tr>
+            <td colspan="2" style="background-color:#cecece;">
+			<strong>.</strong> <?php print($msg->read($EMAIL_LISTMEMBERS)); ?>
+			<label for="IDdst">
+		  	<select id="IDdst" name="IDdst" onchange="document.forms.formulaire.submit()">
+				<option value="0"><?php print($msg->read($EMAIL_ALLMEMBERS)); ?></option>
+				<?php
+					// recherche des groupes de l'établissement
+					$query  = "select _IDgrp, _ident from user_group ";
+					$query .= "where _visible = 'O' AND _lang = '".$_SESSION["lang"]."' ";
+					$query .= "AND _IDcat = '2' ";
+					$query .= "order by _ident";
+
+					$result = mysql_query($query, $mysql_link);
+					$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+					while ( $row ) {			
+						if ( $IDdst == $row[0] )
+							print("<option selected=\"selected\" value=\"$row[0]\">$row[1]</option>");
+						else
+							print("<option value=\"$row[0]\">$row[1]</option>");
+
+						$row = remove_magic_quotes(mysql_fetch_row($result));
+						}				
+				?>
+			</select>
+			</label>
+			<?php
+				// connexion P2P
+				$connect = "";
+
+				// recherche du serveur
+				$result  = mysql_query("select _server from p2p where _visible = 'O' limit 1", $mysql_link);
+				$row     = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+				if ( $row )
+					print(" | <span style=\"border:#000000 solid 1px; padding: 0 5px 0 5px; background-color:#ffffff;\" >
+						<a href=\"$row[0]/server.php?cmde=share_user&amp;lang=".$_SESSION["lang"]."\" onclick=\"window.open(this.href, '_blank'); return false;\" >
+							".$msg->read($EMAIL_CONNECTION)."
+						</a>
+						</span>");
+			?>
+            </td>
+          </tr>
+
+	<?php
+		// sélection des utilisateurs
+		// excepté les utilisateurs en liste brûlée ou anonyme
+		$query  = "select distinctrow ";
+		$query .= "user_id._ID, user_id._name, user_id._IDgrp, user_id._title, user_id._fonction, user_id._email, user_id._IDcentre, user_id._tel, user_id._adr1, user_id._cp, user_id._city, user_id._adr2, ";
+		$query .= "user_group._ident ";
+		$query .= "from user_id, user_group ";
+		$query .= "where user_id._adm AND user_id._sexe != 'A' ";
+		$query .= "AND user_group._IDgrp = user_id._IDgrp ";
+		$query .= "AND user_group._lang = '".$_SESSION["lang"]."' ";
+		$query .= ( $IDcentre ) ? "AND user_id._IDcentre = '$IDcentre' " : "" ;
+		$query .= ( $IDdst ) ? "AND user_id._IDgrp = '$IDdst' " : "" ;
+		$query .= "order by user_id._name, user_id._fname";
+
+		$result = mysql_query($query, $mysql_link);
+		$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+		$i = 0;
+		while ( $row ) {
+			if ( getAccess($row[2]) == 2 ) {
+				if ( $i++ % 2 == 0 )
+					print("<tr class=\"valign-top\">");
+
+				// adresse professionnelle
+				$query  = "select _ident, _web from config_centre ";
+				$query .= "where _IDcentre = '$row[6]' AND _lang = '".$_SESSION["lang"]."' ";
+				$query .= "limit 1";
+
+				$return = mysql_query($query, $mysql_link);
+				$myrow  = ( $return ) ? remove_magic_quotes(mysql_fetch_row($return)) : 0 ;
+
+				// site internet du centre
+				$web    = ( $myrow[1] )
+					? "<a href=\"http://$myrow[1]\" onclick=\"window.open(this.href, '_blank'); return false;\">$myrow[0]</a>"
+					: $myrow[0] ;
+
+				// adresse électronique
+				$mailto = ( $row[5] )
+					? "<a href=\"mailto:$row[5]\"><img src=\"".$_SESSION["ROOTDIR"]."/images/email.gif\" title=\"$row[5]\" alt=\"$row[5]\" /></a>"
+					: "" ;
+
+				// envoie de post-it
+				$postit = getUserName($row[0]);
+
+				if ( $IDlidi ) {
+					mysql_query("select _IDlidi from postit_address where _IDlidi = '$IDlidi' AND _ID = '$row[0]'", $mysql_link);
+					$check = ( mysql_affected_rows($mysql_link) ) ? "checked=\"checked\"" : "" ;
+					}
+				else
+					$check = "";
+
+				print("
+					<td style=\"width:50%;\" class=\"item\">
+						<label for=\"cb_$row[0]\"><input type=\"checkbox\" id=\"cb_$row[0]\" name=\"cb[]\" value=\"$row[0]\" $check /></label>
+						<img src=\"".$_SESSION["ROOTDIR"]."/images/smiley/$row[2].gif\" title=\"$row[12]\" alt=\"$row[12]\" /> $postit $mailto
+						<table class=\"x-small\">
+							<tr>
+								<td style=\"white-space: nowrap;\">". $msg->read($EMAIL_CENTER) ."</td><td>$web</td>
+							</tr>
+							<tr>
+								<td style=\"white-space: nowrap;\">". $msg->read($EMAIL_TITLE) ."</td><td>$row[3]</td>
+							</tr>
+							<tr>
+								<td style=\"white-space: nowrap;\">". $msg->read($EMAIL_FUNCTION) ."</td><td>$row[4]</td>
+							</tr>
+							<tr>
+								<td style=\"white-space: nowrap;\">". $msg->read($EMAIL_PHONE) ."</td><td>$row[7]</td>
+							</tr>
+							<tr>
+								<td style=\"white-space: nowrap;\">". $msg->read($EMAIL_ADDRESS) ."</td><td>$row[8]<br/>$row[11]<br/>$row[9] $row[10]</td>
+							</tr>
+						</table>
+					</td>
+					");
+
+				if ( $i % 2 == 0 )
+					print("</tr>");
+				}
+
+			$row = remove_magic_quotes(mysql_fetch_row($result));
+			}
+
+		if ( $i % 2 )
+			print("
+				  <td style=\"width:50%;\"></td>
+				</tr>
+				");
+	?>
+
+          <tr>
+            <td colspan="2"><hr/></td>
+          </tr>
+        </table>
+
+        <table  class="width100">
+          <tr>
+            <td style="width:10%;" class="valign-middle">
+			<?php print("<input type=\"image\" src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/valid.gif\" name=\"valid\" alt=\"".$msg->read($EMAIL_INPUTOK)."\" />"); ?>
+		</td>
+            <td style="width:90%;" class="valign-middle">
+			<?php print($msg->read($EMAIL_VALIDATE)); ?>
+		</td>
+          </tr>
+        </table>
+
+      </form>
+</div>

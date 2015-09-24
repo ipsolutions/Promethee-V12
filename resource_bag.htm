@@ -1,0 +1,269 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2009 by Dominique Laporte(C-E-D@wanadoo.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : resource_bag.htm
+ *		projet   : la page du cartable électronique
+ *
+ *		version  : 1.0
+ *		auteur   : laporte
+ *		creation : 28/02/09
+ *		modif    : 
+ */
+
+
+$submit = ( @$_POST["valid_x"] )		// bouton de validation
+	? $_POST["valid_x"]
+	: (@$_POST["del_x"]			// bouton de suppression
+		? "delete"
+		: @$_GET["submit"]) ;
+?>
+
+
+<?php
+	// initialisation
+	$fzip    = "tmp/".$_SESSION["CnxID"].".gz";
+	$zipfile = ( file_exists($fzip) )
+		? "<br/>" . $msg->read($RESOURCE_ZIPFILE, $fzip)
+		: "" ;
+
+	if ( $submit )
+		switch ( $submit ) {
+			case "delzip" :	// suppression fichier compressé
+				if ( unlink($fzip) )
+					$zipfile = "";
+				break;
+
+			case "delete" :	// suppression ressource
+				$cb = @$_POST["rm"];
+
+				for ($i = 0; $i < count($cb); $i++)
+					if ( @$cb[$i] ) {
+						$query  = "delete from resource_bag ";
+						$query .= "where _IDitem = '$cb[$i]' ";
+						$query .= "limit 1";
+
+						mysql_query($query, $mysql_link);
+						}
+				break;
+
+			default :
+				switch ( @$_POST["action"]) {
+					case 0 :	// export zip
+						require "lib/lib_zip.php";
+
+						$zip  = new zipfile();
+						$file = @$_POST["file"];
+
+						for ($i = 0; $i < count($file); $i++)
+							if ( @$file[$i] )
+								$zip->addFile(implode("", file($file[$i])), basename($file[$i])); 
+
+/*
+//    $f = gzopen ("test.gz", 'w' );
+//    gzwrite ( $f, file_get_contents($cb[$i]), filesize($cb[$i]) );
+//    gzclose ( $f );
+*/
+
+						$f = fopen ($fzip, "w");
+						if ( fwrite ($f, $zip->file()) )
+							$zipfile = "<br/>" . $msg->read($RESOURCE_ZIPFILE, $fzip);
+						fclose ($f );
+
+/*
+						$n = str_replace(" ","_",basename($zipdir) .".zip");
+						header( "Content-name: $n " );
+						header("Content-Disposition: inline; filename=$n");
+						header("Content-type: application/x-zip");
+						echo $zip->file();
+*/
+					break;
+
+					case 1 :	// copie ETP
+						$size   = 0;
+						$date   = date("Y-m-d-H-i-s");
+
+						$query  = "select _IDetp, _maxsize, _size from etp ";
+						$query .= "where _IDmod = '".$_SESSION["CnxID"]."' ";
+						$query .= "AND _IDgrp = '0' ";
+						$query .= "limit 1";
+
+						$result = mysql_query($query, $mysql_link);
+						$myrow  = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+						//---- lecture de la base de données ----
+						$Query  = "select _title, _file ";
+						$Query .= "from resource_bag ";
+						$Query .= "where _ID = '".$_SESSION["CnxID"]."' " ;
+						$Query .= "order by _IDitem" ;
+
+						$result = mysql_query($Query, $mysql_link);
+						$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+						while ( $row ) {
+							$file  = basename($row[1]);
+							$fsize = filesize(urldecode($row[1]));
+							
+							// ajout dans la base de données
+							$Query  = "insert into etp_items ";
+							$Query .= "values('', '0', '$myrow[0]', '1', '$date', '$date', '".$_SESSION["CnxIP"]."', '".$_SESSION["CnxID"]."', '0', '".$_SESSION["CnxGrp"]."', '".$_SESSION["CnxGrp"]."', '". addslashes($row[0]) ."', '$file', '$fsize', '1', '', '', 'N', 'O')";
+
+							if ( $myrow[2] + $fsize + $size <= $myrow[1] ) 
+								if ( mysql_query($Query, $mysql_link) )
+									if ( copy($row[1], "$DOWNLOAD/etp/".$_SESSION["CnxID"]."/0-$file") )
+										$size += $fsize;
+
+							$row = remove_magic_quotes(mysql_fetch_row($result));
+							}	// endwhile ressource
+
+						// attention à l'espace disque
+						$Query  = "update etp ";
+						$Query .= "set _size = _size + '$size' ";
+						$Query .= "where _IDetp = '$myrow[0]' ";
+						$Query .= "limit 1";
+
+						mysql_query($Query, $mysql_link);
+						break;
+
+					default :
+						break;
+					}
+				break;
+			}
+?>
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<strong><?php print($msg->read($RESOURCE_SCHOOLBAG)); ?></strong>
+	</div>
+</div>
+
+<div class="maincontent">
+
+	<form id="formulaire" action="index.php" method="post">
+	<?php
+		print("
+			<p class=\"hidden\"><input type=\"hidden\" name=\"item\"  value=\"$item\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"cmde\"  value=\"$cmde\" /></p>");
+
+		//---- lecture de la base de données ----
+		$Query  = "select _IDitem, _date, _title, _file ";
+		$Query .= "from resource_bag ";
+		$Query .= "where _ID = '".$_SESSION["CnxID"]."' " ;
+		$Query .= "order by _IDitem" ;
+
+		$result = mysql_query($Query, $mysql_link);
+		$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+		$nbrow  = ( $result ) ? mysql_numrows($result) : 0 ;
+
+		$msg->isPlural = (bool) ( $nbrow > 1 );
+
+		// suppression fichier compressé
+		$zipfile .= ( strlen($zipfile) )
+			? "<a href=\"".myurlencode("index.php?item=$item&cmde=$cmde&submit=delzip")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/corb.gif\" title=\"". $msg->read($RESOURCE_DELFILE) ."\" alt=\"". $msg->read($RESOURCE_DELFILE) ."\" /></a>"
+			: "" ;
+
+		print("<p style=\"text-align:justify;\">". $msg->read($RESOURCE_DOCINBAG, strval($nbrow)) ."$zipfile</p>");
+
+		// suppression des ressources
+		$delete = "<input type=\"image\" src=\"".$_SESSION["ROOTDIR"]."/images/corb.gif\" name=\"del\" title=\"". $msg->read($RESOURCE_DELFILE) ."\" alt=\"". $msg->read($RESOURCE_DELFILE) ."\" />";
+
+		// entête tableau
+		print("
+	            <table class=\"width100\">
+	              <tr style=\"background-color:#c0c0c0;\">
+	                <td style=\"width:1%;\" class=\"align-center\"><img src=\"".$_SESSION["ROOTDIR"]."/images/visible.gif\" title=\"\" alt=\"\" /></td>
+	                <td style=\"width:58%;\">". $msg->read($RESOURCE_DOCTITLE) ."</td>
+	                <td style=\"width:20%;\" class=\"align-center\">". $msg->read($RESOURCE_DATE) ."</td>
+	                <td style=\"width:20%;\" class=\"align-center\">". $msg->read($RESOURCE_SIZE) ."</td>
+	                <td style=\"width:1%;\" class=\"align-center\">$delete</td>
+	              </tr>
+	              ");
+
+		$i = 0;
+		while ( $row ) {
+			$bgcol = ( $i++ % 2 ) ? "item" : "menu" ;
+
+			// extraction de l'icone
+			$ext   = extension($row[3]);
+
+			// lecture de l'icone associée à l'extension
+			if ( mysql_query("select _ext from config_mime where _ext = '$ext'", $mysql_link) )
+				if ( !mysql_affected_rows($mysql_link) )
+					$ext = "-";
+
+			// accès protégé en lecture
+			print("
+				<tr class=\"$bgcol\">
+		              <td class=\"align-center\"><img src=\"".$_SESSION["ROOTDIR"]."/images/mime/$ext.gif\" title=\"$ext\" alt=\"$ext\" /></td>
+     		    		  <td>
+	    		  		<a href=\"$row[3]\" onclick=\"window.open(this.href, '_blank'); return false;\" >$row[2]</a>
+					<input type=\"hidden\" name=\"file[]\" value=\"".urldecode($row[3])."\" />
+     		    		  </td>
+	       	        <td class=\"x-small align-center\">".date2longfmt($row[1])."</td>
+	   			  <td class=\"align-center\">". number_format(filesize(urldecode($row[3])), 0, ",", " ") ."</td>
+			        <td class=\"align-center\">
+					<label for=\"rm_$row[0]\"><input type=\"checkbox\" id=\"rm_$row[0]\" name=\"rm[]\" value=\"$row[0]\" /></label>
+				  </td>
+				</tr>
+				");
+
+			$row = remove_magic_quotes(mysql_fetch_row($result));
+			}	// endwhile ressource
+
+		print("</table>");
+	?>
+
+	<hr/>
+
+	<?php
+		$query  = "select _IDetp from etp ";
+		$query .= "where _IDmod = '".$_SESSION["CnxID"]."' ";
+		$query .= "AND _IDgrp = '0' ";
+		$query .= "limit 1";
+
+		$result = mysql_query($Query, $mysql_link);
+		$isetp  = ( $result ) ? mysql_numrows($result) : 0 ;
+
+		print("<p style=\"margin-top:0px;\">". $msg->read($RESOURCE_WHATODO) ."<br/>");
+
+		$list = explode(",", $msg->read($RESOURCE_BAGACTION));
+
+		for ($i = 0; $i < count($list); $i++) {
+			$checked  = ( $i ) ? "" : "checked=\"checked\"" ;
+			$disabled = ( !$nbrow OR ($i AND !$isetp)) ? "disabled=\"disabled\"" : "" ;
+
+           		print("<label for=\"action_$i\"><input type=\"radio\" id=\"action_$i\" name=\"action\" value=\"$i\" $checked $disabled />$list[$i]</label><br/>");
+			}
+
+		print("</p>");
+	?>
+
+	<hr/>
+
+	<div>
+		<?php print("<input type=\"image\" src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/valid.gif\" name=\"valid\" alt=\"".$msg->read($RESOURCE_INPUTOK)."\" />"); ?>
+	</div>
+
+	</form>
+
+</div>

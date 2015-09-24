@@ -1,0 +1,597 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2003-2007 by Dominique Laporte(C-E-D@wanadoo.fr)
+   Copyright (c) 2006 by Didier Roy (miraceti@free.fr)
+   Copyright (c) 2006 by Nordine Zetoutou (nordine.zetoutou@educagri.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : spip_post.htm
+ *		projet   : la page de saisie des publications par internet
+ *
+ *		version  : 1.1
+ *		auteur   : laporte
+ *		creation : 14/09/03
+ *		modif    : 20/06/06 - par Didier Roy
+ * 		           migration PHP5
+ *		           17/07/06 - Nordine Zetoutou
+ * 	                 migration des balises HTML en XHTML 1.0 strict
+ */
+
+
+$IDinfos = ( @$_POST["IDinfos"] )				// ID de l'information
+	? (int) $_POST["IDinfos"]
+	: (int) @$_GET["IDinfos"] ;	
+$IDflash = ( @$_POST["IDflash"] )				// ID du flash
+	? (int) $_POST["IDflash"]
+	: (int) @$_GET["IDflash"] ; 
+$IDitem  = ( @$_POST["IDitem"] )				// ID de l'article
+	? (int) $_POST["IDitem"]
+	: (int) @$_GET["IDitem"] ; 
+$edit    = ( strlen(@$_POST["edit"]) )			// mode d'édition : basique ou avancé
+	? (int) $_POST["edit"]
+	: (int) (strlen(@$_GET["edit"]) ? $_GET["edit"] : $WYSIWYG) ;
+
+$titre   = addslashes(trim(@$_POST["titre"]));		// titre de la publi
+$article = addslashes(trim(@$_POST["article"]));	// titre de l'article de la publi
+$texte   = addslashes(trim(@$_POST["texte"]));		// texte de l'article
+$align   = @$_POST["align"];					// alignement du titre de la publi
+$color   = @$_POST["color"];					// couleur du fond du titre de l'article
+$color2  = @$_POST["color2"];					// couleur du fond du texte de l'article
+
+$submit  = ( @$_POST["submit"] )				// bouton de validation
+	? $_POST["submit"]
+	: @$_GET["submit"] ; 
+?>
+
+
+<script src="script/ckeditor/ckeditor.js"></script>
+
+
+<?php
+	// initialisation du statut et des erreurs
+	$status = $Query = "";
+	$error1 = $error2 = $error3 = "";
+
+	// l'utilisateur a cliqué sur un lien
+	switch ( $submit ) {
+		case "NewRub" :	// ajout d'une nouvelle rubrique
+			// initialisation des contrôles
+			$IDinfos = 0;
+
+			// et on enchaîne...
+
+		case "NewItem" :	// ajout d'un nouvel article dans une rubrique
+			$IDitem  = -1;
+			break;
+
+		case "Supprimer" :
+			$status = $msg->read($SPIP_DELETE) ." ";
+
+			$Query  = "DELETE from flash_items ";
+			$Query .= "where _IDitem = '$IDitem' ";
+
+			if ( !mysql_query($Query, $mysql_link) ) { 
+				$status .= "<img src=\"".$_SESSION["ROOTDIR"]."/images/bad.gif\" title=\"\" alt=\"\" />";
+				sql_error($mysql_link);
+				}
+			else {
+				$status .= "<img src=\"".$_SESSION["ROOTDIR"]."/images/ok.gif\" title=\"\" alt=\"\" />";
+				$IDitem  = 0;
+				}
+			break;
+
+		case "Setvisible" :		// valider l'article
+		case "Setinvisible" :	// ne pas valider l'article
+			$status = $msg->read($SPIP_MODIFICATION) ." ";
+
+			$Query  = "UPDATE flash_items ";
+			$Query .= "set _visible = " . (( $submit == "Setinvisible" ) ? "'O' " : "'N' ");
+			$Query .= "where _IDitem = '$IDitem' ";
+
+			if ( !mysql_query($Query, $mysql_link) ) { 
+				$status .= "<img src=\"".$_SESSION["ROOTDIR"]."/images/bad.gif\" title=\"\" alt=\"\" />";
+				sql_error($mysql_link);
+				}
+			else
+				$status .= "<img src=\"".$_SESSION["ROOTDIR"]."/images/ok.gif\" title=\"\" alt=\"\" />";
+			break;
+
+		case "Valider" :
+			if ( @$_POST["valid_x"] ) {
+				// on récupère la date pour maj
+				$date = date("Y-m-d H:i:s");
+
+				// obsolète
+				$c = $e = $r = "";
+
+				// si c'est une nouvelle rubrique => on enregistre
+				if ( !$IDinfos ) {
+					// vérification de la saisie
+					if ( !strlen($titre) )
+						$error1 = "<span style=\"color:#FF0000\">". $msg->read($SPIP_ERRTITLE) ."</span>";
+
+					// insertion d'une nouvelle rubrique dans la base de données
+					if ( $error1 == "" ) {
+						// les élèves ne valident jamais les posts
+						$isvalid = ( getAccess() == 2 ) ? "O" : "N" ;
+
+						$Query   = "INSERT INTO flash_data ";
+						$Query  .= "VALUES ('', '$IDflash', '$date', '$date', '".$_SESSION["CnxID"]."', '".$_SESSION["CnxIP"]."', '$titre', '$align', '$color', '', '', 'O', '0', '$isvalid')";
+
+						if ( !mysql_query($Query, $mysql_link) )
+							sql_error($mysql_link);
+						else
+							$IDinfos = mysql_insert_id();
+						}
+					}
+				// sinon on effectue la mise à jour
+				else { 
+					// seuls les modérateurs peuvent modifier leurs rubriques
+					$Query  = "UPDATE flash_data ";
+					$Query .= "SET _align = '$align', _color = '$color'";
+					$Query .= ( strlen($titre) ) ? ", _title = '$titre' " : " " ;
+					$Query .= "where _IDinfos = '$IDinfos' ";
+					$Query  .= "limit 1";
+
+					if ( !mysql_query($Query, $mysql_link) )
+						sql_error($mysql_link);
+					}
+
+				// si c'est un nouvel article => on enregistre
+				if ( !$IDitem ) {
+					$status = $msg->read($SPIP_INSERTION) ." ";
+
+					// vérification de la saisie
+					if ( !strlen($article) )
+						$error2 = "<span style=\"color:#FF0000\">". $msg->read($SPIP_ERRTITLE2) ."</span>";
+					if ( !strlen($texte) )
+						$error3 = "<span style=\"color:#FF0000\">". $msg->read($SPIP_ERRTEXT) ."</span>";
+
+					// insertion d'un nouvel article dans la base de données
+					if ( $IDinfos AND $error1 == "" AND $error2 == "" AND $error3 == "" ) {
+						// mode SPIP ou WYSIWYG
+						$raw     = ( $edit ) ? "N" : "O" ;
+
+						// les élèves ne valident jamais les posts
+						$isvalid = ( getAccess() == 2 ) ? "O" : "N" ;
+
+						$Query   = "INSERT INTO flash_items ";
+						$Query  .= "VALUES ('', '$IDinfos', '$date', '$date', '".$_SESSION["CnxID"]."', '".$_SESSION["CnxIP"]."', '$article', '$texte', '$raw', '$c', '$e', '$r', '$color2', '', '0', '$isvalid')";
+
+						if ( !mysql_query($Query, $mysql_link) )
+							sql_error($mysql_link);
+						else {
+							$IDitem = mysql_insert_id();
+
+							mysql_query("update flash_items set _order = '$IDitem' limit 1", $mysql_link);
+							}
+						}
+					}
+				// ou on effectue la mise à jour
+				else { 
+					$status = $msg->read($SPIP_MODIFICATION) ." ";
+
+					// seuls les propriétaires peuvent modifier leurs articles
+					$Query  = "UPDATE flash_items ";
+					$Query .= "SET _modif = '$date', _IP = '".$_SESSION["CnxIP"]."', _c = '$c', _e = '$e', _r = '$r', _color = '$color2' ";
+					$Query .= ( strlen($article) ) ? ", _title = '$article' " : " " ;
+					$Query .= ( strlen($texte) )   ? ", _texte = '$texte' "   : " " ;
+					$Query .= "where _IDitem = '$IDitem' ";
+					$Query  .= "limit 1";
+
+					if ( !mysql_query($Query, $mysql_link) )
+						sql_error($mysql_link);
+					}
+
+				// icone du statut
+				$status .= ( $IDinfos AND $error1 == "" AND $error2 == "" AND $error3 == "" )
+					? "<img src=\"".$_SESSION["ROOTDIR"]."/images/ok.gif\" title=\"\"  alt=\"\" />"
+					: "<img src=\"".$_SESSION["ROOTDIR"]."/images/bad.gif\" title=\"\" alt=\"\" />" ;
+
+				// on revient sur l'article en cours
+//				$IDitem  = 0;
+				}
+			break;
+
+		case "UpdRub" :		// modification du titre de la rubrique
+		case "UpdItem" :		// modification du titre de l'article
+			// seuls les modérateurs peuvent modifier leurs rubriques
+			$Query  = ( $submit == "UpdRub" )
+				? "UPDATE flash_data "
+				: "UPDATE flash_items " ;
+			$Query .= "SET _modif = '". date("Y-m-d H:i:s", time()) ."' ";
+			$Query .= "where _IDinfos = '$IDinfos' ";
+
+			if ( !mysql_query($Query, $mysql_link) )
+				sql_error($mysql_link);
+			break;
+
+		case "Modifier" :		// modification générale
+			break;
+
+		default :
+			break;
+		}
+
+	// nbr d'articles dans la rubrique
+	if ( !strlen($status) ) {
+		$Query   = "select _IDitem from flash_items ";
+		$Query  .= "where _IDinfos = '$IDinfos' ";
+
+		$result  = mysql_query($Query, $mysql_link);
+		$nbrec   = ( $result ) ? mysql_numrows($result) : 0 ;
+
+		// initialisation des contrôles
+		$msg->isPlural = (bool) ( $nbrec > 1 );
+		$status  = $msg->read($SPIP_NBARTICLE, strval($nbrec));
+		}
+
+	// sélection de la rubrique
+	$Query   = "select _title, _align, _color from flash_data ";
+	$Query  .= "where _IDinfos = '$IDinfos' ";
+	$Query  .= "limit 1";
+
+	$result  = mysql_query($Query, $mysql_link);
+	$row     = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+	$titre   = $row[0];
+	$align   = ( $row[1] ) ? $row[1] : "G" ;
+	$color   = ( $row[2] ) ? $row[2] : "" ;
+
+	// sélection de l'article
+	$Query   = "select _title, _texte, _color, _IDitem, _ID, _visible, _e, _c, _r, _raw from flash_items ";
+	$Query  .= ( $IDitem ) ? "where _IDitem = '$IDitem' " : "where _IDinfos = '$IDinfos' " ;
+	$Query  .= ( $IDitem ) ? "" : "order by _IDitem asc limit 1" ;
+
+	$result  = mysql_query($Query, $mysql_link);
+	$row     = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+	$article = $row[0];
+	$texte   = $row[1];
+	$color2  = ( $row[2] ) ? $row[2] : "" ;
+	$IDitem  = $row[3];
+	$IDmod   = $row[4];
+	$visible = $row[5];
+
+	$e       = $row[6];
+	$c       = $row[7];
+	$r       = $row[8];
+
+	$raw     = $row[9];
+
+	// initialisation des checkbox
+	$check[0] = ( $e == "ON" ) ? "checked=\"checked\"" : "" ;
+	$check[1] = ( $c == "ON" ) ? "checked=\"checked\"" : "" ;
+	$check[2] = ( $r == "ON" ) ? "checked=\"checked\"" : "" ;
+
+	// lecture de la base de données des publications
+	$result = mysql_query("select _title, _IDmod from flash where _IDflash = '$IDflash' AND _visible = 'O'", $mysql_link);
+	$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+	// modérateur de la publi
+	$owner  = $row[1];
+?>
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($SPIP_FORMITEM, $row[0])); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+
+		<table class="width100">
+		  <tr>
+		    <td class="align-left"><?php print($msg->read($SPIP_AUTHOR)." ".$_SESSION["CnxName"]); ?></td>
+		    <td class="align-right"><?php print($msg->read($SPIP_STATUS)." $status"); ?></td>
+		  </tr>
+
+		    <tr>
+		      <td style="height:10px;">&nbsp;</td>
+		    </tr>
+		</table>
+
+            <form id="formulaire" action="index.php" method="post">
+		<?php
+			print("
+				<p class=\"hidden\"><input type=\"hidden\" name=\"item\"    value=\"$item\"/></p>
+				<p class=\"hidden\"><input type=\"hidden\" name=\"cmde\"    value=\"$cmde\" /></p>
+				<p class=\"hidden\"><input type=\"hidden\" name=\"IDflash\" value=\"$IDflash\" /></p>
+				<p class=\"hidden\"><input type=\"hidden\" name=\"IDinfos\" value=\"$IDinfos\" /></p>
+				<p class=\"hidden\"><input type=\"hidden\" name=\"IDitem\"  value=\"$IDitem\" /></p>
+				<p class=\"hidden\"><input type=\"hidden\" name=\"edit\"    value=\"$edit\" /></p>
+				<p class=\"hidden\"><input type=\"hidden\" name=\"submit\"  value=\"Valider\" /></p>
+				");
+		?>
+
+              <table class="width100">
+                <tr>
+                  <td style="background-color:#eeeeee;">
+                    <?php print($msg->read($SPIP_TOPICTITLE)." $error1"); ?>
+                  </td>
+                  <td style="background-color:#eeeeee;" class="align-right">
+			  <?php print("[ <a href=\"index.php?item=$item&amp;IDflash=$IDflash&amp;IDinfos=$IDinfos&amp;cmde=visu\">". $msg->read($SPIP_VISUALIZE) ."</a> ]"); ?>
+                  </td>
+                </tr>
+
+                <tr>
+                  <td colspan="2">
+                  <?php
+                  	if ( $IDinfos AND $submit != "UpdRub" ) {
+                  		$create = "
+                  			<a href=\"index.php?item=$item&amp;cmde=$cmde&amp;IDflash=$IDflash&amp;IDinfos=$IDinfos&amp;submit=NewRub\">
+                  			<img src=\"".$_SESSION["ROOTDIR"]."/images/spip/data.gif\" title=\"". $msg->read($SPIP_NEWTOPIC) ."\" alt=\"". $msg->read($SPIP_NEWTOPIC) ."\" />
+                  			</a>";
+
+                  		$update = "
+                  			<a href=\"index.php?item=$item&amp;cmde=$cmde&amp;IDflash=$IDflash&amp;IDinfos=$IDinfos&amp;submit=UpdRub\">
+                  			<img src=\"".$_SESSION["ROOTDIR"]."/images/spip/update.gif\" title=\"". $msg->read($SPIP_UPDTOPIC) ."\" alt=\"". $msg->read($SPIP_UPDTOPIC) ."\" />
+                  			</a>";
+
+					print("<label for=\"IDinfos\">");
+					print("<select id=\"IDinfos\" name=\"IDinfos\" onchange=\"document.forms.formulaire.submit()\">");
+
+					// recherche des rubriques
+					$query  = "select _IDinfos, _title, _ID from flash_data ";
+					$query .= "where _IDflash = '$IDflash' ";
+					$query .= "order by _IDinfos asc";
+
+					$result = mysql_query($query, $mysql_link);
+					$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+					while ( $row ) {
+						$select = ( $IDinfos == $row[0] ) ? "selected=\"selected\"" : "" ;
+
+						// seul le propriétaire peut modifier son article
+						if ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $owner OR $_SESSION["CnxID"] == $row[2] )
+							print("<option value=\"$row[0]\" $select>$row[1]</option>");
+
+						$row = remove_magic_quotes(mysql_fetch_row($result));
+						}
+
+	                  	print("</select> $create $update");
+	                  	print("</label>");
+                    		}
+                  	else
+	                  	print("<label for=\"titre\"><input type=\"text\" id=\"titre\" name=\"titre\" size=\"40\" value=\"$titre\" /></label>");
+                  ?>
+                  </td>
+                </tr>
+
+		    <tr>
+                  <td colspan="2">
+				<?php print($msg->read($SPIP_ALIGN)); ?> 
+				<label for="align_G"><input type="radio" id="align_G" name="align" value="G" <?php print($align == "G" ? "checked=\"checked\"" : ""); ?> /><?php print($msg->read($SPIP_LEFT)); ?></label>
+	                 	<label for="align_C"><input type="radio" id="align_C" name="align" value="C" <?php print($align == "C" ? "checked=\"checked\"" : ""); ?> /><?php print($msg->read($SPIP_CENTER)); ?></label>
+				<label for="align_D"><input type="radio" id="align_D" name="align" value="D" <?php print($align == "D" ? "checked=\"checked\"" : ""); ?> /><?php print($msg->read($SPIP_RIGHT)); ?></label>					 	
+                  </td>
+                </tr>
+
+		    <tr>
+                  <td colspan="2">
+			 	<?php print($msg->read($SPIP_BACKGROUND)); ?>
+		               <label for="color_1"><input type="radio" id="color_1" name="color" value="#FFFFFF" <?php print($color == "#FFFFFF" ? "checked=\"checked\"" : ""); ?> /><img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/forum/0.png" title="" alt ="" /></label>
+		               <label for="color_2"><input type="radio" id="color_2" name="color" value="#808000" <?php print($color == "#808000" ? "checked=\"checked\"" : ""); ?> /><img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/forum/3.png" title="" alt ="" /></label>
+		               <label for="color_3"><input type="radio" id="color_3" name="color" value="#FFFF00" <?php print($color == "#FFFF00" ? "checked=\"checked\"" : ""); ?> /><img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/forum/7.png" title="" alt ="" /></label>
+		               <label for="color_4"><input type="radio" id="color_4" name="color" value="#00FF00" <?php print($color == "#00FF00" ? "checked=\"checked\"" : ""); ?> /><img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/forum/8.png" title="" alt ="" /></label>
+		               <label for="color_5"><input type="radio" id="color_5" name="color" value="#00FFFF" <?php print($color == "#00FFFF" ? "checked=\"checked\"" : ""); ?> /><img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/forum/9.png" title="" alt ="" /></label>
+		               <label for="color_6"><input type="radio" id="color_6" name="color" value="#FF00FF" <?php print($color == "#FF00FF" ? "checked=\"checked\"" : ""); ?> /><img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/forum/10.png" title="" alt ="" /></label>
+		               <label for="color_7"><input type="radio" id="color_7" name="color" value="#C0C0C0" <?php print($color == "#C0C0C0" ? "checked=\"checked\"" : ""); ?> /><img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/forum/11.png" title="" alt ="" /></label>
+		               <label for="color_8"><input type="radio" id="color_8" name="color" value="#FF0000" <?php print($color == "#FF0000" ? "checked=\"checked\"" : ""); ?> /><img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/forum/12.png" title="" alt ="" /></label>
+		               <label for="color_9"><input type="radio" id="color_9" name="color" value="#008080" <?php print($color == "#008080" ? "checked=\"checked\"" : ""); ?> /><img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/forum/14.png" title="" alt ="" /></label>
+                  </td>
+                </tr>
+
+		    <tr>
+		      <td colspan="2" style="height:15">&nbsp;</td>
+		    </tr>
+              </table>
+
+              <table class="width100">
+                <tr>
+                  <td style="width:100%;background-color:#eeeeee;">
+                    <?php print($msg->read($SPIP_ITEMTITLE)." $error2"); ?>
+                  </td>
+                </tr>
+
+                <tr>
+                  <td style="width:100%;">
+                  <?php
+                  	if ( $IDitem AND $submit != "UpdItem" ) {
+                  		$add   = "
+                  			<a href=\"index.php?item=$item&amp;cmde=$cmde&amp;IDflash=$IDflash&amp;IDinfos=$IDinfos&amp;submit=NewItem\">
+                  			<img src=\"".$_SESSION["ROOTDIR"]."/images/spip/item.gif\" title=\"". $msg->read($SPIP_CREATITEM) ."\" alt=\"". $msg->read($SPIP_CREATITEM) ."\" />
+                  			</a>";
+
+                  		$update = "
+                  			<a href=\"index.php?item=$item&amp;cmde=$cmde&amp;IDflash=$IDflash&amp;IDinfos=$IDinfos&amp;submit=UpdItem\">
+                  			<img src=\"".$_SESSION["ROOTDIR"]."/images/spip/update.gif\" title=\"". $msg->read($SPIP_UPDTITEM) ."\" alt=\"". $msg->read($SPIP_UPDTITEM) ."\" />
+                  			</a>";
+
+					// suppression de l'article
+					$req    = $msg->read($SPIP_DELITEM);
+					$delete = "
+						<a href=\"index.php?item=$item&amp;cmde=$cmde&amp;IDflash=$IDflash&amp;IDinfos=$IDinfos&amp;IDitem=$IDitem&amp;submit=Supprimer\" onclick=\"return confirmLink(this, '$req');\">
+						<img src=\"".$_SESSION["ROOTDIR"]."/images/spip/corb.gif\" title=\"$req\" alt=\"$req\" />
+						</a>";
+
+					// validation d'une rubrique
+					$image  = ( $visible == 'O' ) ? "visible" : "invisible" ;
+
+					// message d'avertissement
+					$req    = ( $visible == 'O' )
+						? $msg->read($SPIP_NOSHOWITEM)
+						: $msg->read($SPIP_SHOWITEM) ;
+
+					// action sur le lien
+					$valide = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $IDmod )
+						? "<a href=\"index.php?item=$item&amp;cmde=$cmde&amp;IDflash=$IDflash&amp;IDinfos=$IDinfos&amp;IDitem=$IDitem&amp;submit=Set$image\" onclick=\"return confirmLink(this, '$req');\"><img src=\"".$_SESSION["ROOTDIR"]."/images/$image.gif\" alt=\"\"  /></a>"
+						: "" ;
+
+					print("<label for=\"IDitem\">");
+					print("<select id=\"IDitem\" name=\"IDitem\" onchange=\"document.forms.formulaire.submit()\">");
+
+					// recherche des articles
+					$query  = "select _IDitem, _title from flash_items ";
+					$query .= "where _IDinfos = '$IDinfos' ";
+					$query .= "order by _IDitem asc";
+
+					$result = mysql_query($query, $mysql_link);
+					$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+					while ( $row ) {
+						$select = ( $IDitem == $row[0] ) ? "selected=\"selected\"" : "" ;
+
+						print("<option value=\"$row[0]\" $select>$row[1]</option>");
+
+						$row = remove_magic_quotes(mysql_fetch_row($result));
+						}
+
+	                  	print("</select> $add $update $delete $valide");
+	                  	print("</label>");
+                    		}
+                  	else
+	                  	print("<label for=\"article\"><input type=\"text\" id=\"article\" name=\"article\" size=\"40\" value=\"$article\" /></label>");
+                  ?>
+                  </td>
+                </tr>
+
+		      <tr>
+			 <td style="width:100%;">
+			 	<?php print($msg->read($SPIP_BACKGROUND)); ?>
+		               <label for="color2_1"><input type="radio" id="color2_1" name="color2" value="#FFFFFF" <?php print($color2 == "#FFFFFF" ? "checked=\"checked\"" : ""); ?> /><img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/forum/0.png" title="" alt ="" /></label>
+		               <label for="color2_2"><input type="radio" id="color2_2" name="color2" value="#808000" <?php print($color2 == "#808000" ? "checked=\"checked\"" : ""); ?> /><img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/forum/3.png" title="" alt ="" /></label>
+		               <label for="color2_3"><input type="radio" id="color2_3" name="color2" value="#FFFF00" <?php print($color2 == "#FFFF00" ? "checked=\"checked\"" : ""); ?> /><img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/forum/7.png" title="" alt ="" /></label>
+		               <label for="color2_4"><input type="radio" id="color2_4" name="color2" value="#00FF00" <?php print($color2 == "#00FF00" ? "checked=\"checked\"" : ""); ?> /><img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/forum/8.png" title="" alt ="" /></label>
+		               <label for="color2_5"><input type="radio" id="color2_5" name="color2" value="#00FFFF" <?php print($color2 == "#00FFFF" ? "checked=\"checked\"" : ""); ?> /><img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/forum/9.png" title="" alt ="" /></label>
+		               <label for="color2_6"><input type="radio" id="color2_6" name="color2" value="#FF00FF" <?php print($color2 == "#FF00FF" ? "checked=\"checked\"" : ""); ?> /><img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/forum/10.png" title="" alt ="" /></label>
+		               <label for="color2_7"><input type="radio" id="color2_7" name="color2" value="#C0C0C0" <?php print($color2 == "#C0C0C0" ? "checked=\"checked\"" : ""); ?> /><img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/forum/11.png" title="" alt ="" /></label>
+		               <label for="color2_8"><input type="radio" id="color2_8" name="color2" value="#FF0000" <?php print($color2 == "#FF0000" ? "checked=\"checked\"" : ""); ?> /><img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/forum/12.png" title="" alt ="" /></label>
+		               <label for="color2_9"><input type="radio" id="color2_9" name="color2" value="#008080" <?php print($color2 == "#008080" ? "checked=\"checked\"" : ""); ?> /><img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/forum/14.png" title="" alt ="" /></label>
+      		 </td>
+	    	  </tr>
+
+		    <tr>
+		      <td style="height:15px;"></td>
+		    </tr>
+              </table>
+              
+              <table class="width100">
+                <tr>
+                  <td class="valign-bottom" style="background-color:#eeeeee;">
+			<?php
+				// une fois un texte saisi dans un certain mode, il n'est plus possible d'en changer
+				if ( $raw ) {
+					$edit    = ( $raw == "O" ) ? 0 : 1 ;
+					$editor  = ( $raw == "O" ) ? $msg->read($SPIP_BASIC) : $msg->read($SPIP_ADVANCED) ;
+					}
+				else {
+					$toggle  = (int) ! $edit;
+					$editor  = "<a href=\"index.php?item=$item&amp;cmde=$cmde&amp;IDflash=$IDflash&amp;IDinfos=$IDinfos&amp;edit=$toggle&amp;submit=$submit\">";
+					$editor .= ( $edit ) ? $msg->read($SPIP_SWAPBASIC) : $msg->read($SPIP_SWAPADVANCED) ;
+					$editor .= "</a>";
+					}
+
+				print("".$msg->read($SPIP_ITEMTEXT)." [$editor] <strong>$error3 &nbsp;</strong>");
+			?>
+                  </td>
+                  <td class="valign-bottom align-right" style="background-color:#eeeeee;">
+			<?php
+				if ( !$edit )
+					print("
+						". $msg->read($SPIP_TYPO) ."
+						<a href=\"#\" onclick=\"popWin('".$_SESSION["ROOTDIR"]."/spip_typo.php?lang=".$_SESSION["lang"]."', '450', '350'); return false;\">
+						<img src=\"".$_SESSION["ROOTDIR"]."/images/spip/aide.gif\" title=\"".$msg->read($SPIP_HELP)."\" alt=\"".$msg->read($SPIP_HELP)."\" />
+						</a>
+						");
+			?>
+                  </td>
+                </tr>
+
+                <tr>
+                  <td colspan="2" class="valign-top">
+			<?php
+				if ( $edit ) {
+					/*$oFCKeditor           = new FCKeditor("texte") ;
+					$oFCKeditor->BasePath = "./script/fckeditor/";
+					$oFCKeditor->Height   = 500;
+					$oFCKeditor->Value    = $texte;
+					$oFCKeditor->Create() ;*/
+					?>
+						<textarea name="texte" id="texte"><?php echo $texte; ?></textarea>
+						<script>
+						CKEDITOR.replace('texte');
+						</script>
+					<?php
+					}
+				else
+					print("<label for=\"texte\"><textarea rows=\"20\" id=\"texte\" name=\"texte\" cols=\"60\">$texte</textarea></label>");
+			?>
+                  </td>
+                </tr>
+
+                <tr>
+                  <td colspan="2">
+                  <?php
+				if ( !$edit ) {
+					// affichage des smileys d'édition
+					$result = mysql_query("select _code, _ident from smileys where _type = 'T'", $mysql_link);
+					$smile  = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+					while ( $smile ) {
+						print("
+							<img src=\"".$_SESSION["ROOTDIR"]."/images/smiley/forum/$smile[1].gif\" title=\" code: $smile[0] \" alt=\" code: $smile[0] \" 
+							onclick=\"Javacript:ajoutsmile('$smile[0]')\" style=\"cursor: hand;\" />
+							");
+				
+						$smile = ( $result ) ? mysql_fetch_row($result) : 0 ;
+						}
+					}
+			?>
+                  </td>
+                </tr>
+              </table>
+
+	         <table class="width100">
+		    <tr>
+			<td colspan="2"><hr style="width:80%;" /></td>
+		    </tr>
+	           <tr>
+	              <td style="width:10%;" class="valign-middle align-center">
+	              	<?php print("<input type=\"image\" src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/valid.gif\" name=\"valid\" alt=\"".$msg->read($SPIP_INPUTOK)."\" />"); ?>
+	              </td>
+	              <td class="valign-middle">
+	              	<?php print($msg->read($SPIP_VALID)); ?>
+	              </td>
+	           </tr>
+	           <tr>
+	              <td class="valign-middle align-center">
+	              	<?php print("<a href=\"index.php?item=$item&amp;cmde=visu&amp;IDflash=$IDflash\"><img src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/cancel.gif\" title=\"\" alt=\"".$msg->read($SPIP_INPUTCANCEL)."\" /></a>"); ?>
+	              </td>
+	              <td class="valign-middle">
+	              	<?php print($msg->read($SPIP_QUIT)); ?>
+	              </td>
+	           </tr>
+	         </table>
+                
+            </form>
+
+</div>

@@ -1,0 +1,123 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2002-2007 by Dominique Laporte(C-E-D@wanadoo.fr)
+   Copyright (c) 2006 by Didier Roy (miraceti@free.fr)
+   Copyright (c) 2006 by Nordine Zetoutou (nordine.zetoutou@educagri.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : campus_breve.htm
+ *		projet   : la page de visualisation des dépêches
+ *
+ *		version  : 1.1
+ *		auteur   : laporte
+ *		creation : 20/03/04
+ *		modif    : 08/06/06 - par Didier Roy
+ *		           migration PHP5  
+ *		modif    : 17/07/06 - Nordine Zetoutou
+ * 	                 migration des balises HTML en XHTML 1.0 strict
+ */
+
+
+$IDmat = ( strlen(@$_POST["IDmat"]) )	// ID de la matière
+	? (int) $_POST["IDmat"]
+	: (int) @$_GET["IDmat"] ;
+$img   = @$_POST["img"];			// le thème
+?>
+
+
+<?php
+	// si le flash n'existe pas on le cré automatiquement
+	$result = mysql_query("select _IDflash, _IDgrp from flash where _title = '".$_SESSION["CampusName"]."'", $mysql_link);
+	$row    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+	if ( !$row ) {
+		$now     = date("Y-m-d H:i:s");
+		$IDgrpwr = pow(2, $_SESSION["CnxGrp"] - 1);
+
+		$Query   = "insert into flash ";
+		$Query  .= "values('', '0', '".$_SESSION["CnxID"]."', '$IDgrpwr', '$IDgrpwr', '255', '$now', 'O', '".$_SESSION["CampusName"]."', 'G', '', 'campus.htm', 'B', 'N', 'O', 'O', 'O', '0', 'O', 'O', 'N', '".$_SESSION["lang"]."')";
+
+		$result  = mysql_query($Query, $mysql_link);
+		$IDflash = ( $result ) ?mysql_insert_id() : 0 ;
+		}
+	else {
+		$IDflash = $row[0];
+		$IDgrpwr = $row[1];
+		}
+?>
+
+	<form id="formulaire" action="" method="post">
+
+	<table class="width100">
+	  <tr style="background-color:#c0c0c0;">
+		<td class="align-left">
+			<label for="img">
+			<select id="img" name="img" onchange="document.forms.formulaire.submit()">
+				<option value=""><?php print($msg->read($CAMPUS_ALLTHEMES)); ?></option>
+			<?php
+				// recherche des thèmes
+				$myDir = @opendir("images/spip/annonces");
+
+				// lecture du répertoire
+				while ( $entry = readdir($myDir) )
+					switch ( extension($entry) ) {
+						case "png" :
+						case "gif" :
+						case "jpg" :
+							if ( $img == $entry )
+								print("<option selected=\"selected\" value=\"$entry\">$entry</option>");
+							else
+								print("<option value=\"$entry\">$entry</option>");
+							break;
+
+						default :
+							break;
+						}
+
+				closedir($myDir);
+			?>
+			</select>
+			</label>
+		</td>
+		<td class="align-right">
+		<?php
+			if ( $_SESSION["CnxAdm"] == 255 OR ($IDgrpwr & pow(2, $_SESSION["CnxGrp"] - 1)) ) 
+				print("[<a href=\"index.php?item=6&amp;IDmat=$IDmat&amp;IDflash=$IDflash&amp;cmde=add\">".$msg->read($CAMPUS_ADDANNOUNCE)."</a>]");
+		?>
+		</td>
+	  </tr>
+	</table>
+
+	</form>
+
+	<hr/>
+
+      <?php
+		// on affiche les brèves s'il y en a
+		$query  = "select _IDbreve from flash_breve ";
+		$query .= "where _IDflash = '$IDflash' ";
+		$query .= ( $img ) ? "AND _img = '$img' " : "" ;
+		$query .= ( $_SESSION["CnxClass"] ) ? "AND _IDgrp like '% ".$_SESSION["CnxClass"]." %' " : "" ;
+		$query .= "limit 1";
+
+		mysql_query($query, $mysql_link);
+		if ( mysql_affected_rows($mysql_link) )
+			require "spip_breve.php";
+      ?>

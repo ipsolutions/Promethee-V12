@@ -1,0 +1,127 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2010 by Dominique Laporte(C-E-D@wanadoo.fr)
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : gallery_ftp_show.htm
+ *		projet   : la page de défilement des images
+ *
+ *		version  : 1.0
+ *		auteur   : laporte
+ *		creation : 3/10/10
+ *		modif    : 
+ */
+?>
+
+
+<script type="text/javascript" src="script/defil.js"></script>
+
+<div class="maincontent">
+
+	<table class="width100">
+	  <tr>
+		<?php
+			// défilement des images
+			$next = ( $nbitem == $total )
+				? $msg->read($GALLERY_NEXT)
+				: "<a href=\"".myurlencode("index.php?item=$item&IDgroup=$IDgroup&IDitem=$IDitem&IDgal=$IDgal&IDdata=$IDdata&sort=$sort&skpage=$skpage&skshow=$skshow&cmde=$cmde&submit=next")."\">". $msg->read($GALLERY_NEXT) ."</a>" ;
+			$prev = ( $nbitem == 1 )
+				? $msg->read($GALLERY_PREV)
+				: "<a href=\"".myurlencode("index.php?item=$item&IDgroup=$IDgroup&IDitem=$IDitem&IDgal=$IDgal&IDdata=$IDdata&sort=$sort&skpage=$skpage&skshow=$skshow&cmde=$cmde&submit=prev")."\">". $msg->read($GALLERY_PREV) ."</a>" ;
+			$back = "<a href=\"".myurlencode("index.php?item=$item&cmde=visu&IDgroup=$IDgroup&IDgal=$IDgal&IDdata=$IDdata&sort=$sort&skpage=$skpage&skshow=$skshow")."\">". $msg->read($GALLERY_BACKROOT) ."</a>";
+
+			print("<td style=\"width:33%;\">[$back]</td>");
+			print("<td style=\"width:33%;\" class=\"align-center\"><strong>$nbitem/$total</strong></td>");
+			print("<td style=\"width:33%;\" class=\"align-right\">[$prev]<strong>.</strong>[$next]</td>");
+		?>
+	  </tr>
+	</table>
+
+	<hr style="width:80%;" />
+
+	<table class="width100">
+	  <tr>
+	    <td colspan="2">
+		<div id="mod_defil" class="mod_defil">
+		<div id="support"   class="support_xl">
+		<div id="contenu"   class="contenu_xl">
+
+		<table class="table_defil">
+           	  <tr> 
+         		<?php
+				// lecture des vignettes
+
+				$width  = 0;
+	            		$path   = "download/galerie/$IDdata/vignettes";
+
+				while ( $row ) {
+
+
+						print("
+							<td class=\"defil\">
+								<a href=\"".myurlencode("index.php?item=$item&IDgroup=$IDgroup&IDgal=$IDgal&IDdata=$IDdata&IDitem=$row[1]&skpage=$skpage&skshow=$skshow&cmde=show")."\">
+								<img src=\"$path/".strtolower(stripaccent($row[0]))."\" title=\"$row[0]\" alt=\"\" class=\"image\" height=\"$height\" />
+								</a>
+							</td>
+							");
+
+						$row = remove_magic_quotes(mysql_fetch_row($result));
+						}
+				?>
+		  </tr>
+		</table>
+
+		</div>
+		</div>
+
+			<div class="navi_left">
+				<span class="pointer" onmouseover="javascript:moveLayerLeft(1, 20, <?php echo $width; ?>);" onmouseout="javascript:clearTimeout(Timer);">&laquo;&laquo;</span>
+				<span>&nbsp;&nbsp;&nbsp;</span>
+				<span class="pointer" onmouseover="javascript:moveLayerLeft(1, 5, <?php echo $width; ?>);" onmouseout="javascript:clearTimeout(Timer);">&laquo;</span>
+			</div>
+
+			<div class="navi_right">
+				<span class="pointer" onmouseover="javascript:moveLayerLeft(-1, 5, <?php echo $width; ?>);" onmouseout="javascript:clearTimeout(Timer);">&raquo;</span>
+				<span>&nbsp;&nbsp;&nbsp;</span>
+				<span class="pointer" onmouseover="javascript:moveLayerLeft(-1, 20, <?php echo $width; ?>);" onmouseout="javascript:clearTimeout(Timer);">&raquo;&raquo;</span>
+			</div>
+
+		</div>
+	    </td>
+	  </tr>
+
+	  <tr>
+	    <td colspan="2"><hr style="width:80%;" /></td>
+	  </tr>
+
+	  <tr>
+	    <td>
+		<?php
+			// retour à la galerie
+			$back  = "<a href=\"".myurlencode("index.php?item=$item&cmde=visu&IDgroup=$IDgroup&IDgal=$IDgal&IDdata=$IDdata&sort=$sort&skpage=$skpage&skshow=$skshow")."\">";
+			$back .= $msg->read($GALLERY_BACKROOT);
+			$back .= "</a>";
+
+			print("[$back]");
+		?>
+	    </td>
+	  </tr>
+	</table>
+
+</div>

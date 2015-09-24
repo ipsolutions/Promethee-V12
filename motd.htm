@@ -1,0 +1,318 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2007-2008 by Dominique Laporte(C-E-D@wanadoo.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : motd.htm
+ *		projet   : page d'affichage des messages du jour
+ *
+ *		version  : 1.0
+ *		auteur   : laporte
+ *		creation : 29/01/07
+ *		modif    : 
+ */
+
+
+$IDcentre = ( strlen(@$_POST["IDcentre"]) )	// Identifiant du centre
+	? (int) $_POST["IDcentre"]
+	: (int) (@$_GET["IDcentre"] ? $_GET["IDcentre"] : $_SESSION["CnxCentre"]);
+$idcentre = (int) @$_POST["idcentre"];		// Identification du message
+$IDitem   = (int) @$_GET["IDitem"];			// Identification du message
+
+$skpage   = ( @$_GET["skpage"] )			// n° de la page affichée
+	? (int) $_GET["skpage"]
+	: 1 ;
+$skshow   = ( @$_GET["skshow"] )			// n° du flash info
+	? (int) $_GET["skshow"]
+	: 1 ;
+
+$submit   = ( @$_POST["del_x"] )			// bouton de validation
+	? "del"
+	: "" ;
+?>
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($MOTD_LIST)); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+
+	<p style="margin-top:0px; margin-bottom:10px; text-align:justify;">
+	<?php print($msg->read($MOTD_DISCLAIMER)); ?>
+	</p>
+
+	<?php
+		// lecture des droits
+		$Query  = "select _IDgrpwr, _IDgrprd from motd ";
+		$Query .= "where _IDcentre = '$IDcentre' ";
+		$Query .= "limit 1";
+
+		$result = mysql_query($Query, $mysql_link);
+		$auth   = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+		// vérification des autorisations
+		verifySessionAccess(0, $auth[1]);
+
+		switch ( $submit ) {
+			case "del" :	// on efface le message
+				if ( $_SESSION["CnxAdm"] == 255 OR ($auth[1] & pow(2, $_SESSION["CnxGrp"] - 1)) ) {
+					$cb = @$_POST["cbitem"];
+
+					for ($i = 0; $i < count($cb); $i++) {
+						$IDitem = (int) $cb[$i];
+
+						$Query  = "delete from motd_items ";
+						$Query .= "where _IDitem = '$IDitem' ";
+						$Query .= ( $_SESSION["CnxAdm"] == 255 ) ? "" : "AND _ID = '".$_SESSION["CnxID"]."' " ;
+						$Query .= "limit 1";
+
+						if ( !mysql_query($Query, $mysql_link) )
+							mysql_error($mysql_link);
+						else {
+							$res = mysql_query("select _IDpj, _file from motd_pj where _IDitem = '$IDitem'", $mysql_link);
+							$row = ( $res ) ? mysql_fetch_row($res) : 0 ;
+
+							while ( $row ) {
+								if ( mysql_query("delete from motd_pj where _IDpj = '$row[0]'", $mysql_link) )
+									unlink("$DOWNLOAD/motd/$row[0].".extension($row[1]));
+
+								$row = mysql_fetch_row($res);
+								}
+							}
+						}
+					}
+				break;
+
+			default :
+				break;
+			}
+
+		// autorisation d'envoyer un motd
+		if ( $_SESSION["CnxAdm"] == 255 OR ($auth[0] & pow(2, $_SESSION["CnxGrp"] - 1)) )
+			print("
+		            <table class=\"width100\">
+	      	        <tr>
+		                <td style=\"width:10%;\" class=\"valign-middle\">
+		                	<a href=\"index.php?item=$item&amp;cmde=post\"><img src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/post.gif\" title=\"". $msg->read($MOTD_NEW) ."\" alt=\"". $msg->read($MOTD_NEW) ."\" /></a>
+		                </td>
+		                <td style=\"width:40%;\" class=\"valign-middle\">". $msg->read($MOTD_SENDMSG) ."</td>
+		                <td style=\"width:50%;\" colspan=\"3\" class=\"valign-middle align-right\">
+		                  ". $msg->read($MOTD_NEXTPREV) ."
+		                </td>
+		              </tr>
+		            </table>
+		            ");
+	?>
+
+	<form id="formulaire" action="" method="post">
+
+           <table class="width100">
+              <tr style="background-color:#c0c0c0;">
+                <td style="width:1%;"></td>
+                <td class="align-center" style="width:1%;"><img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/document.gif" title="<?php print($msg->read($MOTD_PINING)); ?>" alt="<?php print($msg->read($MOTD_PINING)); ?>" /></td>
+                <td class="align-center" style="width:52%;"><?php print($msg->read($MOTD_SUBJECT)); ?></td>
+                <td class="align-center" style="width:1%;">
+			<input type="image" src="images/corb.gif" name="del" title="<?php print($msg->read($MOTD_DELETE)); ?>" alt="<?php print($msg->read($MOTD_DELETE)); ?>" />
+		    </td>
+                <td class="align-center" style="width:25%;"><?php print($msg->read($MOTD_SENT)); ?></td>
+                <td class="align-center" style="width:15%;">
+			<label for="idcentre">
+		  	<select id="idcentre" name="idcentre" onchange="document.forms.formulaire.submit()" style="font-size:9px;">
+				<option value="0"><?php print($msg->read($MOTD_ALLCENTER)); ?></option>
+				<?php
+					// lecture des centres constitutifs
+					$query  = "select _IDcentre, _ident from config_centre ";
+					$query .= "where _visible = 'O' AND _lang = '".$_SESSION["lang"]."' ";
+					$query .= "order by _IDcentre";
+
+					$result = mysql_query($query, $mysql_link);
+					$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+					$i = 0;
+					while ( $row ) {			
+						if ( $idcentre == $row[0] )
+							print("<option selected=\"selected\" value=\"$row[0]\">$row[1]</option>");
+						else
+							print("<option value=\"$row[0]\">$row[1]</option>");
+
+						$row = remove_magic_quotes(mysql_fetch_row($result));
+						}				
+				?>
+			</select>
+			</label>
+		    </td>
+                <td class="align-center" style="width:5%;"><?php print($msg->read($MOTD_HIT)); ?></td>
+              </tr>
+
+            <?php
+			// date du jour
+			$date   = date("Y-m-d H:i:s");
+
+			// lecture des annonces
+			$Query  = "select _IDitem, _IDcentre, _start, _title, _hit, _ID, _IP, _persistent from motd_items ";
+			$Query .= "where _lang = '".$_SESSION["lang"]."' ";
+			$Query .= ( $idcentre ) ? "AND _IDcentre = '$idcentre' " : "" ;
+			$Query .= ( $_SESSION["CnxAdm"] == 255 ) ? "" : "AND (_IDgrp & ".pow(2, $_SESSION["CnxGrp"] - 1).") ";
+			$Query .= "order by _start desc";
+
+			$result = mysql_query($Query, $mysql_link);
+			$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+			// détermination du nombre de pages
+			$result = mysql_query($Query, $mysql_link);
+			$nbelem = ( $result ) ? mysql_affected_rows($mysql_link) : 0 ;
+
+			$page   = $nbelem;
+			$show   = 1;
+
+			if ( $nbelem ) {
+				$page  = ( $page % $MAXPAGE )
+					? (int) ($page / $MAXPAGE) + 1
+					: (int) ($page / $MAXPAGE) ;
+
+				$show  = ( $page % $MAXSHOW )
+					? (int) ($page / $MAXSHOW) + 1
+					: (int) ($page / $MAXSHOW) ;
+
+				// initialisation
+				$i     = 1;
+				$first = 1 + (($skpage - 1) * $MAXPAGE);
+				$pos   = $first;
+				
+				// se positionne sur la page ad hoc
+				mysql_data_seek($result, $first - 1);
+				$row = remove_magic_quotes(mysql_fetch_row($result));
+
+				while ( $row AND $i <= $MAXPAGE ) {
+					$bgcolor = ( $i++ % 2 ) ? "menu" : "item" ;
+
+					// message envoyé
+					$sent  = ( $row[2] <= $date )
+						? "<img src=\"".$_SESSION["ROOTDIR"]."/images/setup/check_on.png\" title=\"\" alt=\"\" />"
+						: "<img src=\"".$_SESSION["ROOTDIR"]."/images/setup/check_wrn.png\" title=\"\" alt=\"\" />" ;
+
+					// message persistant
+					$check = ( $row[7] != "0" ) ? "on" : "off" ;
+
+					// le sujet du message
+					$sujet = "<a href=\"".myurlencode("index.php?item=$item&idcentre=$row[1]&IDitem=$row[0]&motd_all=1")."\">$row[3]</a>";
+
+					// Pièce Jointe 
+					$res   = mysql_query("select _IDpj from motd_pj where _IDitem = '$row[0]' limit 1", $mysql_link);
+					$pj    = ( $res ) ? mysql_affected_rows($mysql_link) : 0 ;
+
+					$ipj   = ( $pj ) ? "<img src=\"".$_SESSION["ROOTDIR"]."/images/pj.gif\" title=\"".$msg->read($MOTD_ATTACHED)."\" alt=\"".$msg->read($MOTD_ATTACHED)."\" />" : "" ;
+
+					// suppression annonce
+					$isrm  = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $row[5] )
+						? ""
+						: "disabled=\"disabled\"" ;
+
+					// mise à jour
+					$updt  = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $row[5] )
+						? "<a href=\"index.php?item=$item&amp;IDitem=$row[0]&amp;cmde=post\"><img src=\"".$_SESSION["ROOTDIR"]."/images/stats/post.gif\" title=\"\" alt=\"\" /></a>"
+						: "" ;
+
+					// lecture du centre
+			$Query  = "select _ident from config_centre ";
+			$Query .= "where _lang = '".$_SESSION["lang"]."' ";
+			$Query .= "AND _IDcentre = '$row[1]' ";
+			$Query .= "limit 1";
+
+			$return = mysql_query($Query, $mysql_link);
+			$myrow  = ( $return ) ? remove_magic_quotes(mysql_fetch_row($return)) : 0 ;
+
+					// lecture du compteur de lectures
+					$lien  = ( $row[4] )
+						? "<a href=\"#\" onclick=\"popWin('".$_SESSION["ROOTDIR"]."/user_list.php?sid=".$_SESSION["sessID"]."&amp;IDitem=$row[0]&amp;cmde=motd&amp;lang=".$_SESSION["lang"]."', '450', '200'); return false;\">$row[4]</a>"
+						: "0" ;
+
+					print("
+						<tr class=\"$bgcolor\">
+						  <td class= \"valign-middle\">$sent</td>
+						  <td class= \"valign-middle\"><img src=\"".$_SESSION["ROOTDIR"]."/images/checkbox_$check.gif\" title=\"\" alt=\"\" /></td>
+						  <td>
+							$sujet $ipj $updt
+						  </td>
+						  <td class= \"valign-middle\">
+							<label for=\"cbitem_$row[0]\">
+							<input type=\"checkbox\" id=\"cbitem_$row[0]\" name=\"cbitem[]\" value=\"$row[0]\" $isrm />
+							</label>
+						  </td>
+						  <td class=\"align-center\">
+							<span class=\"x-small\">".date2longfmt($row[2])."</span>
+						  </td>
+						  <td class=\"align-center\">$myrow[0]</td>
+						  <td class=\"align-center\">[$lien]</td>
+						</tr>
+						");
+
+					$row = remove_magic_quotes(mysql_fetch_row($result));
+					}
+				}
+            ?>
+            </table>
+
+		<?php
+			// bouton précédent
+			$where = $skshow - 1;
+			if ( $skshow == 1 )
+				$prev = "";
+			else {
+				$skpg = 1 + (($skshow - 2) * $MAXSHOW);
+				$prev = "[<a href=\"index.php?item=$item&amp;skpage=$skpg&amp;skshow=$where\">". $msg->read($MOTD_PREV) ."</a>]";
+				}
+
+			// liens directs sur n° de page
+			$start = 1 + (($skshow - 1) * $MAXSHOW);
+			$end   = $skshow * $MAXSHOW;
+
+			$choix = ( $skpage == $start )
+				? "<img src=\"".$_SESSION["ROOTDIR"]."/images/nav_left.gif\" title=\"«\" alt=\"«\" /><strong>$start</strong><img src=\"".$_SESSION["ROOTDIR"]."/images/nav_right.gif\" title=\"»\" alt=\"»\" />"
+				: "<a href=\"index.php?item=$item&amp;skpage=$start&amp;skshow=$skshow\">$start</a>" ;
+
+			for ($j = $start + 1; $j <= $end AND $j <= $page; $j++)
+				$choix .= ( $skpage == $j )
+					? "|<img src=\"".$_SESSION["ROOTDIR"]."/images/nav_left.gif\" title=\"«\" alt=\"«\" /><strong>$j</strong><img src=\"".$_SESSION["ROOTDIR"]."/images/nav_right.gif\" title=\"»\" alt=\"»\" />"
+					: "|<a href=\"index.php?item=$item&amp;skpage=$j&amp;skshow=$skshow\">$j</a>" ;
+
+			// bouton suivant
+			$where = $skshow + 1;
+			$next  = ( $skshow == $show )
+				? ""
+				: "[<a href=\"index.php?item=$item&amp;skpage=$j&amp;skshow=$where\">". $msg->read($MOTD_PREV) ."</a>]";
+		?>
+
+	      <hr/>
+			<?php if ( $nbelem ) print("<div style=\"text-align:center;\">$prev $choix $next</div>"); ?>
+		<hr/>
+
+		<!-- recherche d'un message -->
+		<div>
+	      <img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/search.gif" title="" alt="" />
+		<?php print($msg->read($MOTD_SEARCH, "index.php?item=91&amp;cmde=search&amp;rub=6")); ?>
+		</div>
+
+	</form>
+
+</div>

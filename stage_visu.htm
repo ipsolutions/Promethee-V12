@@ -1,0 +1,656 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2003-2007 by Dominique Laporte(C-E-D@wanadoo.fr)
+   Copyright (c) 2006 by FG (persofg@gmail.com)
+   Copyright (c) 2006 by Nordine Zetoutou (nordine.zetoutou@educagri.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : stage_visu.htm
+ *		projet   : la page de visualisation des maîtres de stage
+ *
+ *		version  : 1.0
+ *		auteur   : laporte
+ *		creation : 15/02/03
+ *		modif    : 20/06/05 par FG
+ *                     migration -> PHP5
+ * 		           17/07/06 - par Nordine Zetoutou
+ * 	                 migration des balises HTML en XHTML 1.0 strict
+ */
+
+
+$IDlieu  = ( @$_POST["IDlieu"] )
+	? (int) $_POST["IDlieu"]
+	: (int) @$_GET["IDlieu"] ;
+$secteur = ( @$_POST["secteur"] )
+	? (int) $_POST["secteur"]
+	: (int) @$_GET["secteur"] ;
+
+$submit  = @$_GET["submit"];
+?>
+
+
+<?php
+	//---- accés protégé ----
+	$Query  = "select _IDmod, _IDgrprd from stage_data ";
+	$Query .= "where _visible = 'O' AND _mod = '$cmde' ";
+	$Query .= "limit 1";
+
+	$result = mysql_query($Query, $mysql_link);
+	$row    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+	// vérification des autorisations
+	verifySessionAccess($row[0], $row[1]);
+	//-----------------------
+
+	//---- maître de stage
+	$Query = "select _IDlieu from stage_lieu ";
+	switch ( $submit ) {
+		case "prev" :
+		case "next" :
+			$Query .= "where _IDlieu ";
+			$Query .= ( $submit == "prev" ? "<" : ">" );
+			$Query .= " '$IDlieu' order by _IDlieu ";
+			$Query .= ( $submit == "prev" ? "desc" : "asc" );
+			$Query .= " limit 1";
+
+			$result = mysql_query($Query, $mysql_link);
+			$row    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+			if ( $row )
+				$IDlieu = $row[0];
+			break;
+
+		default :
+			break;
+		}
+
+	$result = mysql_query("select * from stage_lieu where _IDlieu = '$IDlieu'", $mysql_link);
+	$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+	if ( $row ) {
+		$IDlieu    = $row[0];
+		$date      = $row[1];
+		$secteur   = $row[2];
+		$societe   = $row[3];
+		$statut    = $row[4];
+		$activite  = $row[5];
+		$adresse   = $row[7];
+		$cp        = $row[8];
+		$ville     = $row[9];
+		$tel       = $row[10];
+		$fax       = $row[11];
+		$email     = $row[12];
+		$web       = $row[13];
+		$directeur = $row[14];
+		$resp      = $row[15];
+		$taille    = $row[16];
+		$periode   = $row[17];
+		$mineur    = $row[18];
+		$fille     = $row[19];
+		$loge      = $row[20];
+		$remark1   = $row[21];
+		$nourri    = $row[22];
+		$remark2   = $row[23];
+		$comment   = $row[24];
+		$uth       = $row[25];
+		$st        = $row[26];
+		$sau       = $row[27];
+		$sfp       = $row[28];
+		$tl        = $row[29];
+		$extra     = $row[30];
+		$tva       = $row[31];
+		$compta    = $row[32];
+		$sol       = $row[33];
+		$actif     = $row[34];
+		$accueil   = $row[35];
+		$anim      = $row[36];
+		$resto     = $row[37];
+		$autre     = $row[38];
+		$negocier  = $row[39];
+		$visible   = $row[40];
+
+		//---- filière adaptée
+		$Query  = "select _IDclasse from stage_ok ";
+		$Query .= "where _IDlieu = '$IDlieu'";
+
+		$result = mysql_query($Query, $mysql_link);
+		$row    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+		$i = 0;
+
+		while ( $row ) {
+			$tbl[$i++] = $row[0];
+			$row       = mysql_fetch_row($result);
+			}
+
+		$tbl[$i] = 0;
+		}
+	else
+		sql_error($mysql_link);
+?>
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($STAGE_FILE)); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+
+		<table class="width100">
+		  <tr>
+		  	<td colspan="2">
+				<img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/info.gif" alt="?" title="?" />
+				<a href="#" onclick="popWin('<?php print($_SESSION["ROOTDIR"]."/stage.php?IDlieu=$IDlieu&amp;lang=".$_SESSION["lang"]); ?>', '450', '200'); return false;"><?php print($msg->read($STAGE_STAGEPERIOD)); ?></a>.
+			</td>
+		  </tr>
+		  <tr>
+		  	<td>
+			<?php
+				//---- accés protégé ----
+				// seul le modérateur possède le droit d'écriture
+				$Query  = "select _IDmod from stage_data ";
+				$Query .= "where _visible = 'O' AND _mod = 'lieu' ";
+				$Query .= "limit 1";
+
+				$result = mysql_query($Query, $mysql_link);
+				$row    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+				print((@$_SESSION["CnxAdm"] == 255 OR @$_SESSION["CnxID"] == $row[0] )
+					? "[<a href=\"".myurlencode("index.php?item=$item&cmde=lieu&IDlieu=$IDlieu&submit=read")."\">". $msg->read($STAGE_MODIFY) ."</a>]"
+					: "&nbsp;"
+					);
+			?>
+			</td>
+			<td class="align-right">
+			<?php
+				$prev = myurlencode("index.php?item=$item&cmde=$cmde&IDlieu=$IDlieu&submit=prev");
+				$next = myurlencode("index.php?item=$item&cmde=$cmde&IDlieu=$IDlieu&submit=next");
+
+				print("[<a href=\"$prev\">". $msg->read($STAGE_PREV) ."</a>]<strong>.</strong>[<a href=\"$next\">". $msg->read($STAGE_NEXT) ."</a>]");
+			?>
+			</td>
+		  </tr>
+		</table>
+
+		<hr/>
+
+<table class="width100">
+  <tr>
+    <td style="width:40%;" class="align-right valign-top"><?php print($msg->read($STAGE_NBFILE)); ?></td>
+    <td style="width:60%;">
+	    <?php 
+    		print("$IDlieu ");
+    		print(( $visible == "O" )
+    			? "<img src=\"".$_SESSION["ROOTDIR"]."/images/check-ok.gif\" title=\"\" alt=\"\" />"
+    			: "<img src=\"".$_SESSION["ROOTDIR"]."/images/check.gif\" title=\"\" alt=\"\" />"
+    			);
+    		print(", ".$msg->read($STAGE_CREATBY)." $date");
+	    ?>
+    </td>
+  </tr>
+
+  <tr>
+    <td class="align-right valign-top"><?php print($msg->read($STAGE_SECTOR)); ?></td>
+    <td>
+    	<?php
+		$query  = "select _ident, _infos from stage_secteur ";
+		$query .= "where _IDsecteur = '$secteur' AND _lang = '".$_SESSION["lang"]."' ";
+		$query .= "limit 1";
+
+		$result = mysql_query($query, $mysql_link);
+		$myrow   = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+      	print("$myrow[0]");
+    	?>
+    </td>
+  </tr>
+
+  <tr>
+    <td class="align-right valign-top"><?php print($msg->read($STAGE_COMPNAME)); ?></td>
+    <td><?php print("$societe"); ?></td>
+  </tr>
+
+  <tr>
+    <td class="align-right valign-top"><?php print($msg->read($STAGE_COMPLAW)); ?></td>
+    <td><?php print("$statut"); ?></td>
+  </tr>
+
+  <tr>
+    <td class="align-right valign-top"><?php print($msg->read($STAGE_ACTIVITY)); ?></td>
+    <td><?php print("$activite"); ?></td>
+  </tr>
+
+  <tr>
+    <td class="align-right valign-top"><?php print($msg->read($STAGE_ADDRESS)); ?></td>
+    <td><?php print("$adresse"); ?></td>
+  </tr>
+
+  <tr>
+    <td class="align-right valign-top"><?php print($msg->read($STAGE_ZIP)); ?></td>
+    <td><?php print("$cp"); ?></td>
+  </tr>
+
+  <tr>
+    <td class="align-right valign-top"><?php print($msg->read($STAGE_CITY)); ?></td>
+    <td><?php print("$ville"); ?></td>
+  </tr>
+
+  <tr>
+    <td class="align-right valign-top"><?php print($msg->read($STAGE_TEL)); ?></td>
+    <td><?php print("$tel"); ?></td>
+  </tr>
+
+  <tr>
+    <td class="align-right valign-top"><?php print($msg->read($STAGE_FAX)); ?></td>
+    <td><?php print("$fax"); ?></td>
+  </tr>
+
+  <tr>
+    <td class="align-right valign-top"><?php print($msg->read($STAGE_EMAIL)); ?></td>
+    <td><?php print("$email"); ?></td>
+  </tr>
+
+  <tr>
+    <td class="align-right valign-top"><?php print($msg->read($STAGE_WEBSITE)); ?></td>
+    <td><?php print("$web"); ?></td>
+  </tr>
+
+  <tr>
+    <td class="align-right valign-top"><?php print($msg->read($STAGE_DIRECTOR)); ?></td>
+    <td><?php print("$directeur"); ?></td>
+  </tr>
+
+  <tr>
+    <td class="align-right valign-top"><?php print($msg->read($STAGE_MANAGER)); ?></td>
+    <td><?php print("$resp"); ?></td>
+  </tr>
+
+  <tr>
+    <td class="align-right valign-top"><?php print($msg->read($STAGE_COMPSIZE)); ?></td>
+    <td><?php print("$taille"); ?></td>
+  </tr>
+
+  <tr>
+    <td class="align-right valign-top"><?php print($msg->read($STAGE_MAXWORK)); ?></td>
+    <td><?php print("$periode"); ?></td>
+  </tr>
+
+  <tr>
+    <td class="align-right valign-top"><?php print($msg->read($STAGE_MINOR)); ?></td>
+    <td>
+      <?php print(($mineur == "O") ? $msg->read($STAGE_YES) : $msg->read($STAGE_NO)); ?>
+    </td>
+  </tr>
+
+  <tr>
+    <td class="align-right valign-top"><?php print($msg->read($STAGE_GIRL)); ?></td>
+    <td>
+      <?php print(($fille == "O") ? $msg->read($STAGE_YES) : $msg->read($STAGE_NO)); ?>
+    </td>
+  </tr>
+
+  <tr>
+    <td class="align-right valign-top"><?php print($msg->read($STAGE_HOSTED)); ?></td>
+    <td>
+      <?php
+      	print(($loge == "O") ? $msg->read($STAGE_YES) : $msg->read($STAGE_NO));
+      	print(strlen($remark1) ? ", ($remark1)" : ""); 
+      ?>
+    </td>
+  </tr>
+
+  <tr>
+    <td class="align-right valign-top"><?php print($msg->read($STAGE_CANEAT)); ?></td>
+    <td>
+      <?php
+      	print(($nourri == "O") ? $msg->read($STAGE_YES) : $msg->read($STAGE_NO));
+      	print(strlen($remark2) ? ", ($remark2)" : ""); 
+      ?>
+    </td>
+  </tr>
+
+  <tr>
+    <td class="align-right valign-top"><?php print($msg->read($STAGE_ISOK)); ?></td>
+    <td>
+    <?php
+    	function isMember($tbl, $val)
+    	{
+	    	// function : indique si l'élément $val est présent dans le tableau $tbl
+	    	//      out : 1 si trouvé, 0 sinon
+	    	
+    		$i = 0;
+    		while ( $tbl[$i] )
+    			if ( $tbl[$i++] == $val )
+					return 1;
+					
+			return 0;
+    	}
+    	
+	$result = mysql_query("select _IDclass, _ident from campus_classe where _visible = 'O'", $mysql_link);
+	$row    = ($result) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+    	
+    	while ( $row ) {
+    		if ( isMember($tbl, $row[0]) )
+			print("$row[1] &nbsp;<br/>");
+
+		$row = remove_magic_quotes(mysql_fetch_row($result));
+		}
+    ?>
+	 </td>
+  </tr>
+
+  <tr>
+    <td class="align-right valign-top"><?php print($msg->read($STAGE_COMMENT)); ?></td>
+    <td><?php print($comment); ?></td>
+  </tr>
+</table>
+
+<?php
+	//========== pour Exploitations Agricoles uniquement ===========
+
+	if ( $myrow[1] == "O" ) {
+		print("
+<table class=\"width100\">
+  <tr>
+    <td colspan=\"2\" style=\"background-color:#C0C0C0; width:100%;\">". $msg->read($STAGE_MENATWORK) ."</td>
+  </tr>
+
+  <tr>
+    <td style=\"width:40%;\" class=\"valign-top align-right\">". $msg->read($STAGE_UHT) ."</td>
+    <td style=\"width:60%;\">$uth &nbsp;</td>
+  </tr>
+
+  <tr>
+    <td colspan=\"2\" style=\"background-color:#C0C0C0; width:100%;\">". $msg->read($STAGE_MORTGAGE) ."</td>
+  </tr>
+
+  <tr>
+    <td class=\"align-right valign-top\">". $msg->read($STAGE_SURFACE) ."</td>
+    <td>$st &nbsp;</td>
+  </tr>
+
+  <tr>
+    <td class=\"align-right valign-top\">". $msg->read($STAGE_SAU) ."</td>
+    <td>$sau &nbsp;</td>
+  </tr>
+
+  <tr>
+    <td class=\"align-right valign-top\">". $msg->read($STAGE_SFP) ."</td>
+    <td>$sfp &nbsp;</td>
+  </tr>
+
+  <tr>
+    <td class=\"align-right valign-top\">". $msg->read($STAGE_TL) ."</td>
+    <td>$tl &nbsp;</td>
+  </tr>
+
+  <tr>
+    <td class=\"align-right valign-top\">". $msg->read($STAGE_RESPONSABILITIES) ."</td>
+    <td>$extra &nbsp;</td>
+  </tr>
+  	");
+
+printf("  	
+  <tr>
+    <td class=\"align-right valign-top\">". $msg->read($STAGE_VAT) ."</td>
+    <td>%s</td>
+  </tr>
+
+  <tr>
+    <td class=\"align-right valign-top\">". $msg->read($STAGE_COMPTA) ."</td>
+    <td>%s</td>
+  </tr>
+
+  <tr>
+    <td class=\"align-right valign-top\">". $msg->read($STAGE_SA) ."</td>
+    <td>%s</td>
+  </tr>",
+  	(($tva == "O")    ? $msg->read($STAGE_YES) : $msg->read($STAGE_NO)),
+  	(($compta == "O") ? $msg->read($STAGE_YES) : $msg->read($STAGE_NO)),
+  	(($sol == "O")    ? $msg->read($STAGE_YES) : $msg->read($STAGE_NO))
+  	);
+
+print("
+  <tr>
+    <td colspan=\"2\" width=\"100%\" style=\"background-color:#c0c0c0;\">". $msg->read($STAGE_ANIMAL) ."</td>
+  </tr>
+  <tr>
+    <td colspan=\"2\">
+
+      <table class=\"width100\">        
+        <tr>
+	    <td>
+
+	<table class=\"width100\" style=\"border: 1px solid #FFFFFF;\">
+	  <tr>
+	    <td style=\"width:100%\">
+	      <table class=\"width100\">
+	        <tr class=\"align-center\" style=\"background-color:#eeeeee;\">
+	          <td style=\"width:25%;\">". $msg->read($STAGE_CATEGORY) ."</td>
+	          <td style=\"width:25%;\">". $msg->read($STAGE_RACE) ."</td>
+	          <td style=\"width:8%;\">". $msg->read($STAGE_FEMALE) ."</td>
+	          <td style=\"width:12%\">". $msg->read($STAGE_FUTURE) ."</td>
+	          <td style=\"width:10%;\">". $msg->read($STAGE_UPRA) ."</td>
+	          <td style=\"width:10%;\">". $msg->read($STAGE_PERF) ."</td>
+	          <td style=\"width:10%;\">". $msg->read($STAGE_QUALITY) ."</td>
+	        </tr>
+		");
+            	
+		$result = mysql_query("select _IDcat, _IDrace, _upra, _control, _quality, _devenir, _taille, _IDpa from prod_pa where _IDlieu = '$IDlieu'", $mysql_link);
+		$row    = ($result) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+		while ( $row ) {
+			$res  = mysql_query("select _text from prod_categorie where _IDcat = '$row[0]' AND _lang = '".$_SESSION["lang"]."' limit 1", $mysql_link);
+			$cat  = ($res) ? remove_magic_quotes(mysql_fetch_row($res)) : 0 ;
+
+			$res  = mysql_query("select _race from prod_race where _IDrace = '$row[1]'", $mysql_link);
+			$race = ($res) ? remove_magic_quotes(mysql_fetch_row($res)) : 0 ;
+
+			switch ( $row[5] ) {
+				case "L" : $dev = $msg->read($STAGE_LEISURE);     break;
+				case "C" : $dev = $msg->read($STAGE_COMPETITION); break;
+				case "E" : $dev = $msg->read($STAGE_ELEVAGE);     break;
+				default  : $dev = "&nbsp;";                       break;
+				}
+			
+			$chk[0] = ( $row[2] == "O" ) ? "<img src=\"".$_SESSION["ROOTDIR"]."/images/check.gif\" title=\"\" alt=\"\" />" : "" ;
+			$chk[1] = ( $row[3] == "O" ) ? "<img src=\"".$_SESSION["ROOTDIR"]."/images/check.gif\" title=\"\" alt=\"\" />" : "" ;
+			$chk[2] = ( $row[4] == "O" ) ? "<img src=\"".$_SESSION["ROOTDIR"]."/images/check.gif\" title=\"\" alt=\"\" />" : "" ;
+
+	    		print("
+		        <tr>
+	      	    <td style=\"width:25%;\" class=\"align-center\">$cat[0] &nbsp;</td>
+		          <td style=\"width:25%;\" class=\"align-center\">$race[0] &nbsp;</td>
+		          <td style=\"width:8%;\"  class=\"align-center\">$row[6] &nbsp;</td>
+		          <td style=\"width:12%;\" class=\"align-center\">$dev &nbsp;</td>
+		          <td style=\"width:10%;\" class=\"align-center\">$chk[0] &nbsp;</td>
+		          <td style=\"width:10%;\" class=\"align-center\">$chk[1] &nbsp;</td>
+		          <td style=\"width:10%;\" class=\"align-center\">$chk[2] &nbsp;</td>
+		        </tr>
+				");
+				
+			$row = remove_magic_quotes(mysql_fetch_row($result));
+			}
+
+	print("
+	      </table>
+      
+	    </td>
+	  </tr>
+	</table>
+      
+	    </td>
+        </tr>
+      </table>
+
+    </td>
+  </tr>
+  <tr>
+    <td colspan=\"2\" width=\"100%\" style=\"background-color:#C0C0C0;\">". $msg->read($STAGE_VEGETAL) ."</td>
+  </tr>
+  <tr>
+    <td colspan=\"2\">
+    
+<table class=\"width100\" style=\"border: 1px solid #FFFFFF;\">
+  <tr>
+    <td style=\"width:100%;\">
+      <table class=\"width100\">
+        <tr class=\"align-center\" style=\"background-color:#eeeeee;\">
+          <td style=\"width:33%;\">". $msg->read($STAGE_CATEGORY) ."</td>
+          <td style=\"width:33%;\">". $msg->read($STAGE_FUTURE)   ."</td>
+          <td style=\"width:34%;\">". $msg->read($STAGE_SUFACE)   ."</td>
+        </tr>
+		");
+            	
+		$result = mysql_query("select _IDcat, _devenir, _taille, _IDpv from prod_pv where _IDlieu = '$IDlieu'", $mysql_link);
+		$row    = ($result) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+    	while ( $row ) {
+		$res = mysql_query("select _text from prod_categorie where _IDcat = '$row[0]' AND _lang = '".$_SESSION["lang"]."' limit 1", $mysql_link);
+		$cat = ($res) ? remove_magic_quotes(mysql_fetch_row($res)) : 0 ;
+
+		switch ( $row[1] ) {
+			case "A" : $dev = $msg->read($STAGE_AUTO); break;
+			case "V" : $dev = $msg->read($STAGE_SOLD); break;
+			default  : $dev = "&nbsp;";                break;
+			}
+
+    		print("
+		        <tr>
+		          <td style=\"width:33%;\" class=\"align-center\">$cat[0] &nbsp;</td>
+		          <td style=\"width:33%;\" class=\"align-center\">$dev &nbsp;</td>
+		          <td style=\"width:34%;\" class=\"align-center\">$row[2] &nbsp;</td>
+		        </tr>
+			");
+				
+		$row = remove_magic_quotes(mysql_fetch_row($result));
+		}
+
+print("</table>");
+
+print("      
+    </td>
+  </tr>
+</table>
+
+    </td>
+  </tr>
+  <tr>
+    <td colspan=\"2\" width=\"100%\" style=\"background-color:#C0C0C0;\">". $msg->read($STAGE_COMPLEMENT) ."</td>
+  </tr>
+  <tr>
+    <td colspan=\"2\">
+
+	<table class=\"width100\" style=\"border: 1px solid #FFFFFF;\">
+	  <tr>
+	    <td style=\"width:100%;\">
+	      <table class=\"width100\">
+	        <tr class=\"align-center\" style=\"background-color:#eeeeee;\">
+	          <td style=\"width:50%;\">". $msg->read($STAGE_CATEGORY) ."</td>
+	          <td style=\"width:50%;\">". $msg->read($STAGE_SIZE) ."</td>
+	        </tr>
+		");
+            	
+		$result = mysql_query("select _IDcat, _taille, _IDatcomp from prod_atcomp where _IDlieu = '$IDlieu'", $mysql_link);
+		$row    = ($result) ? mysql_fetch_row($result) : 0 ;
+
+	    	while ( $row ) {
+			$res = mysql_query("select _text from prod_categorie where _IDcat = '$row[0]' AND _lang = '".$_SESSION["lang"]."' limit 1", $mysql_link);
+			$cat = ($res) ? remove_magic_quotes(mysql_fetch_row($res)) : 0 ;
+
+	    		print("
+		        <tr>
+		          <td style=\"width:50%;\" class=\"align-center\">$cat[0] &nbsp;</td>
+		          <td style=\"width:50%;\" class=\"align-center\">$row[1] &nbsp;</td>
+		        </tr>
+				");
+				
+			$row = remove_magic_quotes(mysql_fetch_row($result));
+			}
+
+	print("</table>");
+
+	print("
+	    </td>
+	  </tr>
+	</table>
+
+    </td>
+  </tr>
+</table>
+		");
+	}
+
+	//========== pour les autres secteurs d'activité ===========
+
+	if ( $myrow[1] == "N" ) {
+		print("
+<table class=\"width100\">
+  
+  <tr>
+    <td colspan=\"2\" style=\"background-color:#C0C0C0; width:100%;\">". $msg->read($STAGE_STUDACTIVITY) ."</td>
+  </tr>
+		");
+
+printf("
+  <tr>
+    <td style=\"width:40%;\" class=\"align-right valign-top\">". $msg->read($STAGE_SERVICES) ."</td>
+    <td style=\"width:60%s;\">%s</td>
+  </tr>
+  <tr>
+    <td class=\"align-right valign-top\">". $msg->read($STAGE_ACCUEIL) ."</td>
+    <td>%s</td>
+  </tr>
+  <tr>
+    <td class=\"align-right valign-top\">". $msg->read($STAGE_ANIMATION) ."</td>
+    <td span>%s</span></td>
+  </tr>
+    <td class=\"align-right valign-top\">". $msg->read($STAGE_RESTO) ."</td>
+    <td>%s</td>
+  </tr>
+    <td class=\"align-right valign-top\">". $msg->read($STAGE_OTHER) ."</td>
+    <td>%s</td>
+  </tr>
+    <td class=\"align-right valign-top\">". $msg->read($STAGE_NEGOCIATE) ."</td>
+    <td>%s</td>
+  </tr>",
+	"%", "%",
+  	(($actif    == "O") ? $msg->read($STAGE_YES) : $msg->read($STAGE_NO)),
+  	(($accueil  == "O") ? $msg->read($STAGE_YES) : $msg->read($STAGE_NO)),
+  	(($anim     == "O") ? $msg->read($STAGE_YES) : $msg->read($STAGE_NO)),
+  	(($resto    == "O") ? $msg->read($STAGE_YES) : $msg->read($STAGE_NO)),
+  	(($autre    == "O") ? $msg->read($STAGE_YES) : $msg->read($STAGE_NO)),
+  	(($negocier == "O") ? $msg->read($STAGE_YES) : $msg->read($STAGE_NO))
+  	);
+
+		print("
+</table>
+		");
+	}
+?>
+
+	<hr/>
+
+	<span>
+	[<a href="#" onclick="window.history.go(-1);"><?php print($msg->read($STAGE_BACK2LIST)); ?></a>]
+	</span>
+
+</div>

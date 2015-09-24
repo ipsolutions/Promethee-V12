@@ -1,0 +1,228 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2004-2008 by Dominique Laporte(C-E-D@wanadoo.fr)
+   Copyright (c) 2006 by frédéric poyet(frederic.poyet@free.fr)
+   Copyright (c) 2006 by Nordine Zetoutou (nordine.zetoutou@educagri.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : quizz_upload.htm
+ *		projet   : la page de la création des questions du quizz
+ *
+ *		version  : 1.0
+ *		auteur   : laporte
+ *		creation : 20/06/04
+ *		modif    : 19/06/06 - par Fred POYET
+ *                     migration php5
+ *		           17/07/06 - Nordine Zetoutou
+ * 	                 migration des balises HTML en XHTML 1.0 strict
+ */
+
+
+$IDquizz = ( @$_POST["IDquizz"] )		// ID du quizz
+	? (int) $_POST["IDquizz"]
+	: (int) @$_GET["IDquizz"] ;
+$IDsel   = ( @$_POST["IDsel"] )		// ID de la classe
+	? (int) $_POST["IDsel"]
+	: (int) @$_GET["IDsel"];
+$IDmat   = ( @$_POST["IDmat"] )		// ID de la matière/formation
+	? (int) $_POST["IDmat"]
+	: (int) @$_GET["IDmat"] ;
+$IDdata  = ( @$_POST["IDdata"] )		// Identifiant de la matière
+	? (int) $_POST["IDdata"]
+	: (int) @$_GET["IDdata"] ;
+$IDtext  = ( @$_POST["IDtext"] )		// Identifiant de la question
+	? (int) $_POST["IDtext"]
+	: (int) @$_GET["IDtext"] ;
+$nbcount = ( @$_POST["nbcount"] )		// nombre de test
+	? $_POST["nbcount"]
+	: @$_GET["nbcount"] ;
+$nbq     = ( @$_POST["nbq"] )			// nombre de questions
+	? (int) $_POST["nbq"]
+	: (int) @$_GET["nbq"] ;
+$show    = ( @$_POST["show"] )		// bouton suivant/précédent
+	? $_POST["show"]
+	: @$_GET["show"] ;
+
+$title       = trim(@$_POST["title"]);
+$q           = @$_POST["q"];
+$p           = @$_POST["p"];
+$type        = (int) @$_POST["type"];
+$delete      = @$_POST["delete"];
+$MoreChoices = @$_POST["MoreChoices"];
+
+$submit      = ( @$_POST["valid_x"] )	// bouton de validation
+	? "validation"
+	: @$_GET["submit"] ;
+?>
+
+
+<?php
+	$mytitle = ( $IDtext == 0 )
+		? $msg->read($QUIZZ_CREATEQUIZZ)
+		: $msg->read($QUIZZ_UPDATEQUIZZ) ;
+?> 
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($QUIZZ_MANAGEMENT)); ?><br/>
+		<?php print($mytitle); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+
+	<?php
+	    	// initialisation
+          	if ( $nbq == 0 )
+          		$nbq = 5;
+          	else
+          		if ( strlen($MoreChoices) )
+	          		$nbq += 5;
+
+		$error  = 0;
+		$error1 = $error2 = $error3 = "";
+
+		// l'utilisateur a validé
+		switch ( $submit ) {
+			case "validation" :
+				// vérification de la saisie
+		        	$error1 = ( $title == "" )
+   			  		? "<span style=\"color:#FF0000\">". $msg->read($QUIZZ_ERRQUESTION) ."</span>"
+   		     			: "" ;
+
+		        	$error2 = ( !strlen($q[0]) OR ($type != 3 AND !strlen($q[1])) )
+   			     		? "<span style=\"color:#FF0000\">". $msg->read($QUIZZ_ERRANSWER) ."</span>"
+	      	 	 	: "" ;
+
+				// transfert d'une image
+				$file   = ( @$_FILES["UploadedFile"]["name"] )
+					? $_FILES["UploadedFile"]["name"]
+					: @$_POST["permalink"] ;
+
+		   		if ( $file AND authfile($file) )
+			   		switch ( extension($file) ) {
+    						case "jpg" :
+    						case "gif" :
+    						case "png" :
+    							break;
+	    					default :
+		    					$error3 = "<span style=\"color:#FF0000\">". $msg->read($QUIZZ_BADFORMAT) ."</span>";
+							break;
+						}
+
+				// tout est correct
+				if ( $error1 == "" AND $error2 == "" AND $error3 == "" ) {
+					$title = addslashes($title);
+
+					// on enregistre l'exercice
+					if ( $IDtext == 0 ) {
+						//----- création d'une nouvelle question
+						$Query  = "insert into quizz_data ";
+						$Query .= "values('', '$IDquizz', '$title', '$file', '$type')";
+						}
+					else {
+						//----- mise à jour d'une question
+						$Query  = "update quizz_data ";
+						$Query .= "set _texte = '$title', _image = '$file', _type = '$type' ";
+						$Query .= ( strlen($file) ) ? ", _image = '$file' " : "" ;
+						$Query .= "where _IDdata = '$IDtext' ";
+						$Query .= "limit 1";
+						}
+
+					//requête SQL
+					if ( !mysql_query($Query, $mysql_link) )
+						sql_error($mysql_link);
+					else {
+						// on récupère l'ID de la nouvelle question
+						$iddata = ( $IDtext == 0 ) ? mysql_insert_id() : $IDtext ;
+
+						// on transfére le fichier si pas d'erreur
+	    					if ( !$error AND $file AND strncmp(strtolower($file), "http://", 7) ) {
+							// fichier destination
+							$small  = "$DOWNLOAD/quizz/vignettes";
+							$dest   = "$DOWNLOAD/quizz/$iddata-$file";
+
+							// copie du fichier temporaire -> répertoire de stockage
+							if ( move_uploaded_file(@$_FILES["UploadedFile"]["tmp_name"], $dest) ) {
+								mychmod($dest, $CHMOD);
+
+								// création de la vignette
+								require_once "include/gallery.php";
+
+								vignette($dest, $small, "$iddata-$file", $srcWidth, $srcHeight);
+								}
+							}
+
+						// il est plus rapide de tout effacer et de réécrire
+						mysql_query("delete from quizz_items where _IDdata = '$iddata'", $mysql_link);
+
+			             	for ($i = 0, $j = 0; $i < $nbq; $i++) {
+							$q[$i] = htmlspecialchars(@$q[$i], ENT_QUOTES);
+		      	       		$p[$i] = strval(@$p[$i]);
+
+							// on n'enregistre pas les questions vides !
+							if ( strlen(@$q[$i]) ) {
+								if ( !mysql_query("update quizz_items set _IDitem = '$j', _texte = '$q[$i]', pts = '$p[$i]' where _IDitem = '$i' AND _IDdata = '$iddata'", $mysql_link) )
+									mysql_query("insert into quizz_items values('$j', '$iddata', '$q[$i]', '$p[$i]')", $mysql_link);
+								$j++;
+								}
+							}
+
+						// ok, pas d'erreur
+						$error = 0;
+
+						// permet d'enchaîner sur la saisie d'une nouvelle question
+						$show  = "";
+						}
+					}	// endif error
+				break;
+
+			case "delete" :	// l'utilisateur veut supprimer l'image associée à la question
+				$result = mysql_query("select _image from quizz_data where _IDdata = '$IDtext' limit 1", $mysql_link);
+				$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+				if ( mysql_query("update quizz_data set _image = '' where _IDdata = '$IDtext' limit 1", $mysql_link) ) {
+					@unlink("$DOWNLOAD/quizz/$IDtext-$row[0]");
+					@unlink("$DOWNLOAD/quizz/vignettes/$IDtext-$row[0]");
+					}
+				break;
+
+			case "remove" :	// l'utilisateur veut supprimer la question
+				$result = mysql_query("select _image from quizz_data where _IDdata = '$IDtext' limit 1", $mysql_link);
+				$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+				if ( mysql_query("delete from quizz_data where _IDdata = '$IDtext' limit 1", $mysql_link) ) {
+					mysql_query("delete from quizz_items where _IDdata = '$IDtext'", $mysql_link);
+
+					@unlink("$DOWNLOAD/quizz/$IDtext-$row[0]");
+					@unlink("$DOWNLOAD/quizz/vignettes/$IDtext-$row[0]");
+					}
+				break;
+
+			default :
+				break;
+			}
+
+		// masque de saisie
+		require "quizz_upload.php";
+	?>
+
+</div>

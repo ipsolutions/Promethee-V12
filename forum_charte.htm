@@ -1,0 +1,87 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2002-2007 by Dominique Laporte(C-E-D@wanadoo.fr)
+   Copyright (c) 2006 by Cyril Fresne (cyril.fresne@gmail.com)
+   Copyright (c) 2006 by Nordine Zetoutou (nordine.zetoutou@educagri.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : forum_charte.htm
+ *		projet   : la page d'utilisation des forums
+ *
+ *		version  : 1.1
+ *		auteur   : laporte
+ *		creation : 20/10/02
+ *		modif    : 15/06/06 - par cyril fresne
+ *                     migration PHP5
+ *		           17/07/06 - Nordine Zetoutou
+ * 	                 migration des balises HTML en XHTML 1.0 strict
+ */
+
+
+$IDgroup = (int) @$_GET["IDgroup"];		// identifiant du e-groupe
+$IDroot  = (int) @$_GET["IDroot"];		// ID du répertoire racine
+$IDforum = (int) @$_GET["IDforum"];		// ID du forum
+?>
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($FORUM_CHARTE)); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+
+            <table class="width100">
+              <tr>
+                <td style="width:100%;" class="align-justify">
+			<?php print($msg->read($FORUM_CHARTEXT1)); ?>
+
+                  <div style="padding-top: 10px; padding-left: 20px; padding-bottom: 10px;">
+			<?php
+				$list = explode("-", $msg->read($FORUM_CHARTEXT2));
+
+				for ($i=1; $i < count($list); $i++)
+					print("<img src=\"".$_SESSION["ROOTDIR"]."/images/puce.gif\" title=\"\" alt=\"*\" /> ".trim($list[$i])."<br/>");
+			?>
+                  </div>
+
+			<?php print($msg->read($FORUM_CHARTEXT3)); ?><br/><br/>
+
+			<?php print("<img src=\"".$_SESSION["CfgPuce"]."\"  title=\"".$_SESSION["CfgPuce"]."\" alt=\"".$_SESSION["CfgPuce"]."\" />"); ?>
+			<?php print($msg->read($FORUM_CHARTSMILEY)); ?><br/><br/>
+
+			<?php print("<img src=\"".$_SESSION["CfgPuce"]."\"  title=\"".$_SESSION["CfgPuce"]."\" alt=\"".$_SESSION["CfgPuce"]."\" />"); ?>
+			<?php print($msg->read($FORUM_CHARTBANNER)); ?>
+                </td>
+              </tr>
+
+              <tr>
+                <td style="height:20px;"></td>
+              </tr>
+
+              <tr>
+                <td class="align-center">
+			[<?php print($msg->read($FORUM_BACKTOFORUM, "index.php?item=$item&IDgroup=$IDgroup&IDforum=$IDforum&IDroot&IDroot&cmde=visu")); ?>]
+                </td>
+              </tr>
+            </table>
+
+</div>

@@ -1,0 +1,585 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2007 by Dominique Laporte(C-E-D@wanadoo.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : retenu.htm
+ *		projet   : la page de visualisation des consignes
+ *
+ *		version  : 1.0
+ *		auteur   : laporte
+ *		creation : 10/02/07
+ *		modif    : 
+ */
+
+
+$IDcentre = ( @$_POST["IDcentre"] )		// Identifiant du centre
+	? (int) $_POST["IDcentre"]
+	: (int) (@$_GET["IDcentre"] ? $_GET["IDcentre"] : $_SESSION["CnxCentre"]) ;
+$IDeleve  = ( @$_POST["IDeleve"] )		// Identifiant de l'élève
+	? (int) $_POST["IDeleve"]
+	: (int) @$_GET["IDeleve"] ;
+
+$name     = ( @$_POST["name"]	)		// nom alpha
+	? $_POST["name"]
+	: @$_GET["name"] ;
+$IDclass  = ( @$_POST["IDclass"] )		// Identifiant de la classe
+	? (int) $_POST["IDclass"]
+	: (int) @$_GET["IDclass"] ;
+$year     = ( @$_POST["year"] )
+	? (int) $_POST["year"]
+	: (int) (@$_GET["year"] ? $_GET["year"] : date("Y")) ;
+$month    = ( @$_POST["month"] )
+	? (int) $_POST["month"]
+	: (int) (@$_GET["month"] ? $_GET["month"] : date("m")) ;
+
+$IDdata   = @$_POST["IDdata"];		// Identifiant des consignes
+$isok     = @$_POST["isok"];			// consigne effectuée
+$todo     = @$_POST["todo"];			// data consigne
+$email    = @$_POST["email"];			// email parents
+
+$submit   = ( @$_POST["valid_x"] )		// bouton validation
+	? $_POST["valid_x"]
+	: @$_GET["submit"] ;
+
+//---------------------------------------------------------------------------
+function email($IDeleve)
+{
+/*
+ * fonction :	renseigne le modèle document
+ * out :		corps du message
+ */
+	require "globals.php";
+
+
+	$msg    = Array();
+
+	// lecture de l'élève
+	$Query  = "select _name, _fname from user_id ";
+	$Query .= "where _ID = '$IDeleve' AND _IDgrp = '1' ";
+	$Query .= "limit 1";
+
+	$result = mysql_query($Query, $mysql_link);
+	$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+	$msg[0] = $row[1];
+	$msg[1] = $row[0];
+
+	// lecture de la consigne
+	$query  = "select _ID, _date, _motif, _devoir, _delay from retenu_data ";
+	$query .= "where _IDeleve = '$IDeleve' ";
+	$query .= "order by _date desc";
+
+	$result = mysql_query($query, $mysql_link);
+	$myrow  = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+	$msg[2] = $myrow[1];
+	$msg[5] = getUserName($row[0]);
+	$msg[6] = $myrow[2];
+	$msg[7] = $myrow[3];
+
+	// lecture des paramètres
+	$Query  = "select _template, _start from retenu ";
+	$Query .= "where _IDcentre = '".$_SESSION["CnxCentre"]."' ";
+	$Query .= "limit 1";
+
+	$result = mysql_query($Query, $mysql_link);
+	$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+	list($hour, $min) = explode($msg->read($RETENU_TIMEHOUR), $row[1]);
+	$hour  += (int) $myrow[4];
+
+	$msg[3] = $row[1];
+	$msg[4] = "$hour ".$msg->read($RETENU_TIMEHOUR)." $min";
+
+	// lecture du modèle de document
+	$text   = "";
+
+	if ( ($in  = @fopen("download/email/".$_SESSION["lang"]."/$row[0]", "r")) ) {
+		$text = fgets($in, 4096);
+		fclose($in);
+		}
+
+	for ($i = 0; $i < count($msg); $i++) {
+		$idx  = $i + 1;
+		$text = str_replace("%$idx", $msg[$i], $text);
+		}
+
+	return $text;
+}
+//---------------------------------------------------------------------------
+?>
+
+
+<?php
+	require_once "include/calendar_tools.php";
+
+	// lecture des droits
+	$Query  = "select _IDmod, _IDgrprd, _IDgrpwr, _start from retenu ";
+	$Query .= "where _IDcentre = '".$_SESSION["CnxCentre"]."' ";
+	$Query .= "limit 1";
+
+	$result = mysql_query($Query, $mysql_link);
+	$auth   = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+	// test du droit de lecture
+	verifySessionAccess($auth[0], $auth[1]);
+
+	// commande de l'utilisateur
+	switch ( $submit ) {
+		case "del" :	// suppression de la consigne
+			$date   = date("Y-m-d H:i:s");
+
+			$IDdata = (int) @$_GET["IDdata"];
+			$IDitem = (int) @$_GET["IDitem"];
+
+           		if ( $_SESSION["CnxAdm"] == 255 ) {
+				$Query  = "delete from retenu_data ";
+				$Query .= "where _IDdata = '$IDdata' ";
+				$Query .= "limit 1";
+
+				if ( mysql_query($Query, $mysql_link) ) {
+					$Query  = "delete from retenu_items ";
+					$Query .= "where _IDdata = '$IDdata' ";
+					}
+				}
+			else {
+				$Query  = "update retenu_items ";
+				$Query .= "set _ID = '".$_SESSION["CnxID"]."', _IP = '".$_SESSION["CnxIP"]."', _date = '$date', _status = '3' ";
+				$Query .= "where _IDitem = '$IDitem' ";
+				$Query .= "limit 1";
+				}
+
+			mysql_query($Query, $mysql_link);
+			break;
+
+		default :		// enregistrement de la consigne
+           		if ( $submit AND ($_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $auth[0]) )
+				for ($i = 0; $i < count($IDdata); $i++) {
+					$date   = date("Y-m-d H:i:s", time());
+					$IDitem = @$_POST["IDitem"];
+
+					// date consigne
+					if ( @$_POST["todo_$i"] ) {
+						list($_year, $_month, $_day) = explode("-", $_POST["todo_$i"]);
+
+						if ( $_year != "0000" ) {
+							$Query  = "update retenu_data ";
+							$Query .= "set _todo = '".str_replace("h", ":", $_POST["todo_$i"])."', ";
+							$Query .= "_delay = '".$_POST["delay_$i"]."' ";
+							$Query .= "where _IDdata = '".@$IDdata[$i]."' ";
+
+							if ( mysql_query($Query, $mysql_link) ) {
+								$Query  = "insert into retenu_items ";
+								$Query .= "values('', '".@$IDdata[$i]."', '', '', '', '', '', '0')";
+
+								mysql_query($Query, $mysql_link);
+								}
+							}
+						}
+
+					// pointage consigne
+					if ( @$isok[$i] ) {
+						$value  = (int) $isok[$i];
+
+						$Query  = "update retenu_items ";
+						$Query .= "set _ID = '".$_SESSION["CnxID"]."', _IP = '".$_SESSION["CnxIP"]."', _date = '$date', _status = '$value' ";
+						$Query .= "where _IDitem = '".@$IDitem[$i]."' ";
+
+						// si report, on demande une nouvelle date
+						if ( mysql_query($Query, $mysql_link) AND $value == 2 ) {
+							$Query  = "update retenu_data ";
+							$Query .= "set _todo = '0000-00-00 00:00:00' ";
+							$Query .= "where _IDdata = '".@$IDdata[$i]."' ";
+
+							mysql_query($Query, $mysql_link);
+							}
+						}
+
+					// envoi par mél
+					if ( @$cbmail[$i] ) {
+						$to = @$mail[$i];
+
+						if ( strlen($to) )
+							if ( mail($to, $msg->read($RETENU_SUBJECT), email((int) @$cbmail[$i])) ) {
+								$Query  = "update retenu_items ";
+								$Query .= "set _email = '$date' ";
+								$Query .= "where _IDitem = '".@$IDitem[$i]."' ";
+
+								mysql_query($Query, $mysql_link);
+								}
+						}
+		            	}
+			break;
+		}
+
+	// initialisation
+	$href = "index.php?item=$item&IDcentre=$IDcentre&name=$name&IDclass=$IDclass&year=$year&month=$month";
+?>
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($RETENU_LIST)); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+
+	<form id="formulaire" action="index.php" method="post">
+	<?php
+		print("
+			<p class=\"hidden\"><input type=\"hidden\" name=\"item\"     value=\"$item\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"cmde\"     value=\"$cmde\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"IDeleve\"  value=\"$IDeleve\" /></p>
+			");
+	?>
+
+		<table class="width100">
+		  <tr>
+			<td style="width:50%;" class="align-right">
+			    	<?php print($msg->read($RETENU_CHOOSECENTER)); ?> 
+			</td>
+			<td style="width:50%;">
+				<label for="IDcentre">
+			  	<select id="IDcentre" name="IDcentre" onchange="document.forms.formulaire.submit()">
+				<?php
+					// lecture des centres constitutifs
+					$query  = "select _IDcentre, _ident from config_centre ";
+					$query .= "where _visible = 'O' AND _lang = '".$_SESSION["lang"]."' ";
+					$query .= "order by _IDcentre";
+
+					$result = mysql_query($query, $mysql_link);
+					$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+					while ( $row ) {			
+						printf("<option value=\"$row[0]\" %s>$row[1]</option>", ($IDcentre == $row[0]) ? "selected=\"selected\"" : "");
+
+						$row = remove_magic_quotes(mysql_fetch_row($result));
+						}				
+				?>
+				</select> <img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/home.gif" title="" alt="" />
+				</label>
+			</td>
+		  </tr>
+		</table>
+
+	</form>
+
+	<hr style="width:80%;" />
+
+	<?php
+		// autorisation de renseigner les consignes
+		if ( $_SESSION["CnxID"] == $auth[0] OR $auth[2] & pow(2, $_SESSION["CnxGrp"] - 1) )
+			print("
+		            <table class=\"width100\">
+	      	        <tr>
+		                <td style=\"width:10%;\" class=\"valign-middle\">
+		                	<a href=\"".myurlencode("$href&cmde=post")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/post.gif\" title=\"". $msg->read($RETENU_NEW) ."\" alt=\"". $msg->read($RETENU_NEW) ."\" /></a>
+		                </td>
+		                <td class= \"valign-middle\">". $msg->read($RETENU_RECORD) ."</td>
+		              </tr>
+		            </table>
+		            ");
+
+		print("
+		   <form id=\"selection\" name=\"selection\" action=\"index.php\" method=\"post\">
+			<p class=\"hidden\"><input type=\"hidden\" name=\"item\"     value=\"$item\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"cmde\"     value=\"$cmde\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"IDcentre\" value=\"$IDcentre\" /></p>
+
+			<table class=\"width100\">
+			  <tr>
+	                <td class=\"align-center\" style=\"width:1%; background-color:#C0C0C0;\">
+				<img src=\"".$_SESSION["ROOTDIR"]."/images/setup/check_on.png\" title=\"". $msg->read($RETENU_DONE) ."\" alt=\"". $msg->read($RETENU_DONE) ."\" />
+	                </td>
+	                <td class=\"align-center\" style=\"width:1%; background-color:#C0C0C0;\">
+				<img src=\"".$_SESSION["ROOTDIR"]."/images/setup/check_wrn.png\" title=\"". $msg->read($RETENU_REPORT) ."\" alt=\"". $msg->read($RETENU_REPORT) ."\" />
+	                </td>
+
+	                <td class=\"align-left\" style=\"width:38%; background-color:#C0C0C0;\">
+				". $msg->read($RETENU_NAME) ."
+			  	<label for=\"name\">
+			  	<select id=\"name\" name=\"name\" onchange=\"document.forms.selection.submit()\">
+			");
+
+		// accès par ordre alphabétique
+            $alpha = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
+		printf("<option value=\"\" %s>". $msg->read($RETENU_ALL) ."</option>", ($name == "") ? "selected=\"selected\"" : "");
+		for ($i = 0; $i < 26; $i++)
+			printf("<option value=\"".$alpha[$i]."\" %s>".$alpha[$i]."</option>", ($alpha[$i] == $name) ? "selected=\"selected\"" : "");
+
+		print("
+			  	</select>
+			  	</label>
+	                </td>
+
+	                <td class=\"align-center\" style=\"width:20%; background-color:#C0C0C0;\">
+			  	<label for=\"IDclass\">
+			  	<select id=\"IDclass\" name=\"IDclass\" onchange=\"document.forms.selection.submit()\">
+			");
+
+		// affichage des classes
+		$Query  = "select _IDclass, _ident from campus_classe ";
+		$Query .= "where _IDcentre = '$IDcentre' ";
+		$Query .= "AND _visible = 'O' ";
+		$Query .= "order by _IDclass";
+
+		$result = mysql_query($Query, $mysql_link);
+		$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+		print("<option value=\"0\">". $msg->read($RETENU_ALLCLASS) ."</option>");
+
+		while ( $row ) {			
+			printf("<option value=\"$row[0]\" %s>$row[1]</option>", ($IDclass == $row[0]) ? "selected=\"selected\"" : "");
+
+			$row = remove_magic_quotes(mysql_fetch_row($result));
+			}	// endwhile classe
+
+		print("
+			  	</select>
+			  	</label>
+	                </td>
+	                <td class=\"align-center\" style=\"width:12%; background-color:#C0C0C0;\">
+			  	<label for=\"year\">
+			  	<select id=\"year\" name=\"year\" onchange=\"document.forms.selection.submit()\">
+			");
+
+		// affichage des années
+		$query  = "select min(_date), max(_date) from absent_items";
+
+		$return = mysql_query($query, $mysql_link);
+		$row    = ( $return ) ? mysql_fetch_row($return) : 0 ;
+
+		$min    = ( $row[0] ) ? substr($row[0], 0, 4) : date("Y") ;
+		$max    = ( $row[1] ) ? substr($row[1], 0, 4) : date("Y") ;
+
+		for ($i = $min; $i <= $max; $i++)
+			printf("<option value=\"$i\" %s>$i&nbsp;</option>", ($year == $i) ? "selected=\"selected\"" : "");
+
+		print("
+			  	</select>
+			  	</label>
+	                </td>
+	                <td class=\"align-center\" style=\"width:12%; background-color:#C0C0C0;\">
+			  	<label for=\"month\">
+			  	<select id=\"month\" name=\"month\" onchange=\"document.forms.selection.submit()\">
+			");
+
+		// affichage des mois
+		$mois = array_merge(Array(''), explode(",", $msg->read($RETENU_MONTH)));
+		for ($i = 1; $i < 13; $i++)
+			printf("<option value=\"$i\" %s>".$mois[$i]."</option>", ($month == $i) ? "selected=\"selected\"" : "");
+
+		print("
+			  	</select>
+			  	</label>
+	                </td>
+	                <td class=\"align-center\" style=\"width:8%; background-color:#C0C0C0;\">
+				". $msg->read($RETENU_TIME) ."
+	                </td>
+
+	                <td class=\"align-center\" style=\"width:8%; background-color:#C0C0C0;\">
+				<img src=\"".$_SESSION["ROOTDIR"]."/images/move.gif\" title=\"". $msg->read($RETENU_EMAIL) ."\" alt=\"". $msg->read($RETENU_EMAIL) ."\" />
+             		<label for=\"email\"><input type=\"checkbox\" id=\"email\" name=\"email\" value=\"1\" onclick=\"document.forms.selection.submit();\" /></label>
+	                </td>
+			  </tr>
+			");
+
+		// affichage des consignes
+		$query  = "select user_id._name, user_id._fname, user_id._ID, user_id._IDclass, user_id._email, ";
+		$query .= "retenu_data._delay, retenu_data._todo, retenu_data._IDdata, retenu_data._ID, retenu_data._IDroom ";
+		$query .= "from user_id, retenu_data ";
+		$query .= "where user_id._ID = retenu_data._IDeleve ";
+		$query .= "AND ((retenu_data._todo >= '$year-$month-01 00:00:00' AND retenu_data._todo <= '$year-$month-31 23:59:59') OR retenu_data._todo like '0000-00-00 %') ";
+		$query .= ( $name ) ? "AND _user_id._name like '$name%' " : "" ;
+		$query .= ( $IDclass ) ? "AND user_id._IDclass = '$IDclass' " : "" ;
+		$query .= "order by _name, _fname asc, _IDdata desc";
+
+		$result = mysql_query($query, $mysql_link);
+		$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+		$chkall = ( $email ) ? "checked=\"checked\"" : "" ;
+
+		$count  = 0;
+		while ( $row ) {
+			$bgcolor = ( $count % 2 ) ? "item" : "menu" ;
+
+			// lecture de la classe
+			$return  = mysql_query("select _ident from campus_classe where _IDclass = '$row[3]'", $mysql_link);
+			$classe  = ( $return ) ? remove_magic_quotes(mysql_fetch_row($return)) : 0 ;
+
+			// date de la consigne
+			list($_year, $_month, $_day) = explode("-", $row[6]);
+			list($_day, $h) = explode(" ", $_day);
+
+			// infos sur la consigne
+			$query   = "select _status, _email, _date, _IDitem from retenu_items ";
+			$query  .= "where _IDdata = '$row[7]' ";
+			$query  .= "order by _IDitem desc ";
+//			$query  .= "limit 1";
+
+			$return  = mysql_query($query, $mysql_link);
+			$myrow   = ( $return ) ? remove_magic_quotes(mysql_fetch_row($return)) : 0 ;
+			$nbrow   = ( $return ) ? (int) mysql_affected_rows($mysql_link) - 1 : 0 ;
+
+			$report  = ( $nbrow > 0 ) ? $msg->read($RETENU_SETREPORT, strval($nbrow)) : "" ;
+
+			$col1    = "<p class=\"hidden\"><input type=\"hidden\" name=\"IDdata[$count]\" value=\"$row[7]\" /></p>";
+			$col1   .= "<p class=\"hidden\"><input type=\"hidden\" name=\"IDitem[$count]\" value=\"$myrow[3]\" /></p>";
+			$col1   .= "<p class=\"hidden\"><input type=\"hidden\" name=\"mail[$count]\"   value=\"$row[4]\" /></p>";
+
+			switch ( $myrow[0]) {
+				case '0' :	// en attente
+					$col1 .= $_year == "0000" ? "&nbsp;" : "<label for=\"isok_1\"><input type=\"radio\" id=\"isok_1\" name=\"isok[$count]\" value=\"1\" /></label>" ;
+					$col2  = $_year == "0000" ? "&nbsp;" : "<label for=\"isok_2\"><input type=\"radio\" id=\"isok_2\" name=\"isok[$count]\" value=\"2\" /></label>" ;
+					break;
+				case '1' :	// effectuée
+					$col1 .= "<img src=\"".$_SESSION["ROOTDIR"]."/images\setup\check_on.png\" title=\"". $msg->read($RETENU_DONE) ."\" alt=\"". $msg->read($RETENU_DONE) ."\" />";
+					$col2  = "&nbsp;";
+					break;
+				case '2' :	// reportée
+					$col1 .= "&nbsp;";
+					$col2  = "<img src=\"".$_SESSION["ROOTDIR"]."/images\setup\check_wrn.png\" title=\"". $msg->read($RETENU_REPORT) ."\" alt=\"". $msg->read($RETENU_REPORT) ."\" />";
+					break;
+				case '3' :	// annulée
+					$col1 .= "&nbsp;";
+					$col2  = "<img src=\"".$_SESSION["ROOTDIR"]."/images\setup\check_off.png\" title=\"". $msg->read($RETENU_CANCEL) ."\" alt=\"". $msg->read($RETENU_CANCEL) ."\" />";
+					break;
+				default :	// annulée
+					$col1 .= "&nbsp;";
+					$col2  = "&nbsp;";
+					break;
+				}
+
+			// mail aux parents
+			$mailto  = ( $row[4] )
+				? (($myrow[1] == "0000-00-00 00:00:00")
+					? "<label for=\"cbmail_$count\"><input type=\"checkbox\" id=\"cbmail_$count\" name=\"cbmail[$count]\" value=\"$row[2]\" $chkall /></label>"
+					: "<img src=\"".$_SESSION["ROOTDIR"]."/images/email.gif\" title=\"". $msg->read($RETENU_SENT, $myrow[1]) ."\" alt=\"". $msg->read($RETENU_SENT, $myrow[1]) ."\" />")
+				: "" ;
+
+			// suppression consigne
+			$req    = $msg->read($RETENU_DELETE);
+			$delete = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $row[8] OR $_SESSION["CnxID"] == $auth[0] )
+				? "<a href=\"".myurlencode("$href&IDdata=$row[7]&IDitem=$myrow[3]&submit=del")."\" onclick=\"return confirmLink(this, '$req');\"><img src=\"".$_SESSION["ROOTDIR"]."/images/corb.gif\" title=\"$req\" alt=\"\" /></a>"
+				: "" ;
+
+			if ( $_year == "0000" ) {
+				print("
+					<tr class=\"$bgcolor\">
+			                <td class=\"align-center\">$col1</td>
+			                <td class=\"align-center\" style=\"background-color:#FFCC66;\">$col2</td>
+			                <td>
+						<a href=\"".myurlencode("$href&cmde=visu&IDeleve=$row[2]")."\">$row[0] $row[1]</a> $report
+			                </td>
+			                <td class=\"align-center\">$classe[0]</td>
+			                <td class=\"align-center\" colspan=\"2\">
+						<label for=\"is_todo_$count\"><input type=\"text\" id=\"is_todo_$count\" name=\"todo_$count\" size=\"15\" value=\"$_year-$_month-$_day $auth[3]\" /></label>
+					");
+
+				// calendrier surgissant
+				CalendarPopup("todo_$count", "document.selection.todo_$count");
+
+				print("</td>");
+
+				$select  = "<label for=\"delay_$count\">";
+				$select .= "<select id=\"delay_$count\" name=\"delay_$count\">";
+
+				for ($i = $row[5]; $i < 5; $i++)	
+					$select .= "<option value=\"$i\">$i,00 ".$msg->read($RETENU_TIMEHOUR)."</option>";
+
+				$select .= "</select>";
+				$select .= "</label>";
+
+				print("
+			                <td class=\"align-center\">$select</td>
+			                <td class=\"align-center\">$mailto</td>
+					  </tr>
+					");
+				}
+			else {
+				// lecture de la salle de retenu
+				$query  = "select _title from edt_items ";
+				$query .= "where _IDcentre = '$IDcentre' ";
+				$query .= "AND _lang = '".$_SESSION["lang"]."' ";
+				$query .= "AND _IDitem = '$row[9]' limit 1";
+
+				$return = mysql_query($query, $mysql_link);
+				$myrow  = ( $return ) ? remove_magic_quotes(mysql_fetch_row($return)) : 0 ;
+
+				$room   = ( $myrow ) ? "@ $myrow[0]" : "" ;
+
+				// lecture de l'heure de retenu
+				$query  = "select _start from retenu ";
+				$query .= "where _IDcentre = '$IDcentre' ";
+				$query .= "limit 1";
+
+				$return = mysql_query($query, $mysql_link);
+				$myrow  = ( $return ) ? remove_magic_quotes(mysql_fetch_row($return)) : 0 ;
+
+				print("
+					<tr class=\"$bgcolor\">
+			                <td class=\"align-center\" style=\"width:1%;\">$col1</td>
+			                <td class=\"align-center\" style=\"width:1%; background-color:#FFCC66;\">$col2</td>
+			                <td>
+						<a href=\"".myurlencode("$href&cmde=visu&IDeleve=$row[2]")."\">$row[0] $row[1]</a> $report $delete<br/>
+						<span class=\"x-small\">$myrow[0] $room ($row[5]".$msg->read($RETENU_TIMEHOUR).")</span>
+			                </td>
+			                <td class=\"align-center\">$classe[0]</td>
+			                <td class=\"align-center\">$_year</td>
+			                <td class=\"align-center\">$_day</td>
+			                <td class=\"align-center\">$row[5] ".$msg->read($RETENU_TIMEHOUR)."</td>
+			                <td class=\"align-center\">$mailto</td>
+					  </tr>
+					");
+				}
+
+			$count++;
+			$row = remove_magic_quotes(mysql_fetch_row($result));
+			}
+
+		print("
+			  <tr>
+	                <td colspan=\"8\"><hr/></td>
+			  </tr>
+	            </table>
+			");
+
+		// seuls l'admin et le modérateur peuvent enregistrer les modifs
+		if ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $auth[0] )
+			print("
+		            <table class=\"width100\">
+	      	        <tr>
+		                <td style=\"width:10%;\" class=\"valign-middle\">
+					<input type=\"image\" src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/valid.gif\" name=\"valid\" alt=\"".$msg->read($RETENU_INPUTOK)."\" />
+		                </td>
+		                <td class= \"valign-middle\">". $msg->read($RETENU_VALIDATE) ."</td>
+		              </tr>
+		            </table>
+		            ");
+
+		print("
+				<p class=\"hidden\"><input type=\"hidden\" name=\"count\" value=\"$count\" /></p>
+			</form>");
+	?>
+
+</div>

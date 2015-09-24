@@ -1,0 +1,279 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2009 by Dominique Laporte(C-E-D@wanadoo.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : ccn_gestion.htm
+ *		projet   : la page de gestion des Cahiers de Corresponadance Numériques
+ *
+ *		version  : 1.0
+ *		auteur   : laporte
+ *		creation : 25/10/09
+ *		modif    : 
+ */
+
+
+$IDcentre = ( @$_POST["IDcentre"] ) 		// ID du centre
+	? (int) $_POST["IDcentre"]
+	: (int) (@$_GET["IDcentre"] ? $_GET["IDcentre"] : $_SESSION["CnxCentre"]) ;
+
+$IDmod    = (int) @$_POST["IDmod"];
+$cbrd     = @$_POST["cbrd"];
+$cbwr     = @$_POST["cbwr"];
+$rss      = ( @$_POST["rss"] ) ? "O" : "N" ;
+$email    = @$_POST["email"];
+
+$submit   = @$_POST["valid_x"];		// bouton de validation
+?>
+
+
+<?php
+	// initialisation
+	$status  = "-";
+
+	// vérification des autorisations
+	admSessionAccess();
+
+	// l'utilisateur a validé la saisie
+	if ( $submit ) {
+		$status = $msg->read($CCN_MODIFICATION) ." ";
+
+		// droits des rédacteurs et des lecteurs
+		$grpwr = $grprd = 0;
+		for ($i = 0; $i < count($cbwr); $i++)
+			$grpwr += ( @$cbwr[$i] ) ? $cbwr[$i] : 0 ;
+		for ($i = 0; $i < count($cbrd); $i++)
+			$grprd += ( @$cbrd[$i] ) ? $cbrd[$i] : 0 ;
+
+		// nouveau CCN
+		$Query  = "insert into ccn ";
+		$Query .= "values('$IDcentre', '$IDmod', '$grpwr', '$grprd', '$email', '$rss')";
+
+		if ( !mysql_query($Query, $mysql_link) ) {
+			// modification du CCN
+			$Query  = "UPDATE ccn ";
+			$Query .= "SET _IDmod = '$IDmod', _IDgrpwr = '$grpwr', _IDgrprd= '$grprd', _rss = '$rss', _email = '$email' ";
+			$Query .= "where _IDcentre = '$IDcentre' ";
+			$Query .= "limit 1";
+
+			if ( !mysql_query($Query, $mysql_link) ) {
+				$status .= "<img src=\"".$_SESSION["ROOTDIR"]."/images/bad.gif\" title=\"\" alt=\"\" />";
+				sql_error($mysql_link);
+				}
+			else
+				$status .= "<img src=\"".$_SESSION["ROOTDIR"]."/images/ok.gif\" title=\"\" alt=\"\" />";
+			}
+		else
+			$status .= "<img src=\"".$_SESSION["ROOTDIR"]."/images/ok.gif\" title=\"\" alt=\"\" />";
+		}
+
+	// recherche du ccn
+	$Query  = "select _IDmod, _IDgrpwr, _IDgrprd, _email, _rss ";
+	$Query .= "from ccn ";
+	$Query .= "where _IDcentre = '$IDcentre' ";
+	$Query .= "order by _IDcentre asc ";
+
+	$result = mysql_query($Query, $mysql_link);
+	$row    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+	// initialisation des champs de saisie
+	$IDmod  = $row[0];
+	$grpwr  = $row[1];
+	$grprd  = $row[2];
+	$email  = $row[3];
+	$rss    = $row[4];
+?>
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($CCN_MANAGEMENT)); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+
+	<p><?php print($msg->read($CCN_STATUS)." $status"); ?></p>
+
+	<form id="formulaire" action="index.php" method="post">
+	<?php
+		print("
+			<p class=\"hidden\"><input type=\"hidden\" name=\"item\"    value=\"$item\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"cmde\"    value=\"$cmde\" /></p>
+			");
+	?>
+
+	<div style="border:#cccccc solid 1px; padding:4px;">
+
+		  <table class="width100">
+		    <tr style="background-color:#eeeeee;">
+		      <td style="width:33%;"><?php print($msg->read($CCN_CENTER)); ?></td>
+		      <td style="width:33%;"></td>
+		      <td style="width:33%;"></td>
+		    </tr>
+
+		    <tr>
+		      <td>
+				<label for="IDcentre">
+				<select id="IDcentre" name="IDcentre" onchange="document.forms.formulaire.submit()">
+				<?php
+					// lecture des centres constitutifs
+					$query  = "select _IDcentre, _ident from config_centre ";
+					$query .= "where _visible = 'O' AND _lang = '".$_SESSION["lang"]."' ";
+					$query .= "order by _IDcentre";
+
+					$result = mysql_query($query, $mysql_link);
+					$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+					while ( $row ) {			
+						$select = ( $IDcentre == $row[0] ) ? "selected=\"selected\"" : "" ;
+
+						print("<option value=\"$row[0]\" $select>$row[1]</option>");
+
+						$row = remove_magic_quotes(mysql_fetch_row($result));
+						}				
+				?>
+				</select>
+				</label>
+		      </td>
+		      <td></td>
+		      <td></td>
+		    </tr>
+
+		    <tr>
+		      <td style="height:10px;"></td>
+		    </tr>
+
+		    <tr style="background-color:#eeeeee;">
+		      <td><?php print($msg->read($CCN_MODO)); ?> *</td>
+		      <td><?php print($msg->read($CCN_WRITER)); ?></td>
+		      <td><?php print($msg->read($CCN_READER)); ?></td>
+		    </tr>
+
+		    <tr>
+		      <td class="valign-top">
+				<label for="IDmod">
+				<select id="IDmod" name="IDmod">
+					<option value="0"><?php print($msg->read($CCN_NONE)); ?></option>
+					<?php
+						// recherche des modérateurs
+						$query  = "select _ID, _name, _fname from user_id where _adm & 4 order by _name asc";
+
+						$result = mysql_query($query, $mysql_link);
+						$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+						while ( $row ) {
+							$select = ( $IDmod == $row[0] ) ? "selected=\"selected\"" : "" ;
+
+							print("<option value=\"$row[0]\" $select>".formatUserName($row[1], $row[2])."</option>");
+
+							$row = remove_magic_quotes(mysql_fetch_row($result));
+							}
+					?>
+				</select>
+				</label>
+		      </td>
+		      <td class="valign-top">
+	      		<?php
+					// recherche des groupes
+					$query  = "select _IDgrp, _ident from user_group ";
+					$query .= "where _visible = 'O' AND _lang = '".$_SESSION["lang"]."' ";
+					$query .= "order by _IDgrp asc";
+
+					$result = mysql_query($query, $mysql_link);
+					$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+					while ( $row ) {
+						$check = ( $grpwr & pow(2, $row[0] - 1) ) ? "checked=\"checked\"" : "" ;
+
+	             			print("<label for=\"cbwr_$row[0]\"><input type=\"checkbox\" id=\"cbwr_$row[0]\" name=\"cbwr[]\" value=\"". pow(2, $row[0] - 1) ."\" $check /> $row[1]</label><br/>");
+
+						$row   = remove_magic_quotes(mysql_fetch_row($result));
+						}
+             		?>
+		      </td>
+		      <td class="valign-top">
+	      		<?php
+					// recherche des groupes
+					mysql_data_seek($result, 0);
+					$row = remove_magic_quotes(mysql_fetch_row($result));
+
+					while ( $row ) {
+						$check = ( $grprd & pow(2, $row[0] - 1) ) ? "checked=\"checked\"" : "" ;
+
+	             			print("<label for=\"cbrd_$row[0]\"><input type=\"checkbox\" id=\"cbrd_$row[0]\" name=\"cbrd[]\" value=\"". pow(2, $row[0] - 1) ."\" $check /> $row[1]</label><br/>");
+
+						$row   = remove_magic_quotes(mysql_fetch_row($result));
+						}
+             		?>
+		      </td>
+		    </tr>
+
+		    <tr>
+		      <td style="height:10px;"></td>
+		    </tr>
+
+		    <tr style="background-color:#eeeeee;">
+		      <td><?php print($msg->read($CCN_BROADCAST)); ?></td>
+		      <td><?php print($msg->read($CCN_WARNING)); ?></td>
+		      <td></td>
+		    </tr>
+
+		    <tr>
+			<td class="valign-top">
+	           		<label for="rss"><input type="checkbox" id="rss" name="rss" <?php print(($rss == "O") ? "checked=\"checked\"" : ""); ?> value="O" /><?php print($msg->read($CCN_RSS)); ?></label>
+		      </td>
+			<td class="valign-top">
+	           		<label for="email_"><input type="radio"  id="email_"  name="email" <?php print(($email == 0) ? "checked=\"checked\"" : ""); ?> value="0" /><?php print($msg->read($CCN_NONE)); ?></label><br/>
+	           		<label for="email_S"><input type="radio" id="email_S" name="email" <?php print(($email == 1) ? "checked=\"checked\"" : ""); ?> value="1" /><?php print($msg->read($CCN_SMS)); ?></label><br/>
+	           		<label for="email_P"><input type="radio" id="email_P" name="email" <?php print(($email == 2) ? "checked=\"checked\"" : ""); ?> value="2" /><?php print($msg->read($CCN_POSTIT)); ?></label><br/>
+	           		<label for="email_E"><input type="radio" id="email_E" name="email" <?php print(($email == 3) ? "checked=\"checked\"" : ""); ?> value="3" /><?php print($msg->read($CCN_EMAIL)); ?></label>
+		      </td>
+		      <td></td>
+		    </tr>
+		  </table>
+
+	</div>
+
+	<div class="x-small">* <?php print($msg->read($CCN_DECLARE)); ?></div>
+
+	<hr style="width:80%;" />
+
+		<table class="width100">
+	           <tr>
+	              <td style="width:10%;" class="valign-middle align-center">
+	              	<?php print("<input type=\"image\" src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/valid.gif\" name=\"valid\" alt=\"".$msg->read($CCN_INPUTOK)."\" />"); ?>
+	              </td>
+	              <td class="valign-middle">
+	              	<?php print($msg->read($CCN_MODIFY)); ?>
+	              </td>
+	           </tr>
+	           <tr>
+	              <td class="valign-middle align-center">
+	              	<?php print("<a href=\"index.php?item=$item\"><img src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/cancel.gif\" title=\"\" alt=\"".$msg->read($CCN_INPUTCANCEL)."\" />"); ?></a>
+	              </td>
+	              <td class="valign-middle">
+	              	<?php print($msg->read($CCN_BACK)); ?>
+	              </td>
+	           </tr>
+		</table>
+	</form>
+
+</div>

@@ -1,0 +1,550 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2002-2007 by Dominique Laporte(C-E-D@wanadoo.fr)
+   Copyright (c) 2006 by FG (persofg@gmail.com)
+   Copyright (c) 2006 by Nordine Zetoutou (nordine.zetoutou@educagri.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : stage_visit.htm
+ *		projet   : la page d'inscription des visites de stages
+ *
+ *		version  : 1.0
+ *		auteur   : laporte
+ *		creation : 16/02/03
+ *		modif    : 20/06/05 par FG
+ *                     migration -> PHP5
+ * 		           17/07/06 - par Nordine Zetoutou
+ * 	                 migration des balises HTML en XHTML 1.0 strict
+ */
+
+
+$IDcentre  = ( @$_POST["IDcentre"] )
+	? (int) $_POST["IDcentre"]
+	: (int) (@$_GET["IDcentre"] ? $_GET["IDcentre"] : $_SESSION["CnxCentre"]);
+$IDclass   = ( @$_POST["IDclass"] )
+	? (int) $_POST["IDclass"]
+	: (int) (@$_GET["IDclass"] ? $_GET["IDclass"] : $_SESSION["CnxClass"]);
+$IDeleve   = ( @$_POST["IDeleve"] )
+	? (int) $_POST["IDeleve"]
+	: (int) @$_GET["IDeleve"];
+$IDreturn  = ( @$_POST["IDreturn"] )
+	? (int) $_POST["IDreturn"]
+	: (int) @$_GET["IDreturn"];
+$nbstage   = ( @$_POST["nbstage"] )
+	? (int) $_POST["nbstage"]
+	: (int) (@$_GET["nbstage"] ? $_GET["nbstage"] : 1);
+$IDperiode = ( @$_POST["IDperiode"] )
+	? (int) $_POST["IDperiode"]
+	: (int) @$_GET["IDperiode"];
+$IDstage   = ( @$_POST["IDstage"] )
+	? (int) $_POST["IDstage"]
+	: (int) @$_GET["IDstage"];
+
+$idstage  = @$_POST["idstage"];
+$date1    = @$_POST["date1"];
+$date2    = @$_POST["date2"];
+$ID       = @$_POST["ID"];
+
+$submit   = (@ $_POST["submit"])
+	? $_POST["submit"]
+	: @$_GET["submit"];
+?>
+
+
+<?php
+	//---- accés protégé ----
+	$Query  = "select _IDgrprd, _IDgrpwr, _IDmod from stage_data ";
+	$Query .= "where _visible = 'O' AND _mod = '$cmde' ";
+	$Query .= "limit 1";
+
+	$result = mysql_query($Query, $mysql_link);
+	$row    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+	$grprd  = $row[0];
+	$grpwr  = $row[1];
+	$idmod  = $row[2];
+
+	// vérification des autorisations
+	verifySessionAccess($idmod, $grprd);
+	//-----------------------
+
+	switch ( $submit ) {
+		case "Valider" :
+			// sélection des élèves
+			$Query  = "select _ID from user_id ";
+			$Query .= "where _IDclass = '$IDclass' AND _IDgrp = '1' ";
+			$Query .= "AND _visible = 'O' ";
+			$Query .= "order by _name, _fname";
+
+			$result = mysql_query($Query, $mysql_link);
+			$eleve  = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+			$i = 0;
+			while ( $eleve ) {
+				if ( @$idstage[$i] ) {
+					$Query  = "select _IDperiode from stage_periode ";
+					$Query .= "where _IDstage = '$idstage[$i]' ";
+					$Query .= "AND _nbstage = '$nbstage' ";
+					$Query .= "order by _IDperiode desc ";
+					$Query .= "limit 1";
+
+					$res = mysql_query($Query, $mysql_link);
+					$row = ( $res ) ? mysql_fetch_row($res) : 0 ;
+
+					if ( $res ) {
+						// mise à jour 
+						if ( mysql_affected_rows($mysql_link) ) {
+							$Query  = "update stage_periode ";
+							$Query .= "set ";
+							$Query .= ( strlen(@$date1[$i]) OR strlen(@$date2[$i]) )
+								? "_debut = '$date1[$i]', _fin = '$date2[$i]' "
+								: "" ;
+							$Query .= ( strlen(@$ID[$i]) )
+								? (( strlen($Query) > 30 )
+									? ", _ID = '$ID[$i]' "
+									: "_ID = '$ID[$i]' ")
+								: "" ;
+							$Query .= "where _IDperiode = '$row[0]'";
+
+							mysql_query($Query, $mysql_link);
+							}
+						// insertion
+						else {
+							$id     = ( strlen(@$ID[$i]) ) ? $ID[$i] : 0 ;
+							
+							$Query  = "insert into stage_periode ";
+							$Query .= "values('', '$idstage[$i]', '$nbstage', '$date1[$i]', '$date2[$i]', '$id', '', '')";
+
+							if  ( mysql_query($Query, $mysql_link) ) {
+								$id     = mysql_insert_id();
+
+								$Query  = "update stage ";
+								$Query .= "set _IDperiode = '$id' ";
+								$Query .= "where _IDstage = '$idstage[$i]' ";
+
+								mysql_query($Query, $mysql_link);
+								}
+							else
+								sql_error($mysql_link);
+							}
+						}
+
+					}
+				$eleve = mysql_fetch_row($result);
+				$i++;
+				}
+			break;
+				
+		case "del" :	// on efface le stage
+			if ( $IDstage ) {
+				$Query  = "delete from stage ";
+				$Query .= "where _IDstage = '$IDstage' ";
+			
+				if ( !mysql_query($Query, $mysql_link) )
+					mysql_error($mysql_link);
+				else {
+					// et on efface les périodes de stages
+					$Query  = "delete from stage_periode ";
+					$Query .= "where _IDstage = '$IDstage' ";
+			
+					if ( !mysql_query($Query, $mysql_link) )
+						mysql_error($mysql_link);
+					}
+				}
+			break;
+				
+		case "delme" :	// on efface l'inscription
+			if ( $IDperiode ) {
+				$Query  = "update stage_periode ";
+				$Query .= "set _ID = '0' ";
+				$Query .= "where _IDperiode = '$IDperiode' ";
+			
+				if ( !mysql_query($Query, $mysql_link) )
+					mysql_error($mysql_link);
+				}
+			break;
+				
+		case "new" :	// nouveau stages pour une classe donnée
+			if ( $IDclass ) {
+				// sélection des élèves
+				$Query  = "select _ID from user_id ";
+				$Query .= "where _IDclass = '$IDclass' AND _IDgrp = '1' ";
+				$Query .= "AND _visible = 'O' ";
+				$Query .= "order by _name, _fname";
+
+				$result = mysql_query($Query, $mysql_link);
+				$eleve  = ( $result ) ? mysql_fetch_row($result) : 0 ;
+				
+				while ( $eleve ) {
+					$Query  = "insert into stage ";
+					$Query .= "values('', '0', '$eleve[0]', '$IDclass', '0', '', '', '', '')";
+
+					if ( !mysql_query($Query, $mysql_link) )
+						mysql_error($mysql_link);
+
+					$eleve = mysql_fetch_row($result);
+					}
+				}
+			break;
+
+		case "next" :	// période de stage suivante
+			$nbstage++;
+			break;
+
+			case "prev" :	// période de stage précédente
+			$nbstage--;
+			break;
+
+		default :
+			// test de la valeur de retour sur choix d'entreprise
+			if ( $IDclass AND $IDeleve AND $IDreturn ) {
+				// un enregistrement existe-t-il ?
+				$Query  = "select _IDstage from stage ";
+				$Query .= "where _IDeleve = '$IDeleve' AND _IDlieu = '0'";
+
+				$result = mysql_query($Query, $mysql_link);
+
+				if ( mysql_affected_rows($mysql_link) == 1 ) {
+					// on modifie le stage
+					$row    = mysql_fetch_row($result);
+
+					$Query  = "update stage ";
+					$Query .= "set _IDlieu = '$IDreturn' ";
+					$Query .= "where _IDstage = '$row[0]' ";
+
+					if ( !mysql_query($Query, $mysql_link) )
+						mysql_error($mysql_link);
+					}
+				else {
+					// on enregistre le stage
+					$Query  = "insert into stage ";
+					$Query .= "values('', '$IDreturn', '$IDeleve', '$IDclass', '0', '', '', '', '')";
+
+					if ( !mysql_query($Query, $mysql_link) )
+						mysql_error($mysql_link);
+/*
+					else {
+						// et on met à jour le n° de la convention
+						$conv = mysql_insert_id();
+						mysql_query("update stage set _convention = '$conv' where _IDstage = '$conv'", $mysql_link);
+						}
+*/
+					}
+				}			
+			break;
+		}
+?>
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($STAGE_VISIT)); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+
+	<form id="formulaire" action="index.php" method="post">
+	<?php
+		print("
+			<p class=\"hidden\"><input type=\"hidden\" name=\"item\"    value=\"$item\"/></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"cmde\"    value=\"$cmde\" /></p>
+			");
+	?>
+
+            <table class="width100">
+		  <tr>
+			<td style="width:50%;" class="align-right">
+			    	<?php print($msg->read($STAGE_CHOOSECENTER)); ?> 
+			</td>
+			<td style="width:50%;">
+				<label for="IDcentre">
+			  	<select id="IDcentre" name="IDcentre" onchange="document.forms.formulaire.submit()">
+				<?php
+					// lecture des centres constitutifs
+					$query  = "select _IDcentre, _ident from config_centre ";
+					$query .= "where _visible = 'O' AND _lang = '".$_SESSION["lang"]."' ";
+					$query .= "order by _IDcentre";
+
+					$result = mysql_query($query, $mysql_link);
+					$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+					while ( $row ) {			
+						if ( $IDcentre == $row[0] )
+							print("<option selected=\"selected\" value=\"$row[0]\">$row[1]</option>");
+						else
+							print("<option value=\"$row[0]\">$row[1]</option>");
+
+						$row = remove_magic_quotes(mysql_fetch_row($result));
+						}				
+				?>
+				</select> <img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/home.gif" alt="" title="" />
+				</label>
+			</td>
+		  </tr>
+
+		    <tr>
+			<td class="align-right">
+			  <?php print($msg->read($STAGE_CHOOSECLASS)); ?> 
+			</td>
+			<td>
+				<label for="IDclass">
+			  	<select id="IDclass" name="IDclass" onchange="document.forms.formulaire.submit()">
+					<option value="0">&nbsp;</option>
+					<?php
+						// intialisation
+						$Query  = "select _IDclass, _ident from campus_classe ";
+						$Query .= "where _visible = 'O' AND _IDcentre = '$IDcentre'";
+
+						// affichage des classes
+						$result = mysql_query($Query, $mysql_link);
+						$cat    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+						while ( $cat ) {			
+							printf("<option value=\"$cat[0]\" %s>$cat[1]</option>", ($IDclass == $cat[0]) ? "selected=\"selected\"" : "");
+
+							$cat = remove_magic_quotes(mysql_fetch_row($result));
+							}	// endwhile classe
+				?>
+				</select> <img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/group.gif" alt="" title="" />
+				</label>
+                </td>
+              </tr>
+            </table>
+
+	</form>
+
+	<form id="stage" action="index.php" method="post">
+	<?php
+		print("
+			<p class=\"hidden\"><input type=\"hidden\" name=\"item\"    value=\"$item\"/></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"cmde\"    value=\"$cmde\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"IDclass\" value=\"$IDclass\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"nbstage\" value=\"$nbstage\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"submit\"  value=\"Valider\" /></p>
+			");
+	?>
+
+		<hr style="width:80%;" />
+
+            <table class="width100">
+              <tr>
+		<?php
+			//===== seul les profs principaux peuvent créer un nouveau stage
+			$Query  = "select _IDpp from campus_classe ";
+			$Query .= "where _IDclass = '$IDclass'";
+
+			$result = mysql_query($Query, $mysql_link);
+			$idpp   = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+			if ( @$_SESSION["CnxAdm"] == 255 OR @$_SESSION["CnxID"] == $idmod OR @$_SESSION["CnxID"] == $idpp[0] ) {
+				$alt  = $msg->read($STAGE_NEVCONVENTION);
+				$link = ( $IDclass )
+					? "<a href=\"".myurlencode("index.php?item=$item&cmde=$cmde&IDclass=$IDclass&submit=new")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/post.gif\" title=\"$alt\" alt=\"\" /></a>"
+					: "" ;
+				$text = ( $IDclass )
+					? $msg->read($STAGE_CREATSTAGE, strval($nbstage))
+					: "" ;
+				}
+			else {
+				$link = "";
+				$text = $msg->read($STAGE_PERIOD, strval($nbstage)) ;
+				}
+
+			$next = ( $IDclass AND $nbstage < 7 )
+				? "<a href=\"".myurlencode("index.php?item=$item&cmde=$cmde&IDclass=$IDclass&nbstage=$nbstage&submit=next")."\">". $msg->read($STAGE_NEXT) ."</a>"
+				: $msg->read($STAGE_NEXT) ;
+			$prev = ( $nbstage > 1 )
+				? "<a href=\"".myurlencode("index.php?item=$item&cmde=$cmde&IDclass=$IDclass&nbstage=$nbstage&submit=prev")."\">". $msg->read($STAGE_PREV) ."</a>"
+				: $msg->read($STAGE_PREV) ;
+
+			print("
+	                <td style=\"width:10%;\" class=\"valign-middle\">$link</td>
+      	          <td class= \"valign-middle\">$text</td>
+            	    <td class=\"valign-middle align-right\">[$prev]<strong>.</strong>[$next]</td>
+              		");
+		?>
+              </tr>
+            </table>
+
+            <table class="width100">
+              <tr class="align-center" style="background-color:#c0c0c0;">
+                <td style="width:20%;"><?php print($msg->read($STAGE_STUDENT)); ?></td>
+                <td style="width:30%;"><?php print($msg->read($STAGE_LOCATION)); ?></td>
+                <td style="width:10%;"><?php print($msg->read($STAGE_START)); ?></td>
+                <td style="width:10%;"><?php print($msg->read($STAGE_END)); ?></td>
+                <td style="width:20%;"><?php print($msg->read($STAGE_VISIT)); ?></td>
+              </tr>
+
+            <?php
+			// sélection des élèves
+			$Query  = "select _ID, _name, _fname from user_id ";
+			$Query .= "where _IDclass = '$IDclass' AND _IDgrp = '1' ";
+			$Query .= "AND _visible = 'O' ";
+			$Query .= "order by _name, _fname";
+
+			$result = mysql_query($Query, $mysql_link);
+			$eleve  = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : "" ;
+
+           		// affichage de la recherche
+           		$i = 0;
+           		$debut = $fin= "";
+
+			while ( $eleve ) {
+				//---- sélection des stages par élève
+				$Query  = "select _IDstage, _IDlieu from stage ";
+				$Query .= "where _IDeleve = '$eleve[0]' ";
+				$Query .= "order by _IDstage desc ";
+				$Query .= "limit 1";
+
+				$res    = mysql_query($Query, $mysql_link);
+				$stage  = ( $res ) ? mysql_fetch_row($res) : "" ;
+
+				//---- sélection du lieu de stage
+				$Query  = "select _societe from stage_lieu ";
+				$Query .= "where _IDlieu = '$stage[1]' AND _visible = 'O' ";
+
+				$res    = mysql_query($Query, $mysql_link);
+				$lieu   = ( $res ) ? remove_magic_quotes(mysql_fetch_row($res)) : "" ;
+
+				$req    = $msg->read($STAGE_ERASE, $lieu[0]);
+				$link   = "\"index.php?item=$item&amp;cmde=$cmde&amp;IDclass=$IDclass&amp;IDstage=$stage[0]&amp;submit=del\" onclick=\"return confirmLink(this, '$req');\"";
+
+				// lien sur fiche du maître de stage
+				$link2  = "index.php?item=$item&amp;cmde=visu&amp;IDlieu=$stage[1]&amp;submit=find";
+
+				//===== seuls les profs principaux peuvent attribuer un stage
+				if ( $IDclass AND (@$_SESSION["CnxAdm"] == 255 OR @$_SESSION["CnxID"] == $idmod OR @$_SESSION["CnxID"] == $idpp[0]) )
+					$lien2 = ( strlen($lieu[0]) )
+						? "<a href=$link><img src=\"".$_SESSION["ROOTDIR"]."/images/corb.gif\" title=\"$req\" alt=\"$req\" /></a> <a href=\"$link2\">$lieu[0]</a><p class=\"hidden\"><input type=\"hidden\" name=\"idstage[$i]\" value=\"$stage[0]\" /></p>"
+						: "<a href=\"index.php?item=$item&amp;cmde=search&amp;IDclass=$IDclass&amp;IDeleve=$eleve[0]\">". $msg->read($STAGE_LOCATE) ."</a>" ;
+				else
+					$lien2 = "<a href=\"$link2\">$lieu[0]</a>";
+
+				//---- sélection des périodes de stage
+				$Query  = "select _debut, _fin, _ID, _IDperiode, _IDeleve from stage_periode, stage ";
+				$Query .= "where stage_periode._IDstage = '$stage[0]' ";
+				$Query .= "AND _IDeleve = '$eleve[0]' ";
+				$Query .= "AND _nbstage = '$nbstage' ";
+/*
+				$Query .= ( ($_SESSION["CnxAdm"] & 8) OR $_SESSION["CnxAdm"] == 255 )
+					? "AND _nbstage = '$nbstage' "
+					: "order by _IDperiode desc " ;
+*/
+				$Query .= "limit 1";
+
+				$res    = mysql_query($Query, $mysql_link);
+				$date   = ( $res ) ? mysql_fetch_row($res) : "" ;
+
+				// dates par défaut pour recopie
+				if ( !strlen($debut) AND strlen($date[0]) )
+					$debut = $date[0];
+				if ( !strlen($fin) AND strlen($date[1]) )
+					$fin = $date[1];
+
+				//===== seuls les profs principaux peuvent indiquer des dates de début de stage
+				if ( $IDclass AND (@$_SESSION["CnxAdm"] == 255 OR @$_SESSION["CnxID"] == $idmod OR @$_SESSION["CnxID"] == $idpp[0]) )
+					$lien3 = ( strlen($date[0]) )
+						? "<label for=\"date1_$i\"><input type=\"text\" id=\"date1_$i\" name=\"date1[$i]\" size=\"6\" value=\"$date[0]\" /></label>"
+						: (( strlen($lieu[0]) )
+							? "<label for=\"date1_$i\"><input type=\"text\" id=\"date1_$i\" name=\"date1[$i]\" size=\"6\" value=\"$debut\" /></label>"
+							: "&nbsp;"
+							);
+				else
+					$lien3 = $date[0];
+
+				//===== seuls les profs principaux peuvent indiquer des dates de fin de stage
+				if ( $IDclass AND (@$_SESSION["CnxAdm"] == 255 OR @$_SESSION["CnxID"] == $idmod OR @$_SESSION["CnxID"] == $idpp[0]) )
+					$lien4 = ( strlen($date[1]) )
+						? "<label for=\"date2_$i\"><input type=\"text\" id=\"date2_$i\" name=\"date2[$i]\" size=\"6\" value=\"$date[1]\" /></label>"
+						: (( strlen($lieu[0]) )
+							? "<label for=\"date2_$i\"><input type=\"text\" id=\"date2_$i\" name=\"date2[$i]\" size=\"6\" value=\"$fin\" /></label>"
+							: "&nbsp;"
+							);
+				else
+					$lien4 = $date[1];
+
+				//===== seul celui qui s'est inscrit peut se désinscrire
+				$req    = $msg->read($STAGE_CANCEL, $eleve[1]);
+				$link   = (@$_SESSION["CnxID"] == $date[2] )
+					? "<a href=\"index.php?item=$item&amp;cmde=$cmde&amp;IDclass=$IDclass&amp;IDperiode=$date[3]&amp;submit=delme\" onclick=\"return confirmLink(this, '$req');\"><img src=\"".$_SESSION["ROOTDIR"]."/images/corb.gif\" title=\"$req\" alt=\"$req\" /></a>"
+					: "" ;
+
+				//===== seuls les profs peuvent s'inscrire en visite de stage
+				if ( @$_SESSION["CnxAdm"] == 255 OR @$_SESSION["CnxID"] == $idmod OR ($grpwr & pow(2, @$_SESSION["CnxGrp"] - 1)) )
+					$lien5 = ( $date[2] )
+						? getUserName($date[2]) . " $link"
+						: (( strlen($lieu[0]) )
+							? "<label for=\"ID_$i\"><input type=\"checkbox\" id=\"ID_$i\" name=\"ID[$i]\" value=\"".@$_SESSION["CnxID"]."\" /></label><p class=\"hidden\"><input type=\"hidden\" name=\"idstage[".$i."]\" value=".$stage[0]." /></p>"
+							: "&nbsp;"
+							);
+				else
+					$lien5 = "&nbsp;";
+
+				//===== seul celui qui s'est inscrit peut remplir la fiche de liaison
+				$lien1  = ( @$_SESSION["CnxID"] == $date[2] )
+					? "<a href=\"index.php?item=$item&amp;cmde=link&amp;IDeleve=$eleve[0]&amp;IDstage=$stage[0]\">$eleve[1] ". substr($eleve[2], 0, 1) .".</a>"
+					: "$eleve[1] ". substr($eleve[2], 0, 1) ."." ;
+
+				// affichage tableau
+				$color  = ( $i % 2 ) ? "style=\"background-color:#eeeeee;\"" : "" ;
+
+				print("            
+					<tr $color>
+						<td>$lien1</td>
+						<td>$lien2</td>
+						<td class=\"align-center\">$lien3</td>
+						<td class=\"align-center\">$lien4</td>
+						<td class=\"align-center\">$lien5</td>
+					</tr>
+					");
+
+				$eleve = remove_magic_quotes(mysql_fetch_row($result));
+				$i++;
+				}
+            ?>
+            </table>
+
+	      <hr/>
+
+         <table class="width100">
+           <tr>
+              <td style="width:10%;" class="valign-middle align-center">
+              <?php
+			print( ( $IDclass )
+	              	? "<input type=\"image\" src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/valid.gif\" name=\"valid\" alt=\"".$msg->read($STAGE_INPUTOK)."\" />"
+				: "<img src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/valid.gif\" title=\"\" alt=\"\" />"
+				);
+
+              ?>
+              </td>
+              <td class="valign-middle"><?php print($msg->read($STAGE_CONFIRM)); ?></td>
+           </tr>
+           <tr>
+              <td class="valign-middle align-center">
+              	<a href="index.php"><?php print("<img src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/cancel.gif\" title=\"\" alt=\"".$msg->read($STAGE_INPUTCANCEL)."\" />"); ?></a>
+              </td>
+              <td class="valign-middle"><?php print($msg->read($STAGE_QUIT)); ?></td>
+           </tr>
+         </table>
+
+	      </form>
+
+</div>

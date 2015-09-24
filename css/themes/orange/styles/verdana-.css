@@ -1,0 +1,66 @@
+hr {
+				border-color: #FF9900 #ffffff #ffffff #ffffff;
+}
+a:link {
+				color: #FF9900;
+				text-decoration: none;
+}
+a:hover {
+				color: #FF9900;
+				text-decoration: underline;
+}
+.boxcontent {
+	padding: 0px;
+	border: 1px solid #FFA500;
+}
+.boxtitle {
+				padding: 0px;
+				border: 2px double #000000;
+				background-color: #FF9900;
+				color: #ffffff;
+				font-weight: bold;
+}
+.boxtitle a {
+				color: #ffffff;
+				font-weight: bold;
+				text-decoration: none;
+}
+.boxtitle a:hover {
+				color: #ffffff;
+				font-weight: bold;
+				text-decoration: none;
+}
+.boxtitle a:visited {
+				color: #ffffff;
+				font-weight: bold;
+				text-decoration: none;
+}
+.boxtitle .backoffice {
+				border: none;
+}	
+.boxtitle .backoffice .config {
+				display: none;
+				position: absolute;
+				margin: 0px 0px 0px -80px;
+				width: 80px;
+				height: 18px;
+				text-align: right;
+				}	
+.boxtitle .backoffice:hover .config {
+				display: inline;
+				background-color: #FF9900;
+				}
+.maintitle {
+				border: 2px double #FF9900;
+				padding-left: 4px;
+				padding-right: 4px;
+				padding-top: 4px;
+				padding-bottom: 4px
+}
+.maincontent {
+				border: 4px double #FF9900;
+				padding-left: 4px;
+				padding-right: 4px;
+				padding-top: 4px;
+				padding-bottom: 4px;
+}

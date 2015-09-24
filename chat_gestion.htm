@@ -1,0 +1,314 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2006-2007 by Dominique Laporte(C-E-D@wanadoo.fr)
+   Copyright (c) 2006 by Nordine Zetoutou (nordine.zetoutou@educagri.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : chat_gestion.htm
+ *		projet   : la page de gestion du chat
+ *
+ *		version  : 1.0
+ *		auteur   : laporte
+ *		creation : 20/05/06
+ *		modif    : 17/07/06 - Nordine Zetoutou
+ * 	                 migration des balises HTML en XHTML 1.0 strict
+ */
+
+
+$IDchat  = (int) @$_POST["IDchat"];
+$IDmod   = (int) @$_POST["IDmod"];
+$cbwr    = @$_POST["cbwr"];
+$cbrd    = @$_POST["cbrd"];
+$start   = @$_POST["start"];
+$end     = @$_POST["end"];
+$refresh = (int) @$_POST["refresh"];
+$maxmsg  = (int) @$_POST["maxmsg"];
+$maxsize = (int) @$_POST["maxsize"];
+$visible = ( @$_POST["visible"] ) ? "N" : "O" ;
+?>
+
+
+<?php
+	// l'utilisateur a validé la saisie
+	if ( @$_POST["valid_x"] ) {
+		$status = $msg->read($CHAT_MODIFICATION) ." ";
+
+		// droits des rédacteurs et des lecteurs
+		$grpwr = $grprd = 0;
+
+		for ($i = 0; $i < count($cbwr); $i++)
+			if ( strlen($cbwr[$i]) )
+				$grpwr += $cbwr[$i];
+		for ($i = 0; $i < count($cbrd); $i++)
+			if ( strlen($cbrd[$i]) )
+				$grprd += $cbrd[$i];
+
+		// modification du chat
+		$Query  = "UPDATE chat ";
+		$Query .= "SET _IDmod = '$IDmod', _IDgrpwr = '$grpwr', _IDgrprd= '$grprd', _start = '$start', _end = '$end', _refresh = '$refresh', _maxmsg = '$maxmsg', _maxsize = '$maxsize', _visible = '$visible' ";
+		$Query .= "where _IDchat = '$IDchat' ";
+
+		if ( !mysql_query($Query, $mysql_link) ) {
+			$status .= "<img src=\"".$_SESSION["ROOTDIR"]."/images/bad.gif\" title=\"\" alt=\"\" />";
+			sql_error($mysql_link);
+			}
+		else
+			$status .= "<img src=\"".$_SESSION["ROOTDIR"]."/images/ok.gif\" title=\"\"  alt=\"\" />";
+		}
+	// initialisation
+	else
+		$status = "-";
+
+	// recherche de chat
+	$Query  = "select _IDmod, _title, _visible, _IDgrpwr, _IDgrprd, _start, _end, _refresh, _maxsize, _maxmsg from chat ";
+	$Query .= "where _lang = '".$_SESSION["lang"]."' ";
+	$Query .= ( $IDchat )
+		? "AND _IDchat = '$IDchat' "
+		: "AND _IDchat > '0' order by _IDchat " ;
+	$Query .= "limit 1";
+
+	$result = mysql_query($Query, $mysql_link);
+	$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+	// initialisation
+	$IDmod   = $row[0];
+	$title   = $row[1];
+	$visible = $row[2];
+	$grpwr   = $row[3];
+	$grprd   = $row[4];
+	$start   = $row[5];
+	$end     = $row[6];
+	$refresh = $row[7];
+	$maxsize = $row[8];
+	$maxmsg  = $row[9];
+?>
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($CHAT_MANAGER)); ?><br/>
+		<?php print($msg->read($CHAT_FORMFEED)); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+
+	<p><?php print($msg->read($CHAT_STATUS) . " $status"); ?></p>
+
+	<form id="formulaire" action="index.php" method="post">
+	<?php
+		print("
+			<p class=\"hidden\"><input type=\"hidden\" name=\"item\"    value=\"$item\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"cmde\"    value=\"$cmde\" /></p>
+			");
+	?>
+
+	<div style="border:#cccccc solid 1px; padding:4px;">
+
+		  <table class="width100">
+		    <tr style="background-color:#eeeeee;">
+		      <td style="width:33%;"><?php print($msg->read($CHAT_TITLE)); ?></td>
+		      <td style="width:33%;"><?php print($msg->read($CHAT_CLOSE)); ?></td>
+		      <td style="width:33%;"></td>
+		    </tr>
+
+		    <tr>
+		      <td class="valign-top">
+				<label for="IDchat">
+				<select id="IDchat" name="IDchat" onchange="document.forms.formulaire.submit()">
+				<?php
+					// recherche des salons
+					$query  = "select _IDchat, _title from chat ";
+					$query .= "where _lang = '".$_SESSION["lang"]."' ";
+					$query .= "order by _IDchat asc";
+
+					$result = mysql_query($query, $mysql_link);
+					$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+					while ( $row ) {
+						printf("<option value=\"$row[0]\" %s>$row[1]</option>", $IDchat == $row[0] ? "selected=\"selected\"" : "");
+
+						$row = remove_magic_quotes(mysql_fetch_row($result));
+						}
+				?>
+				</select>
+				</label>
+		      </td>
+		      <td class="valign-top">
+             		<label for="visible"><input type="checkbox" id="visible" name="visible" value="O" <?php print(($visible == "N") ? "checked=\"checked\"" : ""); ?> /></label>
+		      </td>
+		      <td></td>
+		    </tr>
+
+		    <tr>
+		      <td style="height:15px;" colspan="3"></td>
+		    </tr>
+
+		    <tr style="background-color:#eeeeee;">
+		      <td><?php print($msg->read($CHAT_MODO)); ?> *</td>
+		      <td><?php print($msg->read($CHAT_WRITER)); ?></td>
+		      <td><?php print($msg->read($CHAT_READER)); ?></td>
+		    </tr>
+
+		    <tr>
+		      <td style="width:33%;"  class="valign-top">
+				<label for="IDmod">
+				<select id="IDmod" name="IDmod">
+					<option value="0"><?php print($msg->read($CHAT_NONE)); ?></option>
+					<?php
+						// recherche des modérateurs
+						$result = mysql_query("select _ID, _name, _fname from user_id where _adm & 4 order by _name asc", $mysql_link);
+						$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+						while ( $row ) {
+							$select = ( $IDmod == $row[0] ) ? "selected=\"selected\"" : "" ;
+
+							print("<option value=\"$row[0]\" $select>".formatUserName($row[1], $row[2])."</option>");
+
+							$row = remove_magic_quotes(mysql_fetch_row($result));
+							}
+					?>
+				</select>
+				</label>
+		      </td>
+		      <td class="valign-top">
+			<?php
+				// recherche des groupes
+				$query  = "select _IDgrp, _ident from user_group ";
+				$query .= "where _visible = 'O' AND _lang = '".$_SESSION["lang"]."' ";
+				$query .= "order by _IDgrp asc";
+
+				$result = mysql_query($query, $mysql_link);
+				$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+				while ( $row ) {
+					$check = ( $grpwr & pow(2, $row[0] - 1) ) ? "checked=\"checked\"" : "" ;
+
+					print("<label for=\"cbwr_$row[0]\"><input type=\"checkbox\" id=\"cbwr_$row[0]\" name=\"cbwr[]\" value=\"". pow(2, $row[0] - 1) ."\" $check /></label> $row[1]<br/>");
+
+					$row   = remove_magic_quotes(mysql_fetch_row($result));
+					}
+             	?>
+		      </td>
+		      <td class="valign-top">
+	      	<?php
+				// recherche des groupes
+				mysql_data_seek($result, 0);
+				$row = remove_magic_quotes(mysql_fetch_row($result));
+
+				while ( $row ) {
+					$check = ( $grprd & pow(2, $row[0] - 1) ) ? "checked=\"checked\"" : "" ;
+
+					print("<label for=\"cbrd_$row[0]\"><input type=\"checkbox\" id=\"cbrd_$row[0]\" name=\"cbrd[]\" value=\"". pow(2, $row[0] - 1) ."\" $check /></label> $row[1]<br/>");
+
+					$row = remove_magic_quotes(mysql_fetch_row($result));
+					}
+             	?>
+		      </td>
+		    </tr>
+
+		    <tr>
+		      <td style="height:15px;" colspan="3"></td>
+		    </tr>
+
+		    <tr style="background-color:#eeeeee;">
+		      <td><?php print($msg->read($CHAT_CONFIG)); ?></td>
+		      <td><?php print($msg->read($CHAT_OPENING)); ?></td>
+		      <td></td>
+		    </tr>
+
+		    <tr>
+		      <td class="valign-top">
+				<label for="refresh">
+				<select id="refresh" name="refresh">
+				<?php
+					for ($i = 1; $i < 11; $i++) {
+						$select = ( $refresh == $i ) ? "selected=\"selected\"" : "" ;
+
+						print("<option $select value=\"$i\">$i</option>");
+						}
+				?>
+				</select>
+		      	<?php print($msg->read($CHAT_REFRESH)); ?>
+				</label><br />
+
+				<label for="maxmsg">
+				<select id="maxmsg" name="maxmsg">
+				<?php
+					for ($i = 10; $i < 30; $i += 5) {
+						$select = ( $maxmsg == $i ) ? "selected=\"selected\"" : "" ;
+
+						print("<option $select value=\"$i\">$i</option>");
+						}
+				?>
+				</select>
+		      	<?php print($msg->read($CHAT_MAXMSG)); ?>
+				</label><br />
+
+				<label for="maxsize">
+				<select id="maxsize" name="maxsize">
+				<?php
+					for ($i = 10; $i < 30; $i += 5) {
+						$select = ( $maxsize == $i ) ? "selected=\"selected\"" : "" ;
+
+						print("<option $select value=\"$i\">$i</option>");
+						}
+				?>
+				</select>
+		      	<?php print($msg->read($CHAT_MAXSIZE)); ?>
+				</label>
+		      </td>
+		      <td class="valign-top">
+				<?php print("<label for=\"start\"><input type=\"text\" id=\"start\" name=\"start\" size=\"10\" value=\"$start\" /> ". $msg->read($CHAT_START) ."</label><br />"); ?>
+				<?php print("<label for=\"end\"><input type=\"text\" id=\"end\" name=\"end\" size=\"10\" value=\"$end\" /> ". $msg->read($CHAT_END) ."</label>"); ?>
+		      </td>
+		      <td></td>
+		    </tr>
+
+		  </table>
+
+	</div>
+
+	<div class="x-small">* <?php print($msg->read($CHAT_DECLARE)); ?></div>
+
+	<hr style="width:80%;" />
+
+         <table class="width100">
+           <tr>
+              <td style="width:10%;" class="valign-middle align-center">
+              	<?php print("<input type=\"image\" src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/valid.gif\" name=\"valid\" alt=\"".$msg->read($CHAT_INPUTOK)."\" />"); ?>
+              </td>
+              <td class="valign-middle">
+              	<?php print($msg->read($CHAT_MODIFY)); ?>
+              </td>
+           </tr>
+           <tr>
+              <td class="valign-middle align-center">
+              	<a href="index.php"><?php print("<img src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/cancel.gif\" title=\"\" alt=\"".$msg->read($CHAT_INPUTCANCEL)."\" />"); ?></a>
+              </td>
+              <td class="valign-middle">
+              	<?php print($msg->read($CHAT_BACK)); ?>
+              </td>
+           </tr>
+         </table>
+
+	</form>
+
+</div>

@@ -1,0 +1,299 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2007 by Dominique Laporte(C-E-D@wanadoo.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : resource_visu.htm
+ *		projet   : la page de visualisation des ressources en ligne
+ *
+ *		version  : 1.0
+ *		auteur   : laporte
+ *		creation : 4/02/07
+ *		modif    : 
+ */
+
+
+$IDres   = (int) @$_GET["IDres"];	 	// identifiant de la ressource
+$IDcat   = (int) @$_GET["IDcat"];		// identifiant de la catégorie
+$IDsel   = (int) @$_GET["IDsel"];		// identifiant du niveau
+$IDtype  = (int) @$_GET["IDtype"];		// type de ressource
+$IDitem  = (int) @$_GET["IDitem"];	 	// ID de la ressource
+$words   = trim(@$_GET["words"]);		// liste des mots-clef
+
+$submit  = @$_GET["submit"];			// bouton de validation
+?>
+
+
+<?php
+	// lecture du droit de lecture
+	$Query  = "select _IDgrprd, _IDmod from resource_data ";
+	$Query .= "where _IDres = '$IDres' ";
+	$Query .= "limit 1";
+
+	$result = mysql_query($Query, $mysql_link);
+	$auth   = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+	// vérification des autorisations
+	verifySessionAccess($auth[0], $auth[1]);
+
+     	// seuls le big chef, le modérateur ou le propriétaire
+	// peuvent supprimer une ressource
+	switch ( $submit ) {
+		case "del" :	// on efface la ressource
+			$query  = "delete from resource_online ";
+			$query .= "where _IDitem = '$IDitem' ";
+			$query .= ( $_SESSION["CnxAdm"] == 255 ) ? "" : "AND _ID = '".$_SESSION["CnxID"]."' " ;
+			$query .= "limit 1";
+
+			if ( !mysql_query($query, $mysql_link) )
+				mysql_error($mysql_link);
+			break;
+
+		default :
+			break;
+		}
+
+	// initialisation
+	$href = "index.php?item=$item&IDres=$IDres&IDcat=$IDcat&IDsel=$IDsel&IDtype=$IDtype";
+?>
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($RESOURCE_FILE)); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+
+		<?php
+			//---- lecture de la base de données ----
+			$Query  = "select _IDitem, _title, _texte, _url, _lang, _author, _tags, _IDlicense, _IDtype, _IDcat, _IDgrprd ";
+			$Query .= "from resource_online ";
+			$Query .= "where _IDitem = '$IDitem' " ;
+
+			$result  = mysql_query($Query, $mysql_link);
+			$row     = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+			// détermination du nombre de pages
+			$result = mysql_query($Query, $mysql_link);
+			$nbelem = ( $result ) ? mysql_affected_rows($mysql_link) : 0 ;
+
+			// sélection des mots clef
+			$tags   = "";
+			$list   = explode(" ", $row[6]);
+			for ($i = 1; $i < count($list); $i++)
+				if ( strlen($list[$i]) ) {
+					$kword  = $list[$i];
+
+					$result = mysql_query("select _IDitem from resource_online where _tags like '% $kword %'", $mysql_link);
+					$sql    = ( $result ) ? mysql_affected_rows($mysql_link) : 0 ;
+
+					$tags  .= ( $sql > 1 ) ? "<a href=\"".myurlencode("$href&cmde=online&words=$kword")."\">$kword</a> ($sql) " : "$kword ";
+					}
+
+			// sélection du type de contenu des ressources
+			$type   = "";
+			$list   = explode(" ", $row[8]);
+			for ($i = 1; $i < count($list); $i++)
+				if ( strlen($list[$i]) ) {
+					$result = mysql_query("select _ident from resource_type where _IDtype = '".$list[$i]."' AND _lang = '".$_SESSION["lang"]."' limit 1", $mysql_link);
+					$sql    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+					$type  .= "$sql[0]<br/>";
+					}
+
+			// sélection des matières
+			$mat    = "";
+			$list   = explode(" ", $row[9]);
+			for ($i = 1; $i < count($list); $i++)
+				if ( strlen($list[$i]) ) {
+					$result = mysql_query("select _titre from campus_data where _IDmat = '".$list[$i]."' AND _lang = '".$_SESSION["lang"]."' limit 1", $mysql_link);
+					$sql    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+					$mat   .= "$sql[0]<br/>";
+					}
+
+			// sélection des niveaux
+			$level  = "";
+			$list   = explode(" ", $row[10]);
+			for ($i = 1; $i < count($list); $i++)
+				if ( strlen($list[$i]) ) {
+					$Query  = "select _ident from campus_level ";
+					$Query .= "where _IDlevel = '".$list[$i]."' AND _lang = '".$_SESSION["lang"]."' ";
+					$Query .= "limit 1";
+
+					$result = mysql_query($Query, $mysql_link);
+					$sql    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+					$level .= "$sql[0]<br/>";
+					}
+
+			// lecture de la license
+			$result = mysql_query("select _texte from resource_license where _IDlicense = '$row[7]' _lang = '".$_SESSION["lang"]."' limit 1", $mysql_link);
+			$myrow  = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result )) : 0 ;
+
+			// suppression des ressources
+			$req   = $msg->read($RESOURCE_ERASE);
+			$del   = ( $_SESSION["CnxAdm"] == 255 OR $row[7] == $_SESSION["CnxID"] )
+				? "<a href=\"".myurlencode("$href&cmde=online&IDitem=$row[0]&submit=del")."\" onclick=\"return confirmLink(this, '$req');\"><img src=\"".$_SESSION["ROOTDIR"]."/images/corb.gif\" title=\"$req\" alt=\"\" /></a>"
+				: "" ;
+
+			// modification des ressources
+			$maj   = ( $_SESSION["CnxAdm"] == 255 OR $row[7] == $_SESSION["CnxID"] )
+				? "<a href=\"".myurlencode("$href&cmde=new&IDitem=$row[0]")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/stats/post.gif\" title=\"". $msg->read($RESOURCE_RESMODIFY) ."\" alt=\"\" /></a>"
+				: "" ;
+
+			print("
+				<table class=\"width100\">
+				  <tr>
+				    <td class=\"align-left\">
+
+
+
+				    	". $msg->read($RESOURCE_FICHE) ." $row[0] $maj $del
+				    </td>
+				    <td class=\"align-right\">
+				    	". $msg->read($RESOURCE_NEXTPREV) ."
+				    </td>
+				  </tr>
+
+				  <tr>
+				    <td class=\"align-left\" colspan=\"2\">
+					<hr style=\"width:80%; text-align:center;\" />
+				    </td>
+				  </tr>
+
+				  <tr>
+				    <td style=\"width:20%;\" class=\"align-right\">
+				    	". $msg->read($RESOURCE_TITLE) ."
+				    </td>
+				    <td class=\"align-left\">
+
+
+
+				    	$row[1]
+					<img src=\"".$_SESSION["ROOTDIR"]."/images/spip/langues/$row[4]\" alt=\"$row[4]\" title=\"$row[4]\" />
+				    </td>
+				  </tr>
+
+				  <tr>
+				    <td class=\"align-right\">
+				    	". $msg->read($RESOURCE_URL) ."
+				    </td>
+				    <td class=\"align-left\">
+
+
+
+				    	<a href=\"$row[3]\" onclick=\"window.open(this.href, '_blank'); return false;\">".htmlspecialchars($row[3])."</a>
+				    </td>
+				  </tr>
+
+				  <tr>
+				    <td class=\"align-right\">
+				    	". $msg->read($RESOURCE_DESCRIPTION) ."
+				    </td>
+				    <td class=\"align-left\">
+
+
+
+				    	$row[2]
+				    </td>
+				  </tr>
+
+				  <tr>
+				    <td class=\"align-right\">
+				    	". $msg->read($RESOURCE_KWORD) ."
+				    </td>
+				    <td class=\"align-left\">
+
+
+
+				    	$tags
+				    </td>
+				  </tr>
+
+				  <tr>
+				    <td class=\"align-right\">
+				    	". $msg->read($RESOURCE_AUTHOR) ."
+				    </td>
+				    <td class=\"align-left\">
+
+
+
+				    	$row[5]
+				    </td>
+				  </tr>
+
+				  <tr>
+				    <td class=\"align-right\">
+				    	". $msg->read($RESOURCE_LICENSE) ."
+				    </td>
+				    <td class=\"align-left\">
+
+
+
+				    	$myrow[0]
+				    </td>
+				  </tr>
+
+				  <tr>
+				    <td class=\"align-right\">
+				    	". $msg->read($RESOURCE_CONTENT) ."
+				    </td>
+				    <td class=\"align-left\">
+
+
+
+				    	$type
+				    </td>
+				  </tr>
+
+				  <tr>
+				    <td class=\"align-right\">
+				    	". $msg->read($RESOURCE_LEVEL) ."
+				    </td>
+				    <td class=\"align-left\">
+
+
+
+				    	$level
+				    </td>
+				  </tr>
+
+				  <tr>
+				    <td class=\"align-right\">
+				    	". $msg->read($RESOURCE_MATTER) ."
+				    </td>
+				    <td class=\"align-left\">
+
+
+
+				    	$mat
+				    </td>
+				  </tr>
+
+           			</table>
+				");
+		?>
+
+		<hr/>
+	      [ <?php print($msg->read($RESOURCE_BACK, myurlencode("$href&cmde=online"))); ?> ]
+
+</div>

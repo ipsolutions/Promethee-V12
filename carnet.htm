@@ -1,0 +1,278 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2007 by Dominique Laporte(C-E-D@wanadoo.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : carnet.htm
+ *		projet   : la page de visualisation du carnet à points
+ *
+ *		version  : 1.0
+ *		auteur   : laporte
+ *		creation : 10/02/07
+ *		modif    : 
+ */
+
+
+$IDcentre = ( @$_POST["IDcentre"] )		// Identifiant du centre
+	? (int) $_POST["IDcentre"]
+	: (int) (@$_GET["IDcentre"] ? $_GET["IDcentre"] : $_SESSION["CnxCentre"]) ;
+
+$name     = ( @$_POST["name"]	)		// nom alpha
+	? $_POST["name"]
+	: @$_GET["name"] ;
+$IDclass  = ( @$_POST["IDclass"] )		// Identifiant de la classe
+	? (int) $_POST["IDclass"]
+	: (int) @$_GET["IDclass"] ;
+$IDtype   = ( @$_POST["IDtype"] )		// type de sanction
+	? (int) $_POST["IDtype"]
+	: (int) @$_GET["IDtype"] ;
+?>
+
+
+<?php
+	// lecture des droits
+	$Query  = "select _IDmod, _IDgrprd, _IDgrpwr from carnet ";
+	$Query .= "where _IDcentre = '$IDcentre' ";
+	$Query .= "limit 1";
+
+	$result = mysql_query($Query, $mysql_link);
+	$auth   = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+	// vérification des autorisations
+	verifySessionAccess($auth[0], $auth[1]);
+?>
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($CARNET_TITLE)); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+
+	<form id="formulaire" action="index.php" method="post">
+	<?php
+		print("
+			<p class=\"hidden\"><input type=\"hidden\" name=\"item\"   value=\"$item\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"cmde\"   value=\"$cmde\" /></p>
+			");
+	?>
+
+	<p style="margin:0px"><?php print($msg->read($CARNET_TEXT)); ?></p>
+
+	<hr style="width:80%;" />
+
+	<table class="width100">
+	  <tr>
+		<td style="width:50%;" class="align-right">
+		    	<?php print($msg->read($CARNET_CHOOSECENTER)); ?> 
+		</td>
+		<td style="width:50%;">
+			<label for="IDcentre">
+		  	<select id="IDcentre" name="IDcentre" onchange="document.forms.formulaire.submit()">
+			<?php
+				// lecture des centres constitutifs
+				$query  = "select _IDcentre, _ident from config_centre ";
+				$query .= "where _visible = 'O' AND _lang = '".$_SESSION["lang"]."' ";
+				$query .= "order by _IDcentre";
+
+				$result = mysql_query($query, $mysql_link);
+				$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+				while ( $row ) {			
+					printf("<option value=\"$row[0]\" %s>$row[1]</option>", ($IDcentre == $row[0]) ? "selected=\"selected\"" : "");
+
+					$row = remove_magic_quotes(mysql_fetch_row($result));
+					}				
+			?>
+			</select> <img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/home.gif" title="" alt="" />
+			</label>
+		</td>
+	  </tr>
+	</table>
+
+	<hr style="width:80%;" />
+
+	<?php
+		// autorisation de renseigner le carnet à points
+		if ( $_SESSION["CnxID"] == $auth[0] OR $auth[2] & pow(2, $_SESSION["CnxGrp"] - 1) )
+			print("
+		            <table class=\"width100\">
+	      	        <tr>
+		                <td style=\"width:10%;\" class=\"valign-middle\">
+		                	<a href=\"index.php?item=$item&amp;cmde=post\"><img src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/post.gif\" title=\"\" alt=\"\" /></a>
+		                </td>
+		                <td class= \"valign-middle\">". $msg->read($CARNET_NEW) ."</td>
+		              </tr>
+		            </table>
+		            ");
+
+		print("
+			<table class=\"width100\">
+			  <tr>
+	                <td class=\"btn-primary align-center\" style=\"width:50%;background-color:#C0C0C0;border-radius: 4px 0 0 4px; padding-top: 10px\">
+			  	<label for=\"name\">
+			  	<select id=\"name\" name=\"name\" onchange=\"document.forms.formulaire.submit()\">
+					<option value=\"\">&nbsp;</option>
+			");
+
+		// accès par ordre alphabétique
+            $alpha = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
+		for ($i = 0; $i < 26; $i++)
+			printf("<option value=\"".$alpha[$i]."\" %s>".$alpha[$i]."</option>", ($alpha[$i] == $name) ? "selected=\"selected\"" : "");
+
+		print("
+			  	</select>
+			  	</label>
+	                </td>
+
+	                <td class=\"btn-primary align-center\" style=\"width:25%;background-color:#C0C0C0;padding-top: 10px\">
+			  	<label for=\"IDclass\">
+			  	<select id=\"IDclass\" name=\"IDclass\" onchange=\"document.forms.formulaire.submit()\">
+			");
+
+		// affichage des classes
+		$Query  = "select _IDclass, _ident from campus_classe ";
+		$Query .= "where _IDcentre = '$IDcentre' ";
+		$Query .= "AND _visible = 'O' ";
+		$Query .= "order by _IDclass";
+
+		$result = mysql_query($Query, $mysql_link);
+		$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+		print("<option value=\"0\">". $msg->read($CARNET_CLASS) ."</option>");
+
+		while ( $row ) {			
+			printf("<option value=\"$row[0]\" %s>$row[1]</option>", ($IDclass == $row[0]) ? "selected=\"selected\"" : "");
+
+			$row = remove_magic_quotes(mysql_fetch_row($result));
+			}	// endwhile classe
+
+		print("
+			  	</select>
+			  	</label>
+	                </td>
+	                <td class=\"btn-primary align-center\" style=\" width:25%;background-color:#C0C0C0;border-radius: 0 4px 4px 0; padding-top: 10px\">
+			  	<label for=\"IDtype\">
+			  	<select id=\"IDtype\" name=\"IDtype\" onchange=\"document.forms.formulaire.submit()\">
+			");
+
+		// affichage des motifs
+		$query  = "select _IDtype, _ident from carnet_type ";
+		$query .= "where _lang = '".$_SESSION["lang"]."' ";
+		$query .= "order by _IDtype";
+
+		$result = mysql_query($query, $mysql_link);
+		$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+		print("<option value=\"0\">". $msg->read($CARNET_ALL) ."</option>");
+
+		while ( $row ) {			
+			printf("<option value=\"$row[0]\" %s>$row[1]</option>", ($IDtype == $row[0]) ? "selected=\"selected\"" : "");
+
+			$row = remove_magic_quotes(mysql_fetch_row($result));
+			}	// endwhile classe
+
+		print("
+			  	</select>
+			  	</label>
+	                </td>
+			  </tr>
+			");
+
+		// affichage des points
+		$query  = "select distinctrow user_id._name, user_id._fname, user_id._IDclass, user_id._ID, ";
+		$query .= "carnet_data._IDdata, carnet_data._IDitem, carnet_data._IDtype ";
+		$query .= "from user_id, carnet_data, campus_classe ";
+		$query .= "where user_id._ID = carnet_data._IDeleve ";
+		$query .= "AND campus_classe._IDclass = user_id._IDclass ";
+		$query .= "AND campus_classe._IDcentre = '$IDcentre' ";
+		$query .= ( $IDclass ) ? "AND user_id._IDclass = '$IDclass' " : "" ;
+		$query .= ( $name ) ? "AND user_id._name like '$name%' " : "" ;
+		$query .= ( getAccess() != 2 ) ? "AND user_id._ID = '".$_SESSION["CnxID"]."' " : "" ;
+		$query .= "order by user_id._name, user_id._fname";
+
+		$result = mysql_query($query, $mysql_link);
+		$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+		$idrow  = $i = 0;
+		while ( $row ) {
+			if ( $idrow != $row[3] ) {
+				// lecture de la classe
+				$query  = "select _ident ";
+				$query .= "from campus_classe ";
+				$query .= "where _IDclass = '$row[2]' ";
+
+				$return = mysql_query($query, $mysql_link);
+				$myrow  = ( $return ) ? remove_magic_quotes(mysql_fetch_row($return)) : 0 ;
+
+				// lecture des points
+				if ($IDtype != 0)
+				{
+					$return = mysql_query("select _IDitem, _IDtype from carnet_data where _IDeleve = '$row[3]' and _IDtype = $IDtype", $mysql_link);
+				}
+				else
+				{
+					$return = mysql_query("select _IDitem, _IDtype from carnet_data where _IDeleve = '$row[3]'", $mysql_link);
+				}
+				
+				$sql    = ( $return ) ? mysql_fetch_row($return) : 0 ;
+				$pts    = 0;
+				while ( $sql ) {
+					$query  = "select _pts from carnet_items ";
+					$query .= "where _IDitem = '$sql[0]' ";
+					$query .= "AND _lang = '".$_SESSION["lang"]."' ";
+					$query .= "AND _IDtype = '".$sql[1]."' " ;
+					
+					$ret    = mysql_query($query, $mysql_link);
+					$tmp    = ( $ret ) ? mysql_fetch_row($ret) : 0 ;
+					$pts   += (int) $tmp[0];
+
+					$sql    = mysql_fetch_row($return);
+					}
+
+				if ( $pts ) {
+					$color  = ( $i++ % 2 ) ? "item" : "menu" ;
+
+					print("
+					  <tr class=\"$color btn\" style=\"display: table-row\">
+			                <td style=\"padding: 5px\"><a href=\"".myurlencode("index.php?item=$item&cmde=visu&IDeleve=$row[3]&name=$name&IDclass=$IDclass&IDtype=$IDtype")."\">$row[0] $row[1]</a></td>
+			                <td class=\"align-center\" style=\"padding: 5px\">$myrow[0]</td>
+			                <td class=\"align-center\" style=\"padding: 5px\">$pts pts</td>
+					  </tr>
+						");
+					}
+
+				$idrow = $row[3];
+				}
+
+			$row = remove_magic_quotes(mysql_fetch_row($result));
+			}
+
+		print("
+	            </table>
+			");
+	?>
+
+	</form>
+
+</div>

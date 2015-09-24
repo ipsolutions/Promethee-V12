@@ -1,0 +1,291 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2006-2007 by Dominique Laporte(C-E-D@wanadoo.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : liaison.htm
+ *		projet   : la page de visualisation du cahier de liaison
+ *
+ *		version  : 1.0
+ *		auteur   : laporte
+ *		creation : 19/11/06
+ *		modif    : 
+ */
+
+
+$IDcentre = ( @$_POST["IDcentre"] )			// Identifiant du centre
+	? (int) $_POST["IDcentre"]
+	: (int) $_SESSION["CnxCentre"] ;
+
+$name     = ( @$_POST["name"] )			// nom alpha
+	? $_POST["name"]
+	: @$_GET["name"] ;
+$IDclass  = ( strlen(@$_POST["IDclass"]) )	// Identifiant de la classe
+	? (int) $_POST["IDclass"]
+	: (int) @$_GET["IDclass"] ;
+$period   = ( strlen(@$_POST["period"]) )		// trimestre
+	? (int) $_POST["period"]
+	: (int) @$_GET["period"] ;
+
+$pglink   = "IDcentre=$IDcentre&amp;name=$name&amp;IDclass=$IDclass&amp;period=$period";
+
+$skpage   = ( @$_GET["skpage"] )			// n° de la page affichée
+	? (int) $_GET["skpage"]
+	: 1 ;
+$skshow   = ( @$_GET["skshow"] )			// n° du flash info
+	? (int) $_GET["skshow"]
+	: 1 ;
+
+$submit   = @$_POST["valid_x"];			// bouton validation
+?>
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($LIAISON_TITLE)); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+
+	<form id="formulaire" action="index.php" method="post">
+	<?php
+		print("
+			<p class=\"hidden\"><input type=\"hidden\" name=\"item\"   value=\"$item\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"cmde\"   value=\"$cmde\" /></p>
+			");
+	?>
+
+	<table class="width100">
+	  <tr>
+		<td style="width:50%;" class="align-right">
+			<?php print($msg->read($LIAISON_CHOOSECENTER)); ?>
+		</td>
+		<td style="width:50%;">
+			<label for="IDcentre">
+		  	<select id="IDcentre" name="IDcentre" onchange="document.forms.formulaire.submit()">
+			<?php
+				// lecture des centres constitutifs
+				$query  = "select _IDcentre, _ident from config_centre ";
+				$query .= "where _visible = 'O' AND _lang = '".$_SESSION["lang"]."' ";
+				$query .= "order by _IDcentre";
+
+				$result = mysql_query($query, $mysql_link);
+				$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+				while ( $row ) {			
+					printf("<option value=\"$row[0]\" %s>$row[1]</option>", ($IDcentre == $row[0]) ? "selected=\"selected\"" : "");
+
+					$row = remove_magic_quotes(mysql_fetch_row($result));
+					}				
+			?>
+			</select> <img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/home.gif" title="" alt="" />
+			</label>
+		</td>
+	  </tr>
+	  </table>
+	</form>
+
+	<hr style="width:80%;" />
+
+	<?php
+		print("
+		   <form id=\"selection\" action=\"index.php?item=12\" method=\"post\">
+			<p class=\"hidden\"><input type=\"hidden\" name=\"IDcentre\" value=\"$IDcentre\" /></p>
+
+			<table class=\"width100\">
+			  <tr style=\"background-color:#C0C0C0;\">
+	                <td class=\"align-center\" style=\"width:40%;\" colspan=\"2\">
+				". $msg->read($LIAISON_NAME) ."
+			  	<label for=\"name\">
+			  	<select id=\"name\" name=\"name\" onchange=\"document.forms.selection.submit()\">
+			");
+
+		// accès par ordre alphabétique
+            $alpha = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
+		printf("<option value=\"\" %s>". $msg->read($LIAISON_ALL) ."</option>", ($name == "") ? "selected=\"selected\"" : "");
+		for ($i = 0; $i < 26; $i++)
+			printf("<option value=\"".$alpha[$i]."\" %s>".$alpha[$i]."</option>", ($alpha[$i] == $name) ? "selected=\"selected\"" : "");
+
+		print("
+			  	</select>
+			  	</label>
+	                </td>
+
+	                <td class=\"align-center\" style=\"width:40%;\">
+				". $msg->read($LIAISON_CLASS) ."
+			  	<label for=\"IDclass\">
+			  	<select id=\"IDclass\" name=\"IDclass\" onchange=\"document.forms.selection.submit()\">
+			");
+
+		// affichage des classes
+		$Query  = "select _IDclass, _ident from campus_classe ";
+		$Query .= "where _IDcentre = '$IDcentre' ";
+		$Query .= "AND _visible = 'O' ";
+		$Query .= "order by _IDclass";
+
+		$result = mysql_query($Query, $mysql_link);
+		$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+		print("<option value=\"0\">". $msg->read($LIAISON_ALLSELECT) ."</option>");
+
+		while ( $row ) {			
+			printf("<option value=\"$row[0]\" %s>$row[1]</option>", ($IDclass == $row[0]) ? "selected=\"selected\"" : "");
+
+			$row = remove_magic_quotes(mysql_fetch_row($result));
+			}	// endwhile classe
+
+		print("
+			  	</select>
+			  	</label>
+	                </td>
+	                <td class=\"align-center\" style=\" width:20%;\">
+				". $msg->read($LIAISON_QUAT) ."
+			  	<label for=\"period\">
+			  	<select id=\"period\" name=\"period\" onchange=\"document.forms.selection.submit()\">
+			");
+
+		// les trimestres
+		printf("<option value=\"\" %s>". $msg->read($LIAISON_ALL) ."</option>", ($period == 0) ? "selected=\"selected\"" : "");
+		for ($i = 1; $i < 4; $i++)
+			printf("<option value=\"$i\" %s>". $msg->read($LIAISON_Q, strval($i)) ."</option>", ($i == $period) ? "selected=\"selected\"" : "");
+
+		print("
+			  	</select>
+			  	</label>
+	                </td>
+			</tr>
+			");
+
+		// affichage des élèves
+		$query  = "select _name, _fname, _ID, _IDclass ";
+		$query .= "from user_id ";
+		$query .= "where _visible = 'O' AND _IDgrp = '1' ";
+		$query .= ( $name ) ? "AND _name like '$name%' " : "" ;
+		$query .= ( $IDclass ) ? "AND _IDclass = '$IDclass' " : "" ;
+		$query .= "order by _name, _fname";
+
+		// détermination du nombre de pages
+		$result = mysql_query($query, $mysql_link);
+		$nbelem = ( $result ) ? mysql_affected_rows($mysql_link) : 0 ;
+
+		$page  = $nbelem;
+		$show  = 1;
+
+		if ( $nbelem ) {
+			$page  = ( $page % $MAXPAGE )
+				? (int) ($page / $MAXPAGE) + 1
+				: (int) ($page / $MAXPAGE) ;
+
+			$show  = ( $page % $MAXSHOW )
+				? (int) ($page / $MAXSHOW) + 1
+				: (int) ($page / $MAXSHOW) ;
+
+			// initialisation
+			$i     = 1;
+			$first = 1 + (($skpage - 1) * $MAXPAGE);
+				
+			// se positionne sur la page ad hoc
+			mysql_data_seek($result, $first - 1);
+			$row   = remove_magic_quotes(mysql_fetch_row($result));
+
+			$j = 0;
+			while ( $row AND $i++ <= $MAXPAGE ) {
+				$bgcolor = ( $j++ % 2 ) ? "item" : "menu" ;
+
+				// recherche des droits
+				$return  = mysql_query("select _IDgrpwr from liaison where _IDcentre = '$IDcentre' AND _IDclass = '$row[3]'", $mysql_link);
+				$myrow   = ( $return ) ? mysql_fetch_row($return) : 0 ;
+
+				$icone   = ( $period AND ($myrow[0] & pow(2, $_SESSION["CnxGrp"] - 1)) )
+					? "<a href=\"index.php?item=$item&amp;cmde=post&amp;$pglink&amp;IDeleve=$row[2]&amp;myclass=$row[3]\"><img src=\"".$_SESSION["ROOTDIR"]."/images/modify.gif\" title=\"\" alt=\"\" /></a>"
+					: "<img src=\"".$_SESSION["ROOTDIR"]."/images/files.gif\" title=\"\" alt=\"\" />" ;
+
+				// recherche de la classe
+				$return  = mysql_query("select _ident from campus_classe where _IDclass = '$row[3]'", $mysql_link);
+				$classe  = ( $return ) ? remove_magic_quotes(mysql_fetch_row($return)) : 0 ;
+
+				// recherche du nbr de commentaires
+				$query   = "select _IDitem from liaison_items, liaison_data ";
+				$query  .= "where liaison_items._IDparent = '0' ";
+				$query  .= "AND liaison_data._IDeleve = '$row[2]' ";
+				$query  .= ( $period ) ? "AND liaison_data._period = '$period' " : "" ;
+				$query  .= "AND liaison_items._IDdata = liaison_data._IDdata ";
+
+				$return  = mysql_query($query, $mysql_link);
+				$nbitem  = ( $return ) ? mysql_affected_rows($mysql_link) : 0 ;
+
+				$link    = ( getAccess() == 2 OR $row[4] == $_SESSION["CnxID"] )
+					? "<a href=\"index.php?item=$item&amp;cmde=show&amp;$pglink&amp;IDeleve=$row[2]\">$row[0] $row[1]</a>"
+					: "$row[0] $row[1]" ;
+
+				print("
+					<tr class=\"$bgcolor\">
+			                <td style=\"width:1%;\">$icone</td>
+			                <td style=\"width:39%;\">$link</td>
+			                <td class=\"align-center\">$classe[0]</td>
+			                <td class=\"align-center\">$nbitem</td>
+					  </tr>
+					");
+
+				$row = remove_magic_quotes(mysql_fetch_row($result));
+				}
+			}
+
+		print("
+		            </table>
+	            </form>
+			");
+
+		// bouton précédent
+		$where = $skshow - 1;
+		if ( $skshow == 1 )
+			$prev = "";
+		else {
+			$skpg = 1 + (($skshow - 2) * $MAXSHOW);
+			$prev = "[<a href=\"index.php?item=$item&amp;$pglink&amp;skpage=$skpg&amp;skshow=$where\">". $msg->read($LIAISON_PREV) ."</a>]";
+			}
+
+		// liens directs sur n° de page
+		$start = 1 + (($skshow - 1) * $MAXSHOW);
+		$end   = $skshow * $MAXSHOW;
+
+		$choix = ( $skpage == $start )
+			? "<img src=\"".$_SESSION["ROOTDIR"]."/images/nav_left.gif\" title=\"«\" alt=\"«\" /><strong>$start</strong><img src=\"".$_SESSION["ROOTDIR"]."/images/nav_right.gif\" title=\"»\" alt=\"»\" />"
+			: "<a href=\"index.php?item=$item&amp;$pglink&amp;skpage=$start&amp;skshow=$skshow\">$start</a>" ;
+
+		for ($j = $start + 1; $j <= $end AND $j <= $page; $j++)
+			$choix .= ( $skpage == $j )
+				? "|<img src=\"".$_SESSION["ROOTDIR"]."/images/nav_left.gif\" title=\"«\" alt=\"«\" /><strong>$j</strong><img src=\"".$_SESSION["ROOTDIR"]."/images/nav_right.gif\" title=\"»\" alt=\"»\" />"
+				: "|<a href=\"index.php?item=$item&amp;$pglink&amp;skpage=$j&amp;skshow=$skshow\">$j</a>" ;
+
+		// bouton suivant
+		$where = $skshow + 1;
+		$next  = ( $skshow == $show )
+			? ""
+			: "[<a href=\"index.php?item=$item&amp;$pglink&amp;skpage=$j&amp;skshow=$where\">". $msg->read($LIAISON_NEXT) ."</a>]";
+	?>
+
+	      <hr/>
+
+		<?php if ( $nbelem ) print("<div style=\"text-align:center;\">$prev $choix $next</div>"); ?>
+
+</div>

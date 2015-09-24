@@ -1,0 +1,160 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2007-2008 by Dominique Laporte(C-E-D@wanadoo.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : cms.htm
+ *		projet   : la page de visualisation des contenus d'information
+ *
+ *		version  : 1.0
+ *		auteur   : laporte
+ *		creation : 7/10/07
+ *		modif    : 
+ */
+
+
+$IDsubmenu = (int) @$_GET["IDsubmenu"];		// ID du sous menu
+$IDpj      = (int) @$_GET["IDpj"];			// ID de la pièce jointe
+?>
+
+
+<?php
+	// suppression des PJ
+	if ( $IDpj < 0 AND ($_SESSION["CnxAdm"] & 8) ) {
+		$query  = "delete from flash_pj ";
+		$query .= "where _IDpj = '".abs($IDpj)."' ";
+		$query .= "limit 1";
+
+		if ( mysql_query($query, $mysql_link) )
+			unlink("$DOWNLOAD/flash/".abs($IDpj).".".@$_GET["ext"]);
+		}
+
+	// recherche de l'article à afficher par défaut
+	if ( !$IDsubmenu ) {
+		$query  = "select _title from flash_data ";
+		$query .= "where _title like '#menu_item:%' ";
+		$query .= "order by _title asc ";
+		$query .= "limit 1";
+
+		$result = mysql_query($query, $mysql_link);
+		$row    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+		list($nul, $IDsubmenu) = explode(":", $row[0]);
+		}
+
+	// on sélectionne le contenu
+	$query  = "select _IDmenu from config_submenu ";
+	$query .= "where _lang = '".$_SESSION["lang"]."' ";
+	$query .= "AND _IDsubmenu = '$IDsubmenu' ";
+	$query .= "limit 1";
+
+	$result = mysql_query($query, $mysql_link);
+	$row    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+	// il s'agit d'un sous menu
+	if ( $row[0] < 0 ) {
+		$sublevel  = true;
+		$IDsubmenu = abs($row[0]);
+
+		$query  = "select _IDmenu from config_submenu ";
+		$query .= "where _lang = '".$_SESSION["lang"]."' ";
+		$query .= "AND _IDsubmenu = '$IDsubmenu' ";
+ 		$query .= "limit 1";
+
+		$result = mysql_query($query, $mysql_link);
+		$row    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+		}
+
+	// test si le flash info existe
+	// correspond au titre du bloc menu
+	$query  = "select _IDflash, _IDmod, _IDgrprd, _create, _template from flash ";
+	$query .= "where _title = '#menu:$row[0]' ";
+	$query .= "AND _type = 'C' AND _visible = 'O' ";
+	$query .= "AND _lang = '".$_SESSION["lang"]."' ";
+ 	$query .= "limit 1";
+
+	$result = mysql_query($query, $mysql_link);
+	$sql    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+	// si pas d'item => création du flash info
+	// attention : pas d'item vide !
+	if ( $row AND mysql_affected_rows($mysql_link) == 0 ) {
+		$query  = "insert into flash ";
+		$query .= "values('', '0', '".$_SESSION["CnxID"]."', '0', '0', '255', '".date("Y-m-d H:i:s")."', 'N', '#menu:$row[0]', 'G', '', 'content.htm', 'C', 'N', 'O', 'O', 'O', '1', 'O', 'O', 'N', '".$_SESSION["lang"]."')";
+
+		if ( mysql_query($query, $mysql_link) ) {
+			// on sélectionne le flash info
+			$query  = "select _IDflash, _IDmod, _IDgrprd, _create, _template from flash ";
+			$query .= "where _IDflash = '". mysql_insert_id() ."' ";
+		 	$query .= "limit 1";
+
+			$result = mysql_query($query, $mysql_link);
+			$sql    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+			}
+		}
+
+	// si pas d'autorisation => affichage de la page d'accueil Prométhée 
+	if ( $_SESSION["CnxAdm"] != 255 AND $_SESSION["CnxID"] != $sql[1] AND !($_SESSION["CnxAdm"] & 8) AND ($sql[2] & pow(2, $_SESSION["CnxGrp"] - 1)) == 0 )
+		require "cms_blank.htm";
+	else {
+		// test si l'article existe
+		$Query  = "select _IDinfos from flash_data ";
+		$Query .= "where _IDflash = '$sql[0]' AND _title = '#menu_item:$IDsubmenu' ";
+		$Query .= "limit 1";
+
+		$result = mysql_query($Query, $mysql_link);
+		$myrow  = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+		// si pas d'item => création de l'article
+		if ( mysql_affected_rows($mysql_link) == 0 ) {
+			$date   = date("Y-m-d H:i:s");
+
+			$query  = "insert into flash_data ";
+			$query .= "values('', '$sql[0]', '$date', '$date', '".$_SESSION["CnxID"]."', '".$_SESSION["CnxIP"]."', '#menu_item:$IDsubmenu', '', '', '', '', 'O', '0', 'O')";
+
+			mysql_query($query, $mysql_link);
+			}
+
+		// lecture de la base de données
+		$Query  = "select _IDinfos, _date, _modif, _ID from flash_data ";
+		$Query .= "where _IDflash = '$sql[0]' AND _title = '#menu_item:$IDsubmenu' ";
+		$Query .= ( $_SESSION["CnxAdm"] != 255 AND $_SESSION["CnxID"] != $sql[1] )
+			? "AND _visible = 'O' "
+			: "" ;
+		$Query .= ( $sql[3] == "O" )
+			? "order by _IDinfos desc "
+			: "order by _modif desc " ;
+		$Query .= "limit 1";
+
+		$result = mysql_query($Query, $mysql_link);
+		$data   = remove_magic_quotes(mysql_fetch_row($result));
+
+		$IDflash = $sql[0];
+		$IDinfos = $data[0];
+
+		// visualisation du flash
+		require "msg/flash.php";
+		require_once "include/TMessage.php";
+
+		$msg  = new TMessage($_SESSION["ROOTDIR"]."/msg/".$_SESSION["lang"]."/flash.php");
+
+		require "flash_visu.php";
+		}	// end if
+?>

@@ -1,0 +1,665 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2007 by Dominique Laporte(C-E-D@wanadoo.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : pfolio_new.htm
+ *		projet   : la page de gestion des domaines et des compétences
+ *
+ *		version  : 1.0
+ *		auteur   : laporte
+ *		creation : 4/01/07
+ *		modif    : 
+ */
+
+
+$IDcentre = ( @$_POST["IDcentre"] )				// Identifiant du centre
+	? (int) $_POST["IDcentre"]
+	: (int) (@$_GET["IDcentre"] ? $_GET["IDcentre"] : $_SESSION["CnxCentre"]) ;
+
+$IDform   = ( @$_POST["IDform"] )				// Identifiant de la formation
+	? (int) $_POST["IDform"]
+	: (int) @$_GET["IDform"] ;
+$IDuv     = ( @$_POST["IDuv"] )				// Identifiant du module
+	? (int) $_POST["IDuv"]
+	: (int) @$_GET["IDuv"] ;
+$IDskill  = ( @$_POST["IDskill"] )				// Identifiant du domaine de compétence
+	? (int) $_POST["IDskill"]
+	: (int) @$_GET["IDskill"] ;
+$IDdata   = ( @$_POST["IDdata"] )				// Identifiant de la compétence
+	? (int) $_POST["IDdata"]
+	: (int) @$_GET["IDdata"] ;
+
+$IDmat    = (int) @$_POST["IDmat"];				// Identifiant de la matière pédagogique
+$ident1   = addslashes(trim(@$_POST["ident1"]));	// intitulé de la formation
+$text1    = addslashes(trim(@$_POST["text1"]));		// description de la formation
+$ident2   = addslashes(trim(@$_POST["ident2"]));	// intitulé du module
+$text2    = addslashes(trim(@$_POST["text2"]));		// description du module
+$ident3   = addslashes(trim(@$_POST["ident3"]));	// domainde de compétence
+$text3    = addslashes(trim(@$_POST["text3"]));		// compétence
+
+$submit   = @$_GET["submit"];					// bouton de validation
+//---------------------------------------------------------------------------
+function sql_get_pfolio_order($id)
+{
+	/*
+	 * fonction :	retourne le nbr d'enregistrements d'une table
+	 * out :		nbr d'enregistrements
+	 */
+
+	require "globals.php";
+
+	$result = mysql_query("select _IDskill from pfolio where _IDuv = '$id'", $mysql_link);
+
+	return mysql_numrows($result) + 1;
+}
+//---------------------------------------------------------------------------
+function sql_get_pfolio_data_order($id)
+{
+	/*
+	 * fonction :	retourne le nbr d'enregistrements d'une table
+	 * out :		nbr d'enregistrements
+	 */
+
+	require "globals.php";
+
+	$result = mysql_query("select _IDdata from pfolio_data where _IDskill = '$id'", $mysql_link);
+
+	return mysql_numrows($result) + 1;
+}
+//---------------------------------------------------------------------------
+?>
+
+
+<?php
+	// initialisation
+	$status  = "-";
+	$cmdline = "index.php?item=$item&amp;cmde=$cmde&amp;IDcentre=$IDcentre";
+
+	// l'utilisateur a valider
+	if ( @$_POST["valid_x"] ) {
+		// ajout/modification des formations
+		if ( strlen($ident1) ) {
+			$status = ( $IDform ) ? $msg->read($PFOLIO_MODIFICATION) ." " : $msg->read($PFOLIO_APPEND) ." " ;
+
+			if ( $IDform ) {
+				$Query  = "UPDATE pfolio_formation ";
+				$Query .= "SET _ident = '$ident1', _texte = '$text1' ";
+				$Query .= "where _IDform = '$IDform' ";
+				$Query .= "AND _lang = '".$_SESSION["lang"]."' ";
+				$Query .= "limit 1";
+				}
+			else {
+				$Query  = "insert into pfolio_formation ";
+				$Query .= "values('', '$ident1', '$text1', '".$_SESSION["lang"]."')";
+				}
+			}
+
+		// ajout/modification des modules
+		if ( strlen($ident2) ) {
+			$status = ( $IDuv ) ? $msg->read($PFOLIO_MODIFICATION) ." " : $msg->read($PFOLIO_APPEND) ." " ;
+
+			if ( $IDuv ) {
+				$Query  = "UPDATE pfolio_uv ";
+				$Query .= "SET _ident = '$ident2', _texte = '$text2' ";
+				$Query .= "where _lang = '".$_SESSION["lang"]."' ";
+				$Query .= "AND _IDuv = '$IDuv' ";
+				$Query .= "limit 1";
+				}
+			else {
+				$Query  = "insert into pfolio_uv ";
+				$Query .= "values('', '".$_POST["_form"]."', '$IDmat', '0', '0', '0', '$ident2', '$text2', '', '1', 'N', 'N', 'N', '50', '".$_SESSION["lang"]."')";
+				}
+			}
+
+		// ajout/modification des domaines
+		if ( strlen($ident3) ) {
+			$status = ( $IDskill ) ? $msg->read($PFOLIO_MODIFICATION) ." " : $msg->read($PFOLIO_APPEND) ." " ;
+
+			if ( $IDskill ) {
+				$Query  = "UPDATE pfolio ";
+				$Query .= "SET _ident = '$ident3' ";
+				$Query .= "where _IDskill = '$IDskill' ";
+				$Query .= "limit 1";
+				}
+			else {
+				$Query  = "insert into pfolio ";
+				$Query .= "values('', '".@$_POST["_uv"]."', '".sql_get_pfolio_order(@$_POST["_uv"])."', '$ident3', '50', 'O')";
+				}
+			}
+
+		// ajout/modification des compétences
+		if ( strlen($text3) ) {
+			$status = ( $IDdata ) ? $msg->read($PFOLIO_MODIFICATION) ." " : $msg->read($PFOLIO_APPEND) ." " ;
+
+			if ( $IDdata ) {
+				$Query  = "UPDATE pfolio_data ";
+				$Query .= "SET _texte = '$text3' ";
+				$Query .= "where _IDdata = '$IDdata' ";
+				$Query .= "limit 1";
+				}
+			else {
+				$Query  = "insert into pfolio_data ";
+				$Query .= "values('', '$IDskill', '".sql_get_pfolio_data_order($IDskill)."', '$text3', 'N', 'O')";
+				}
+
+			// pour ajouter une nouvelle compétence
+			$IDdata = 0;
+			}
+
+		if ( !mysql_query($Query, $mysql_link) ) {
+			$status .= "<img src=\"".$_SESSION["ROOTDIR"]."/images/bad.gif\" title=\"\" alt=\"\" />";
+			sql_error($mysql_link);
+			}
+		else
+			$status .= "<img src=\"".$_SESSION["ROOTDIR"]."/images/ok.gif\" title=\"\" alt=\"\" />";
+		}
+
+	// commande utilisateur
+	switch ( $submit ) {
+		case "del" :	// suppression
+			if ( $IDdata ) {
+				$Query  = "delete from pfolio_data ";
+				$Query .= "where _IDdata = '$IDdata' ";
+				$Query .= "limit 1";
+
+				if ( $_SESSION["CnxAdm"] == 255 )
+					if ( mysql_query($Query, $mysql_link) ) {
+						// renumérotation des compétences
+						$return = mysql_query("select _IDdata from pfolio_data where _IDskill = '$IDskill' order by _order asc", $mysql_link);
+						$myrow  = ( $return ) ? mysql_fetch_row($return) : 0 ;
+
+						$i = 1;
+						while ( $myrow ) {			
+							if ( mysql_query("update pfolio_data set _order = '$i' where _IDdata = '$myrow[0]' limit 1", $mysql_link) )
+								$i++;
+
+							$myrow = mysql_fetch_row($return);
+							}	// endwhile groupe
+						}
+
+				$IDdata = 0;
+				}
+			else
+				if ( $IDskill ) {
+					$Query  = "delete from pfolio ";
+					$Query .= "where _IDskill = '$IDskill' ";
+					$Query .= "limit 1";
+
+					if ( $_SESSION["CnxAdm"] == 255 )
+						if ( mysql_query($Query, $mysql_link) )
+							mysql_query("delete from pfolio_data where _IDskill = '$IDskill'", $mysql_link);
+					}
+				else
+					if ( $IDuv ) {
+						$Query  = "delete from pfolio_uv ";
+						$Query .= "where _lang = '".$_SESSION["lang"]."' ";
+						$Query .= "AND _IDuv = '$IDuv' ";
+						$Query .= "limit 1";
+
+						if ( $_SESSION["CnxAdm"] == 255 )
+							if ( mysql_query($Query, $mysql_link) ) {
+								mysql_query("delete from pfolio where _IDuv = '$IDuv'", $mysql_link);
+								}
+						}
+					else
+						if ( $IDform ) {
+							$Query  = "delete from pfolio_formation ";
+							$Query .= "where _lang = '".$_SESSION["lang"]."' ";
+							$Query .= "AND _IDform = '$IDform' ";
+							$Query .= "limit 1";
+
+							if ( $_SESSION["CnxAdm"] == 255 )
+								if ( mysql_query($Query, $mysql_link) ) {
+									mysql_query("delete from pfolio_uv where _IDform = '$IDform' AND _lang = '".$_SESSION["lang"]."'", $mysql_link);
+									}
+							}
+			break;
+		default :
+			break;
+		}
+?>
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($PFOLIO_MANAGEMENT)); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+
+	<p><?php print($msg->read($PFOLIO_STATUS) . " $status"); ?></p>
+
+	<form id="formulaire" action ="index.php" method="post">
+	<?php
+		print("
+			<p class=\"hidden\"><input type=\"hidden\" name=\"item\"    value=\"$item\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"cmde\"    value=\"$cmde\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"IDform\"  value=\"$IDform\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"IDuv\"    value=\"$IDuv\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"IDskill\" value=\"$IDskill\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"IDdata\"  value=\"$IDdata\" /></p>
+			");
+	?>
+
+	<div style="border:#cccccc solid 1px; padding:4px;">
+
+		  <table class="width100">
+		    <tr style="background-color:#c0c0c0;">
+		      <td style="width:33%;"><?php print($msg->read($PFOLIO_FORMATION)); ?></td>
+		      <td><?php print($msg->read($PFOLIO_DESCRIPTION)); ?></td>
+		    </tr>
+
+		<?php
+		// zone de saisie pour une nouvelle formation
+		switch ( $submit ) {
+			case "new_form" :
+			case "update_form" :
+				$myform = $IDform;
+
+				$query  = "select _ident, _texte from pfolio_formation ";
+				$query .= "where _lang = '".$_SESSION["lang"]."' ";
+				$query .= "AND _IDform = '$myform' ";
+				$query .= "limit 1";
+
+				$result = mysql_query($query, $mysql_link);
+				$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+				print("
+					<tr>
+					  <td>
+						<label for=\"ident1\"><input type=\"text\" id=\"ident1\" name=\"ident1\" size=\"30\" value=\"$row[0]\" /></label>
+					  </td>
+					  <td>
+						<label for=\"text1\"><input type=\"text\" id=\"text1\" name=\"text1\" size=\"60\" value=\"$row[1]\" /></label>
+					  </td>
+					</tr>
+					");
+				break;
+
+			default :
+				print("
+					<tr>
+					  <td class=\"valign-top\">
+						<label for=\"IDform\">
+					  	<select id=\"IDform\" name=\"IDform\" onchange=\"document.forms.formulaire.submit()\">
+					");
+
+				// affichage des formations
+				$query  = "select _IDform, _ident, _texte from pfolio_formation ";
+				$query .= "where _lang = '".$_SESSION["lang"]."' ";
+				$query .= "order by _ident";
+
+				$result = mysql_query($query, $mysql_link);
+				$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+				// initialisation
+				$myform = $row[0];
+				$text   = $row[2];
+
+				while ( $row ) {			
+					if ( $IDform == $row[0] ) {
+						$myform = $row[0];
+						$text   = $row[2];
+						print("<option selected=\"selected\" value=\"$row[0]\">$row[1]</option>");
+						}
+					else
+						print("<option value=\"$row[0]\">$row[1]</option>");
+
+					$row = remove_magic_quotes(mysql_fetch_row($result));
+					}
+
+				// ajout formation
+				$add   = ( $_SESSION["CnxAdm"] == 255 )
+					? "<a href=\"$cmdline&amp;submit=new_form\"><img src=\"".$_SESSION["ROOTDIR"]."/images/ajouter.gif\" title=\"". $msg->read($PFOLIO_ADD) ."\" alt=\"". $msg->read($PFOLIO_ADD) ."\" /></a>"
+					: "" ;
+
+				// modification formation
+				$maj  = ( $_SESSION["CnxAdm"] == 255 )
+					? "<a href=\"$cmdline&amp;IDform=$myform&amp;submit=update_form\"><img src=\"".$_SESSION["ROOTDIR"]."/images/stats/post.gif\" title=\"". $msg->read($PFOLIO_UPDATE) ."\" alt=\"". $msg->read($PFOLIO_UPDATE) ."\" /></a>"
+					: "" ;
+
+				// suppression formation
+				$req  = $msg->read($PFOLIO_DELETE);
+				$del  = ( $_SESSION["CnxAdm"] == 255 )
+					? "<a href=\"$cmdline&amp;IDform=$myform&amp;submit=del\" onclick=\"return confirmLink(this, '$req');\"><img src=\"".$_SESSION["ROOTDIR"]."/images/corb.gif\" title=\"". $msg->read($PFOLIO_DELETE) ."\" alt=\"". $msg->read($PFOLIO_DELETE) ."\" /></a>"
+					: "" ;
+
+				print("
+						</select> $add $maj $del
+						</label>
+					  </td>
+				        <td>$text</td>
+					</tr>
+					");
+				break;
+			}
+		?>
+
+		    <tr>
+		      <td style="height:10px;"></td>
+		    </tr>
+
+		    <tr style="background-color:#c0c0c0;">
+		      <td><?php print($msg->read($PFOLIO_MODULE)); ?></td>
+		      <td><?php print($msg->read($PFOLIO_DESCRIPTION)); ?></td>
+		    </tr>
+
+		<?php
+		// zone de saisie pour un nouveau module
+		switch ( $submit ) {
+			case "new_uv" :
+			case "update_uv" :
+				$myuv   = $IDuv;
+
+				$result = mysql_query("select _ident, _texte from pfolio_uv where _IDuv = '$myuv' AND _lang = '".$_SESSION["lang"]."'", $mysql_link);
+				$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+				print("
+					<tr>
+					  <td>
+						<label for=\"ident2\"><input type=\"text\" id=\"ident2\" name=\"ident2\" size=\"30\" value=\"$row[0]\" /></label>
+					  </td>
+					  <td>
+						<label for=\"text2\"><input type=\"text\" id=\"text2\" name=\"text2\" size=\"60\" value=\"$row[1]\" /></label>
+					  </td>
+					</tr>
+
+					<tr>
+					  <td colspan=\"2\">
+						<label for=\"pfolio_IDmat\">
+					  	<select id=\"pfolio_IDmat\" name=\"IDmat\">
+							<option value=\"0\">&nbsp;</option>");
+
+				// affichage des matières
+				$query  = "select _IDmat, _titre from campus_data ";
+				$query .= "where _visible = 'O' AND _lang = '".$_SESSION["lang"]."' ";
+				$query .= "order by _titre";
+
+				$result = mysql_query($query, $mysql_link);
+				$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+				while ( $row ) {
+					print("<option value=\"$row[0]\">$row[1]</option>");
+
+					$row = remove_magic_quotes(mysql_fetch_row($result));
+					}
+
+				print("
+						</select> <img src=\"".$_SESSION["ROOTDIR"]."/images/group.gif\" title=\"\" alt=\"\" />
+						". $msg->read($PFOLIO_ASSOCIATION) ."
+						</label>
+					  </td>
+					</tr>
+					");
+				break;
+
+			default :
+				print("
+					<tr>
+					  <td class=\"valign-top\">
+						<label for=\"IDuv\">
+						<select id=\"IDuv\" name=\"IDuv\" onchange=\"document.forms.formulaire.submit()\">
+					");
+
+				// affichage des UV
+				$query  = "select _IDuv, _ident, _IDeval, _texte from pfolio_uv ";
+				$query .= "where _lang = '".$_SESSION["lang"]."' ";
+				$query .= "AND pfolio_uv._IDform = '$myform' ";
+				$query .= "order by _IDuv";
+
+				$result = mysql_query($query, $mysql_link);
+				$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+				// initialisation
+				$myuv    = (int) $row[0];
+				$typeval = $row[2];
+				$text    = $row[3];
+
+				while ( $row ) {			
+					if ( $IDuv == $row[0] ) {
+						$myuv    = (int) $row[0];
+						$typeval = $row[2];
+						$text    = $row[3];
+						print("<option selected=\"selected\" value=\"$row[0]\">$row[1]</option>");
+						}
+					else
+						print("<option value=\"$row[0]\">$row[1]</option>");
+
+					$row = remove_magic_quotes(mysql_fetch_row($result));
+					}
+
+				// ajout module de formation
+				$add   = ( $_SESSION["CnxAdm"] == 255 )
+					? "<a href=\"$cmdline&amp;IDform=$myform&amp;submit=new_uv\"><img src=\"".$_SESSION["ROOTDIR"]."/images/ajouter.gif\" title=\"". $msg->read($PFOLIO_ADDMODULE) ."\" alt=\"". $msg->read($PFOLIO_ADDMODULE) ."\" /></a>"
+					: "" ;
+
+				// modification module de formation
+				$maj  = ( $_SESSION["CnxAdm"] == 255 AND $myuv )
+					? "<a href=\"$cmdline&amp;IDform=$myform&amp;IDuv=$myuv&amp;submit=update_uv\"><img src=\"".$_SESSION["ROOTDIR"]."/images/stats/post.gif\" title=\"". $msg->read($PFOLIO_UPDATEMODULE) ."\" alt=\"". $msg->read($PFOLIO_UPDATEMODULE) ."\" /></a>"
+					: "" ;
+
+				// suppression module de formation
+				$req  = $msg->read($PFOLIO_DELMODULE);
+				$del  = ( $_SESSION["CnxAdm"] == 255 AND $myuv )
+					? "<a href=\"$cmdline&amp;IDform=$myform&amp;IDuv=$myuv&amp;submit=del\" onclick=\"return confirmLink(this, '$req');\"><img src=\"".$_SESSION["ROOTDIR"]."/images/corb.gif\" title=\"". $msg->read($PFOLIO_DELMODULE) ."\" alt=\"". $msg->read($PFOLIO_DELMODULE) ."\" /></a>"
+					: "" ;
+
+				print("
+						</select> $add $maj $del
+						</label>
+					  </td>
+				        <td>$text</td>
+					</tr>
+					");
+				break;
+			}
+		?>
+
+		    <tr>
+		      <td style="height:10px;"></td>
+		    </tr>
+
+		    <tr style="background-color:#c0c0c0;">
+		      <td colspan="2">
+	                <?php print($msg->read($PFOLIO_DOMAIN)); ?>
+		      </td>
+		    </tr>
+
+		<?php
+		// zone de saisie pour un nouveau domaine de compétences
+		switch ( $submit ) {
+			case "new_domain" :
+			case "update_domain" :
+				$domain = $IDskill;
+
+				$result = mysql_query("select _ident, _order from pfolio where _IDskill = '$domain'", $mysql_link);
+				$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+				$order  = $row[1];
+
+				print("
+					<tr>
+					  <td colspan=\"2\">
+						<label for=\"ident3\"><input type=\"text\" id=\"ident3\" name=\"ident3\" size=\"45\" value=\"$row[0]\" /></label>
+					  </td>
+					</tr>
+					");
+				break;
+
+			default :
+				print("
+					<tr>
+					  <td colspan=\"2\">
+						<label for=\"IDskill\">
+						<select id=\"IDskill\" name=\"IDskill\" onchange=\"document.forms.formulaire.submit()\">
+					");
+
+				// recherche des domaines
+				$query  = "select _IDskill, _ident, _order from pfolio ";
+				$query .= "where _IDuv = '$myuv' ";
+				$query .= "order by _IDskill";
+
+				$result = mysql_query($query, $mysql_link);
+				$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+				// initialisation
+				$domain = $row[0];
+				$order  = $row[2];
+
+				while ( $row ) {
+					$text = strlen($row[1]) > 80 ? substr($row[1], 0, 80)."..." : $row[1] ;
+
+					if ( $IDskill == $row[0] ) {
+						$domain = $row[0];
+						$order  = $row[2];
+
+						print("<option selected=\"selected\" value=\"$row[0]\">$text</option>");
+						}
+					else
+						print("<option value=\"$row[0]\">$text</option>");
+
+					$row  = remove_magic_quotes(mysql_fetch_row($result));
+					}
+
+				// ajout domaine
+				$add   = ( $_SESSION["CnxAdm"] == 255 )
+					? "<a href=\"$cmdline&amp;IDform=$myform&amp;IDuv=$myuv&amp;submit=new_domain\"><img src=\"".$_SESSION["ROOTDIR"]."/images/ajouter.gif\" title=\"". $msg->read($PFOLIO_ADDDOMAIN) ."\" alt=\"". $msg->read($PFOLIO_ADDDOMAIN) ."\" /></a>"
+					: "" ;
+
+				// modification domaine
+				$maj  = ( $_SESSION["CnxAdm"] == 255 AND $domain )
+					? "<a href=\"$cmdline&amp;IDform=$myform&amp;IDuv=$myuv&amp;IDskill=$domain&amp;submit=update_domain\"><img src=\"".$_SESSION["ROOTDIR"]."/images/stats/post.gif\" title=\"". $msg->read($PFOLIO_UPDATEDOMAIN) ."\" alt=\"". $msg->read($PFOLIO_UPDATEDOMAIN) ."\" /></a>"
+					: "" ;
+
+				// suppression domaine
+				$req  = $msg->read($PFOLIO_DELETEDOMAIN);
+				$del  = ( $_SESSION["CnxAdm"] == 255 AND $domain )
+					? "<a href=\"$cmdline&amp;IDform=$myform&amp;IDuv=$myuv&amp;IDskill=$domain&amp;submit=del\" onclick=\"return confirmLink(this, '$req');\"><img src=\"".$_SESSION["ROOTDIR"]."/images/corb.gif\" title=\"". $msg->read($PFOLIO_DELETEDOMAIN) ."\" alt=\"". $msg->read($PFOLIO_DELETEDOMAIN) ."\" /></a>"
+					: "" ;
+
+				print("
+						</select> $add $maj $del
+						</label>
+					  </td>
+					</tr>
+					");
+				break;
+			}
+		?>
+
+		    <tr>
+		      <td style="height:10px;"></td>
+		    </tr>
+
+		    <tr style="background-color:#c0c0c0;">
+		      <td colspan="2">
+	                <strong><?php print($msg->read($PFOLIO_SKILL)); ?></strong>
+		      </td>
+		    </tr>
+
+		    <tr>
+		      <td colspan="2">
+			  <table class="width100">
+			<?php
+				// lecture des compétences
+				$query  = "select _IDdata, _texte, _order from pfolio_data ";
+				$query .= "where _IDskill = '$domain' ";
+				$query .= "order by _IDdata";
+
+				$result = mysql_query($query, $mysql_link);
+				$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+				$text   = "";
+				$i = 0;
+				while ( $row ) {
+					$bgcolor = ( $i++ % 2 ) ? "item" : "menu" ;
+
+					// modification compétence
+					$maj  = ( $_SESSION["CnxAdm"] == 255 )
+						? "<a href=\"$cmdline&amp;IDform=$myform&amp;IDuv=$myuv&amp;IDskill=$domain&amp;IDdata=$row[0]\"><img src=\"".$_SESSION["ROOTDIR"]."/images/stats/post.gif\" title=\"". $msg->read($PFOLIO_SKILLUPDATE) ."\" alt=\"". $msg->read($PFOLIO_SKILLUPDATE) ."\" /></a>"
+						: "" ;
+
+					$text = ( $row[0] == $IDdata ) ? $row[1] : $text ;
+
+					// suppression compétence
+					$req  = $msg->read($PFOLIO_SKILLDELETE);
+					$del  = ( $_SESSION["CnxAdm"] == 255 )
+						? "<a href=\"$cmdline&amp;IDform=$myform&amp;IDuv=$myuv&amp;IDskill=$domain&amp;IDdata=$row[0]&amp;submit=del\" onclick=\"return confirmLink(this, '$req');\"><img src=\"".$_SESSION["ROOTDIR"]."/images/corb.gif\" title=\"".$msg->read($PFOLIO_SKILLDELETE)."\" alt=\"".$msg->read($PFOLIO_SKILLDELETE)."\" /></a>"
+						: "" ;
+
+					print("<tr class=\"$bgcolor\">");
+					print("<td class=\"valign-top\" style=\"width:1%;\">$maj</td>");
+					print("<td class=\"valign-top\" style=\"width:1%;\">$del</td>");
+					print("<td class=\"valign-top\" style=\"width:1%;\">$order.$row[2]</td>");
+					print("<td class=\"align-justify\">$row[1]</td>");
+					print("</tr>");
+
+					$row = remove_magic_quotes(mysql_fetch_row($result));
+					}
+
+				// zone de saisie
+				print("
+					<tr>
+					  <td colspan=\"4\">
+						<label for=\"text3\"><textarea id=\"text3\" name=\"text3\" rows=\"2\" cols=\"60\">$text</textarea></label>
+					  </td>
+					</tr>
+					");
+			?>
+			  </table>
+		      </td>
+		    </tr>
+		  </table>
+
+	</div>
+
+	<hr style="width:80%;" />
+
+         <table class="width100">
+           <tr>
+              <td style="width:10%;" class="valign-middle align-center">
+              	<?php print("<input type=\"image\" src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/valid.gif\" name=\"valid\" alt=\"".$msg->read($PFOLIO_INPUTOK)."\" />"); ?>
+              </td>
+              <td class="valign-middle">
+              	<?php print($msg->read($PFOLIO_UPDATESKILL)); ?>
+              </td>
+           </tr>
+           <tr>
+              <td class="valign-middle align-center">
+              	<a href="<?php print("index.php?item=$item&amp;cmde=gestion"); ?>"><?php print("<img src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/cancel.gif\" title=\"\" alt=\"".$msg->read($PFOLIO_INPUTCANCEL)."\" />"); ?></a>
+              </td>
+              <td class="valign-middle">
+              	<?php print($msg->read($PFOLIO_QUIT)); ?>
+              </td>
+           </tr>
+         </table>
+
+		<?php
+			print("
+				<p class=\"hidden\"><input type=\"hidden\" name=\"_form\"  value=\"$myform\" /></p>
+				<p class=\"hidden\"><input type=\"hidden\" name=\"_uv\"    value=\"$myuv\" /></p>
+				");
+		?>
+
+	</form>
+
+</div>

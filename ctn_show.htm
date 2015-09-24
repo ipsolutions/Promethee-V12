@@ -1,0 +1,653 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2005-2008 by Dominique Laporte(C-E-D@wanadoo.fr)
+   Copyright (c) 2006 by Nordine Zetoutou (nordine.zetoutou@educagri.fr)
+   Copyright (c) 2010 by Jérémy CORNILLEAU (jeremy.cornilleau@gmail.com)
+   Copyright (c) 2010 by Alexandre MAHE (alexandre.mahe@oxydia.com)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : ctn_show.htm
+ *		projet   : la page de visualisation du Cahier de Texte Numérique
+ *
+ *		version  : 1.0
+ *		auteur   : laporte
+ *		creation : 22/10/05
+ *		modif    : 17/07/06 - Nordine Zetoutou
+ * 	                 migration des balises HTML en XHTML 1.0 strict
+ */
+
+
+$IDcentre = ( @$_POST["IDcentre"] )				// Identifiant du centre
+	? (int) $_POST["IDcentre"]
+	: (int) (@$_GET["IDcentre"] ? $_GET["IDcentre"] : $_SESSION["CnxCentre"]) ;
+$IDitem  = ( @$_POST["IDitem"] )		// identificateur de l'annonce
+	? (int) $_POST["IDitem"]
+	: (int) @$_GET["IDitem"] ;
+$IDgroup  = ( @$_POST["IDgroup"] )		// sélection du e-groupe
+	? (int) $_POST["IDgroup"]
+	: (int) @$_GET["IDgroup"] ;
+$IDclass = ( @$_POST["IDclass"] )		// sélection de la classe
+	? (int) $_POST["IDclass"]
+	: (int) (@$_GET["IDclass"] ? $_GET["IDclass"] : $_SESSION["CnxClass"]) ;
+$IDmat   = ( @$_POST["IDmat"] )		// ID de la matière
+	? (int) $_POST["IDmat"]
+	: (int) @$_GET["IDmat"] ;
+
+$year    = (int) @$_GET["year"];
+$month   = (int) @$_GET["month"];
+$day     = (int) @$_GET["day"];
+$type    = (int) @$_GET["type"];		// devoir ou controle
+$IDpj    = (int) @$_GET["IDpj"];		// identificateur de la pièce jointe
+$request = @$_GET["request"];			// bouton avant/arrière
+$mode    = @$_GET["mode"];			// mode de visualisation
+$skpage  = (int) @$_GET["skpage"];		// n° de la page affichée
+$skshow  = (int) @$_GET["skshow"];		// n° du flash info
+
+$submit  = ( @$_POST["submit"] )		// bouton de validation
+	? $_POST["submit"]
+	: @$_GET["submit"] ;
+?>
+
+
+<?php
+	require_once "include/smileys.php";
+	require_once "include/spip.php";
+
+	// vérification des droits
+	$query  = "select _IDmod, _IDgrpwr, _IDgrprd, _month, _display, _limited, _IDctn, _rss from ctn ";
+	$query .= "where _IDclass = '$IDclass' AND _IDgroup = '$IDgroup' ";
+	$query .= "limit 1";
+
+	$result = mysql_query($query, $mysql_link);
+	$auth   = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+	// vérification des autorisations
+	verifySessionAccess($auth[0], $auth[2]);
+
+	if ( getAccess() != 2 AND $auth[5] == "O" AND $_SESSION["CnxClass"] != $IDclass )
+		logSessionAccess();
+
+	// l'utilisateur a cliqué sur un lien
+	if ( $submit ) {
+		$result = mysql_query("select _ID from ctn_items where _IDitem = '$IDitem' limit 1", $mysql_link);
+		$row    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+		if ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $row[0] ) 
+			switch ( $submit ) {
+				case "del" :
+					$Query  = "delete from ctn_data ";
+					$Query .= "where _IDitem = '$IDitem' AND _type = '$type'";
+
+					if ( mysql_query($Query, $mysql_link) ) {
+						// on efface les PJ
+						$Query  = "select _IDpj, _ext from ctn_pj ";
+						$Query .= "where _IDitem = '$IDitem'  AND _type = '$type'";
+
+						$result = mysql_query($Query, $mysql_link);
+						$row    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+						while ( $row ) {
+							unlink("ctn/$row[0].$row[1]");
+							$row = mysql_fetch_row($result);
+							}
+
+						mysql_query("delete from ctn_pj where _IDitem = '$IDitem' AND _type = '$type'", $mysql_link);
+						}
+					break;
+
+				case "delpj" :
+					$Query  = "select _ext from ctn_pj ";
+					$Query .= "where _IDpj = '$IDpj' ";
+					$Query .= "limit 1";
+
+					$result = mysql_query($Query, $mysql_link);
+					$row    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+					$Query  = "delete from ctn_pj ";
+					$Query .= "where _IDpj = '$IDpj' ";
+					$Query .= "limit 1";
+
+					if ( mysql_query($Query, $mysql_link) )
+						// on efface les PJ
+						unlink("ctn/$IDpj.$row[0]");
+					break;
+
+				default :
+					break;
+				}	// endswitch
+		}	// endif submit
+?>
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($CTN_MYCTN, $_SESSION["CampusName"])); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+
+	<p>
+		<?php print($msg->read($CTN_SHOWDESC)); ?><br/>
+		<?php print($msg->read($CTN_EMAILED, "<img src=\"".$_SESSION["ROOTDIR"]."/images/email.gif\" title=\"\" alt=\"\" />")); ?>
+	</p>
+
+	<?php
+		// initialisation
+		$lemois     = $month + 1;
+      	$link       = "index.php?item=$item&IDmat=$IDmat&IDclass=$IDclass&IDgroup=$IDgroup&skpage=$skpage&skshow=$skshow&salon=".$_SESSION["CampusName"];
+
+		$prev_year  = $next_year  = $year;
+		$prev_month = $next_month = $month;
+		$prev_day   = $next_day   = $day;
+
+		// 1er jour de la semaine
+		$fstday = date("w", mktime(1, 1, 1, $month + 1, $day, $year));
+		$fstday = ( $fstday == 0 ) ? $day - 6 : $day - $fstday + 1 ;
+
+		if ( $fstday < 1 ) {
+			$fstday = $fstday + getmaxdays($month ? $year : ($year - 1), $month + 1);
+			$month  = ( $month ) ? $month - 1 : 0 ;
+			}
+
+		// nombre de jours dans le mois
+		$nbdays = getmaxdays($year, $month + 1);
+		$mode   = ( $mode ) ? $mode : $auth[4] ;
+
+		// lecture des dates suivantes/précédentes
+		$Query  = "select _date from ctn_items ";
+		$Query .= "where _IDctn = $auth[6] ";
+		$Query .= ( $IDmat ) ? "AND _IDmat = '$IDmat' " : "" ;
+//		$Query .= ( $IDclass ) ? "AND _IDclass = '$IDclass' " : "" ;
+
+		$query  = $Query; 
+ 		switch ( $mode ) {
+			case "D" :
+				break;
+			case "W" :
+				// semaine suivante
+				if ( $fstday + 7 > $nbdays ) {
+					$next_month = $month + 1;
+					$next_days  = $fstday + 6 - $nbdays;
+					}
+				else
+					$next_days  = $fstday + 6;
+				$next_year  = ( $next_month > 11 ) ? $year + 1 : $year ;
+				$next_month = $next_month % 12;
+				break;
+			default :
+				if ( $month == 11 ) {
+					$next_month = 0;
+					$next_year = $year + 1;
+					}
+				else
+					$next_month = $month + 1;
+				break;
+			}
+		$query .= "AND _date > '".sprintf("%d-%02d-%02d", $next_year, $next_month+1, $next_day)." 23:59:59' ";
+		$query .= "order by _date asc ";
+		$query .= "limit 1";
+
+		$result = mysql_query($query, $mysql_link);
+		$row    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+		$nbnext = ( $result ) ? mysql_numrows($result) : 0 ;
+
+		// accès sur date suivante
+		if ( $nbnext ) {
+			list($mdate, $mtime) = explode(" ", $row[0]);
+			list($next_year, $next_month, $next_day) = explode("-", $mdate);
+			$next_month = $next_month - 1;
+			}
+
+		$query  = $Query;
+ 		switch ( $mode ) {
+			case "D" :
+				break;
+			case "W" :
+				// semaine précédente
+				if ( $fstday - 7 < 1 ) {
+					$prev_month = $month - 1;
+					$prev_days  = $fstday - 6 + getmaxdays($month ? $year : ($year - 1), $month + 1);
+					}
+				else
+					$prev_days  = $fstday - 6;
+				$prev_year  = ( $prev_month < 0 ) ? $year - 1 : $year ;
+				$prev_month = ( $prev_month < 0 ) ? 11 : $prev_month ;
+				break;
+			default :
+				if ( $month )
+					$prev_month = $month - 1;
+				else {
+					$prev_month = 11;
+					$prev_year  = $year - 1;
+					}
+				break;
+			}
+		$query .= "AND _date < '".sprintf("%d-%02d-%02d", $prev_year, $prev_month+1, $prev_day)." 00:00:00' ";
+		$query .= "order by _date desc ";
+		$query .= "limit 1";
+
+		$result = mysql_query($query, $mysql_link);
+		$row    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+		$nbprev = ( $result ) ? mysql_numrows($result) : 0 ;
+
+		// accès sur date précédente
+		if ( $nbprev ) {
+			list($mdate, $mtime) = explode(" ", $row[0]);
+			list($prev_year, $prev_month, $prev_day) = explode("-", $mdate);
+			$prev_month = $prev_month - 1;
+			}
+
+           	$next   = ( $nbnext )
+           		? "<a href=\"".myurlencode("$link&cmde=$cmde&year=$next_year&month=$next_month&day=$next_day&request=next")."\">".$msg->read($CTN_NEXT)."</a>"
+           		: $msg->read($CTN_NEXT) ;
+
+           	$prev   = ( $nbprev )
+           		? "<a href=\"".myurlencode("$link&cmde=$cmde&year=$prev_year&month=$prev_month&day=$prev_day&request=prev")."\">".$msg->read($CTN_PREV)."</a>"
+          		: $msg->read($CTN_PREV) ;
+
+		// affichage bouton "ajouter"
+		$button = ( $IDclass AND ($_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $auth[0] OR $auth[1] & pow(2, $_SESSION["CnxGrp"] - 1)) )
+			? "<a href=\"".myurlencode("$link&cmde=post")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/post.gif\" title=\"\" alt=\"\" /></a>"
+			: "" ;
+		$text   = ( $IDclass AND ($_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $auth[0] OR $auth[1] & pow(2, $_SESSION["CnxGrp"] - 1)) )
+			? $msg->read($CTN_INPUT)
+			: "" ;
+
+		// $button_print créé le 16/05/10
+		// Modifications : Jérémy CORNILLEAU et Alexandre MAHE
+			
+		// lecture de la date de l'item
+		$query   = "select distinctrow _date ";
+		$query  .= "from ctn_items ";
+		$query  .= "where _IDctn = '$auth[6]' ";
+		$query  .= ( $IDmat ) ? "AND ctn_items._IDmat = '$IDmat' " : "" ;
+			
+		$result  = mysql_query($query, $mysql_link);
+		$date_print = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+			
+		$button_print = ( $IDclass != 0 )
+			? "<a href=\"".myurlencode($_SESSION["ROOTDIR"]."/ctn_pdf.php?sid=".$_SESSION["sessID"]."&IDclass=$IDclass&IDmat=$IDmat&IDgroup=$IDgroup&date=$date_print[0]")."\" onclick=\"window.open(this.href, '_blank'); return false;\">
+				<img src=\"".$_SESSION["ROOTDIR"]."/images/print.gif\" title=\"". $msg->read($CTN_PRINT) ."\" alt=\"". $msg->read($CTN_PRINT) ."\" />
+				</a>"
+			: "" ;
+
+		$rss_flux = ( $auth[7] == "O" )
+			? "<a href=\"".$_SESSION["ROOTDIR"]."/ctn_rss.php\" onclick=\"window.open(this.href, '_blank'); return false;\">
+				<img src=\"".$_SESSION["ROOTDIR"]."/images/rss.png\" title=\"". $msg->read($CTN_RSS) ."\" alt=\"". $msg->read($CTN_RSS) ."\" />
+				</a>"
+			: "" ;
+
+        	print("
+	            <table class=\"width100\">
+	              <tr>
+	                <td style=\"width:10%;\" class=\"valign-middle\">$button</td>
+	                <td style=\"width:40%;\" class=\"valign-middle\">$text</td>
+	                <td class=\"valign-middle align-right\">[$prev]<strong>.</strong>[$next]</td>
+		          <td class=\"align-right valign-middle\" style=\"width:1%; white-space:nowrap;\">$button_print $rss_flux</td>
+	              </tr>
+	            </table>
+	            ");
+
+		// initialisation
+		$prev_year  = $next_year  = $year;
+		$prev_month = $next_month = $month;
+		$prev_day   = $next_day   = $day;
+
+		switch ( $request ) {
+			case "next" :
+		 		switch ( $mode ) {
+ 					case "D" :
+						if ( $day == $nbdays ) {
+							$prev_month = $month + 1;
+							$prev_year  = $next_year  = ( $prev_month > 11 ) ? $year + 1 : $year ;
+							$prev_month = $next_month = ( $prev_month > 11 ) ? 0 : $prev_month ;
+							$prev_days  = $next_days  = getmaxdays($prev_year, $prev_month + 1);
+							}
+						else {
+							$prev_month = $next_month = $lemois-1;
+							$prev_days  = $next_days  = $day + 1;
+							}
+						break;
+					case "W" :
+						// semaine suivante
+						if ( $fstday + 7 > $nbdays ) {
+							$next_month = $month + 1;
+							$next_days  = $fstday + 6 - $nbdays;
+							}
+						else
+							$next_days  = $fstday + 6;
+						$next_year  = ( $next_month > 11 ) ? $year + 1 : $year ;
+						$next_month = $next_month % 12;
+						break;
+					default :
+						if ( $month == 11 ) {
+							$prev_month = $next_month = 0;
+							$prev_year  = $next_year  = $year + 1;
+							}
+						else
+							$prev_month = $next_month = $month + 1;
+						$prev_day = 1;
+						$next_day = 31;
+						break;
+					}
+				break;
+							
+			case "prev" :
+		 		switch ( $mode ) {
+ 					case "D" :
+						if ( $day == 1 ) {
+							$prev_month = $month - 1;
+							$prev_year  = $next_year  = ( $prev_month < 0 ) ? $year - 1 : $year ;
+							$prev_month = $next_month = ( $prev_month < 0 ) ? 11 : $prev_month ;
+							$prev_days  = $next_days  = getmaxdays($prev_year, $prev_month + 1);
+							}
+						else {
+							$prev_month = $next_month = $lemois-1;
+							$prev_days  = $next_days  = $day - 1;
+							}
+						break;
+					case "W" :
+						// semaine précédente
+						if ( $fstday - 7 < 1 ) {
+							$prev_month = $month - 1;
+							$prev_days  = $fstday - 6 + getmaxdays($month ? $year : ($year - 1), $month + 1);
+							}
+						else
+							$prev_days  = $fstday - 6;
+						$prev_year  = ( $prev_month < 0 ) ? $year - 1 : $year ;
+						$prev_month = ( $prev_month < 0 ) ? 11 : $prev_month ;
+						break;
+					default :
+						if ( $month )
+							$prev_month = $next_month = $month - 1;
+						else {
+							$prev_month = $next_month = 11;
+							$prev_year  = $next_year  = $year - 1;
+							}
+						$prev_day = 1;
+						$next_day = 31;
+						break;
+					}
+				break;
+
+			default :
+		 		switch ( $mode ) {
+ 					case "D" :
+						$prev_month = $next_month = $lemois-1;
+						break;
+					case "W" :
+						$prev_day = $fstday;
+						if ( $fstday + 7 > $nbdays ) {
+							$next_month = $month + 1;
+							$next_day   = $fstday + 7 - $nbdays;
+							}
+						else
+							$next_day   = $fstday + 6;
+						$next_year  = ( $next_month > 11 ) ? $year + 1 : $year ;
+						$next_month = $next_month % 12;
+						break;
+					default :
+						$prev_month = $next_month = $lemois-1;
+						$prev_day   = 1;
+						$next_day   = 31;
+						break;
+					}
+				break;
+			}
+
+		// lecture de l'item
+		$Query   = "select distinctrow ";
+		$Query  .= "ctn._IDclass, ";
+		$Query  .= "ctn_items._IDmat, ctn_items._texte, ctn_items._date, ctn_items._ID, ctn_items._IP, ctn_items._delay, ctn_items._IDitem, ctn_items._raw, ctn_items._note, ctn_items._title ";
+		$Query  .= "from ctn, ctn_items ";
+		$Query  .= "where ctn_items._IDctn = '$auth[6]' ";
+		$Query  .= "AND ctn_items._IDctn = ctn._IDctn ";
+		$Query  .= ( $IDmat ) ? "AND ctn_items._IDmat = '$IDmat' " : "" ;
+//		$Query  .= ( $IDclass ) ? "AND _IDclass = '$IDclass' " : "" ;
+		$Query  .= "AND (ctn_items._date between '".sprintf("%d-%02d-%02d", $prev_year, $prev_month+1, $prev_day)." 00:00:00' AND '".sprintf("%d-%02d-%02d", $next_year, $next_month+1, $next_day)." 23:59:59' ) ";
+		$Query  .= "order by ctn_items._date desc";
+
+		$result  = mysql_query($Query, $mysql_link);
+		$row     = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+		while ( $row ) {
+			// log des lectures
+			mysql_query("insert into ctn_vu values('$row[7]', '".$_SESSION["CnxID"]."', '".$_SESSION["CnxIP"]."', '". date("Y-m-d H:i:s"). "')", $mysql_link);
+
+			// lecture de la classe
+			$return = mysql_query("select _ident from campus_classe where _IDclass = '$row[0]' limit 1", $mysql_link);
+			$classe = ( $return ) ? remove_magic_quotes(mysql_fetch_row($return)) : 0 ;
+
+			// lecture de la matière
+			$return = mysql_query("select _titre from campus_data where _IDmat = '$row[1]' AND _lang = '".$_SESSION["lang"]."' limit 1", $mysql_link);
+			$mat    = ( $return ) ? remove_magic_quotes(mysql_fetch_row($return)) : 0 ;
+
+			// lecture de l'auteur du texte
+			$who    = getUserName($row[4]) . " " . _getHostName($row[5]);
+
+			// affichage bouton "modifier"
+			$button = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $auth[0] OR $_SESSION["CnxID"] == $row[4] )
+				? "[<a href=\"".myurlencode("$link&IDitem=$row[7]&cmde=post")."\">".$msg->read($CTN_MODIFY)."</a>|<a href=\"".myurlencode("$link&IDitem=$row[7]&cmde=post&copy=$row[0]")."\">".$msg->read($CTN_COPY)."</a>]"
+				: "" ;
+
+			print("
+		            <table class=\"width100\">
+		              <tr style=\"background-color:#c0c0c0;\">
+		                <td class=\"valign-top align-right\" style=\"width:20%;\">
+					". $msg->read($CTN_GETCLASS) ."<br/>
+	            		". $msg->read($CTN_GETMATTER) ."<br/>
+	            		". $msg->read($CTN_AUTHOR) ."
+		                </td>
+		                <td class=\"valign-top align-left\" style=\"width:80%;\">
+					$classe[0]<br/>
+					$mat[0]<br/>
+			            $who
+		                </td>
+		              </tr>
+
+				  <tr>
+				    <td style=\"border: 1px solid #c0c0c0;\" class=\"align-center valign-top\">
+					". date2longfmt($row[3]) ."<br/>
+					<strong>". str_replace(":", $msg->read($CTN_HOUR), $row[6]) ."</strong><br/><br/>
+					$button
+				    </td>
+				    <td style=\"border: 1px solid #c0c0c0;\" class=\"valign-top\">
+					<p style=\"margin:0 0 0 0px; background-color:#eeeeee;\"><strong>$row[10]</strong></p>
+					<hr style=\"margin:0px;\" />");
+
+			if ( $row[8] == "O" )
+				print("<div>". replace_smile(find_typo($row[2], $note)) ."</div>");
+			else
+				print("<div>$row[2]</div>");
+
+			// devoir ou controle
+			$list = explode(",", $msg->read($CTN_TODO));
+			for ($i = 1, $j = 0; $i <= count($list); $i++, $j++) {
+				$file = "";
+				$icon = ( $i == 1 ) ? "B" : "H" ;
+
+				// lecture des PJ
+				$res  = mysql_query("select _IDpj, _title, _ext, _size from ctn_pj where _IDitem = '$row[7]' AND _type = '$i'", $mysql_link);
+				$doc  = ( $res ) ? remove_magic_quotes(mysql_fetch_row($res)) : 0 ;
+
+				while ( $doc ) {
+					// suppression de la pièce jointe
+					$req   = $msg->read($CTN_DELATTACH);
+					$del   = ( $_SESSION["CnxAdm"] == 255 OR $row[4] == $_SESSION["CnxID"] )
+						? "<a href=\"".myurlencode("index.php?item=$item&cmde=$cmde&IDitem=$row[7]&IDpj=$doc[0]&IDmat=$row[1]&IDclass=$row[0]&IDgroup=$IDgroup&year=$year&month=$month&day=$day&submit=delpj")."\" onclick=\"return confirmLink(this, '$req');\">
+						   <img src=\"".$_SESSION["ROOTDIR"]."/images/corb.gif\" title=\"$req\" alt=\"$req\" />
+						   </a>"
+						: "" ;
+
+					// description
+					$desc  = $msg->read($CTN_SIZE, "$doc[3]");
+
+					$file .= "
+				    		<img src=\"".$_SESSION["ROOTDIR"]."/images/mime/$doc[2].gif\" title=\"$doc[2]\" alt=\"$doc[2]\" />
+				    		". $msg->read($CTN_ATTACHEDOC, Array("$DOWNLOAD/ctn/$doc[0].$doc[2]", $desc)) ." $del<br/>";
+
+					$doc   = remove_magic_quotes(mysql_fetch_row($res));
+					}
+
+				// lecture des PJ
+				$res  = mysql_query("select _todo, _text from ctn_data where _IDitem = '$row[7]' AND _type = '$i'", $mysql_link);
+				$doc  = ( $res ) ? remove_magic_quotes(mysql_fetch_row($res)) : 0 ;
+
+				if ( strlen($file) OR mysql_numrows($res) ) {
+					// suppression de l'activité
+					$req   = $msg->read($CTN_DELETE);
+					$del   = ( $_SESSION["CnxAdm"] == 255 OR $row[4] == $_SESSION["CnxID"] )
+						? "<a href=\"".myurlencode("index.php?item=$item&cmde=$cmde&IDitem=$row[7]&type=$i&IDmat=$row[1]&IDclass=$row[0]&IDgroup=$IDgroup&year=$year&month=$month&day=$day&submit=del")."\" onclick=\"return confirmLink(this, '$req');\">
+						   <img src=\"".$_SESSION["ROOTDIR"]."/images/corb.gif\" title=\"$req\" alt=\"$req\" />
+						   </a>"
+						: "" ;
+
+					print(
+						"<div style=\"margin-top:10px;\">"
+							. $msg->read($CTN_FORNEXT, Array("<img src=\"".$_SESSION["ROOTDIR"]."/images/$icon.gif\" title=\"\" alt=\"*\" />", $list[$j], date2longfmt($doc[0]))) . $del
+							. "<p style=\"margin:0 0 0 20px; background-color:#eeeeee;\">"
+							. $file
+							. $doc[1] .
+							"</p>".
+						"</div>"
+						);
+					}
+				}	// end for
+
+			print("
+		                </td>
+		              </tr>");
+
+			// lecture des PJ
+			$res = mysql_query("select _IDpj, _title, _ext, _size from ctn_pj where _IDitem = '$row[7]' AND _type = '0'", $mysql_link);
+			$doc = ( $res ) ? remove_magic_quotes(mysql_fetch_row($res)) : 0 ;
+
+			if ( mysql_affected_rows($mysql_link) ) {
+				print("
+					<tr>
+					  <td class=\"valign-top align-center\" style=\"border: 1px solid #c0c0c0;\">
+				    		<img src=\"".$_SESSION["ROOTDIR"]."/images/spip/pj.gif\" title=\"\" alt=\"\" />
+					  </td>
+
+					  <td class=\"valign-top\" style=\"border: 1px solid #c0c0c0;\">
+					");
+
+				while ( $doc ) {
+					// suppression de la pièce jointe
+					$req   = $msg->read($CTN_DELATTACH);
+					$del   = ( $_SESSION["CnxAdm"] == 255 OR $row[4] == $_SESSION["CnxID"] )
+						? "<a href=\"".myurlencode("index.php?item=$item&cmde=$cmde&IDitem=$row[7]&IDpj=$doc[0]&IDmat=$row[1]&IDclass=$row[0]&IDgroup=$IDgroup&year=$year&month=$month&day=$day&submit=delpj")."\" onclick=\"return confirmLink(this, '$req');\">
+						   <img src=\"".$_SESSION["ROOTDIR"]."/images/corb.gif\" title=\"$req\" alt=\"$req\" />
+						   </a>"
+						: "" ;
+
+					// description
+					$desc  = $msg->read($CTN_SIZE, strval($doc[3])) ."<br/>";
+					$desc .= addslashes($doc[1]);
+
+					print("
+				    		<img src=\"".$_SESSION["ROOTDIR"]."/images/mime/$doc[2].gif\" title=\"$doc[2]\" alt=\"$doc[2]\" />
+				    		". $msg->read($CTN_ATTACHEDOC, Array("$DOWNLOAD/ctn/$doc[0].$doc[2]", $desc)) ." $del
+					    	<br/>
+						");
+
+					$doc = remove_magic_quotes(mysql_fetch_row($res));
+					}
+
+				print("
+					  </td>
+					</tr>
+					");
+				}
+
+			// lecture des absences
+			$query  = "select distinctrow ";
+			$query .= "user_id._name, user_id._fname, ";
+			$query .= "absent_items._email, absent_items._IDdata, absent_items._date, absent_items._IDmod, absent_items._isok ";
+			$query .= "from user_id, absent_items ";
+			$query .= "where absent_items._IDctn = '$row[7]' ";
+			$query .= "AND user_id._ID = absent_items._IDabs ";
+			$query .= "AND absent_items._IDctn";
+
+			$return = mysql_query($query, $mysql_link);
+			$myrow  = ( $return ) ? remove_magic_quotes(mysql_fetch_row($return)) : 0 ;
+
+			if ( $myrow ) {
+				print("
+				  <tr>
+				    <td class=\"valign-top align-right\" style=\"border: 1px solid #c0c0c0;\">
+           				".$msg->read($CTN_GETABSENT)."
+				    </td>
+				    <td class=\"valign-top\" style=\"border: 1px solid #c0c0c0;\">");
+
+				while ( $myrow ) {
+					// motif exclusion
+					$res   = mysql_query("select _texte from absent_data where _IDdata = '$myrow[3]' AND _lang = '".$_SESSION["lang"]."' limit 1", $mysql_link);
+					$data  = ( $res ) ? remove_magic_quotes(mysql_fetch_row($res)) : 0 ;
+
+					// autorisation de rentrer en cours
+					$isok  = ( $myrow[6] == "0000-00-00 00:00:00" )
+						? "<img src=\"".$_SESSION["CfgPuce"]."\" title=\"\" alt=\"*\" />"
+						: "<img src=\"".$_SESSION["ROOTDIR"]."/images/certificate.png\" title=\"". $msg->read($CTN_ISOK, Array(date2longfmt($myrow[6]), getUserName($myrow[5], false))) ."\" alt=\"". $msg->read($CTN_ISOK, Array(date2longfmt($myrow[6]), getUserName($myrow[5], false))) ."\" />" ;
+
+					$email = ( $myrow[2] != "0000-00-00 00:00:00" )
+						? "<img src=\"".$_SESSION["ROOTDIR"]."/images/email.gif\" title=\"".$msg->read($CTN_SENT, $myrow[2])."\" alt=\"".$msg->read($CTN_SENT, $myrow[2])."\" />"
+						: "" ;
+
+					print("$isok $myrow[0] $myrow[1] ($data[0] -> ".date2longfmt($myrow[4]).") $email<br/>");
+
+					$myrow = remove_magic_quotes(mysql_fetch_row($return));
+					}
+
+				print("
+					<p style=\"margin:0px; background-color:#eeeeee;\">". find_typo($row[9], $note) ."&nbsp;</p>
+				    </td>
+				  </tr>");
+				}
+
+			print("</table>");
+
+			$row = remove_magic_quotes(mysql_fetch_row($result)) ;
+			}
+
+		// mode de visualisation
+		$lemois = $lemois - 1;
+		$list   = explode(",", $msg->read($CTN_DISPLAYLIST));
+
+         	print("
+	            <table class=\"width100\">
+	              <tr>
+	                <td style=\"width:10%;\" class=\"valign-middle\">
+      	        	<a href=\"".myurlencode("$link")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/cancel.gif\" title=\"\" alt=\"".$msg->read($CTN_INPUTCANCEL)."\" /></a>
+	                </td>
+	                <td class= \"valign-middle\">".$msg->read($CTN_VISUALIZE)."</td>
+	                <td class=\"valign-middle align-right\">
+				".$msg->read($CTN_DISPLAY)."
+      	        	<a href=\"".myurlencode("$link&year=$year&month=$lemois&day=$day&mode=D&cmde=show")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/view_day.gif\" title=\"$list[0]\" alt=\"$list[0]\" /></a>
+      	        	<a href=\"".myurlencode("$link&year=$year&month=$lemois&day=$day&mode=W&cmde=show")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/view_week.gif\" title=\"$list[1]\" alt=\"$list[1]\" /></a>
+      	        	<a href=\"".myurlencode("$link&year=$year&month=$lemois&day=$day&mode=M&cmde=show")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/view_month.gif\" title=\"$list[2]\" alt=\"$list[2]\" /></a>
+	                </td>
+	              </tr>
+	            </table>
+			");
+	?>
+
+</div>

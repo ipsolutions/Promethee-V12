@@ -1,0 +1,476 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2002-2007 by Dominique Laporte (C-E-D@wanadoo.fr)
+   Copyright (c) 2006 by Hugues Lecocq(hugues.lecocq@laposte.net)
+   Copyright (c) 2006 by Nordine Zetoutou (nordine.zetoutou@educagri.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : cursus_new.htm
+ *		projet   : la page d'ajout des référentiels du campus virtuel
+ *
+ *		version  : 1.0
+ *		auteur   : laporte
+ *		creation : 9/05/04
+ *		modif    : 15/06/06 - par hugues lecocq
+ *                     migration php5
+ *		           17/07/06 - Nordine Zetoutou
+ * 	                 migration des balises HTML en XHTML 1.0 strict
+ */
+
+
+$titre  = @$_POST["titre"];			// titre de l'item du cursus
+$texte  = @$_POST["texte"];			// texte de l'item du cursus
+
+$IDsel  = ( @$_POST["IDsel"] )		// Identifiant de la classe sélectionnée
+	? (int) $_POST["IDsel"]
+	: (@$_GET["IDsel"] ? $_GET["IDsel"] : $_SESSION["CnxClass"]) ;
+$IDmat   = ( @$_POST["IDmat"] )		// Identifiant de la matière/formation
+	? (int) $_POST["IDmat"]
+	: (int) @$_GET["IDmat"] ;
+$IDdata  = ( @$_POST["IDdata"] )		// Identifiant de la matière
+	? (int) $_POST["IDdata"]
+	: (int) @$_GET["IDdata"] ;
+$IDitem = ( @$_POST["IDitem"] )		// Identifiant d'un module de cursus
+	? (int) $_POST["IDitem"]
+	: (int) @$_GET["IDitem"] ;
+$group  = @$_POST["group"];
+
+$submit = ( @$_POST["submit"] )		// bouton de validation
+	? $_POST["submit"]
+	: @$_GET["submit"] ;
+?>
+
+
+<?php
+	// initialisation
+	$error  = 0;
+	$status = ( $IDitem )
+		? $msg->read($CURSUS_UPDATECURSUS)
+		: $msg->read($CURSUS_NEWCURSUS) ;
+
+	// recherche du cursus
+	// NB : pour l'instant seule la formation continue est acessible !!
+	$query  = "select _IDcursus, _titre from cursus ";
+	$query .= "where _visible = 'O' AND _lang = '".$_SESSION["lang"]."' ";
+	$query .= "order by _IDcursus asc limit 1";
+
+	$result = mysql_query($query, $mysql_link);
+	$cursus = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+	// et du module
+	$result = mysql_query("select _titre from campus_data where _IDmat = '$IDdata' AND _lang = '".$_SESSION["lang"]."' limit 1", $mysql_link);
+	$module = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+	// l'utilisateur a cliqué sur un lien
+	switch ( $submit ) {
+		case "Valider" :
+			// la matière est-elle ouverte et les droits sont-ils Ok ?
+			$Query  = "select _IDdata from cursus_data ";
+			$Query .= "where _IDmat = '$IDdata' ";
+			$Query .= ( $_SESSION["CnxAdm"] == 255 ) ? "" : "AND (_IDgrpwr & ". pow(2, $_SESSION["CnxGrp"] - 1) .") " ;
+			$Query .= "AND _visible = 'O'";
+
+			$result = mysql_query($Query, $mysql_link);
+			if ( mysql_affected_rows($mysql_link) )
+				$row = mysql_fetch_row($result);
+			else
+				// création d'un compte par défaut (si enseignant ou formateur)
+				if ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxGrp"] == 2 OR $_SESSION["CnxGrp"] == 6 ) {
+					$Query  = "insert into cursus_data ";
+					$Query .= "values('', '$cursus[0]', '$IDdata', '0', '".$_SESSION["CnxGrp"]."', '".$_SESSION["CnxGrp"]."', 'O')";
+
+					if ( mysql_query($Query, $mysql_link) )
+						$row[0] = mysql_insert_id();
+					}
+				else
+					die($msg->read($CURSUS_NOPERM));
+
+			// fichier à transférer
+			$file = @$_FILES["UploadedFile"]["tmp_name"];
+
+			// test d'erreur sur champs non renseignés
+			if ( $titre == "" )
+				$error = 1;
+			else
+				// pb de transfert
+				if ( $file == "" )
+   		 			if ( @$_FILES["UploadedFile"]["name"] != "" AND @$_FILES["UploadedFile"]["size"] == 0 )
+	    					$error = 2;
+					else
+						$error = 3;
+
+			// Vérification du type de fichier à transférer				    
+			if ( !$error )
+				$error = authfile(@$_FILES["UploadedFile"]["name"]) ? 0 : 4 ;
+
+			// test d'erreur sur fichier existant
+			if ( !$error ) {
+				$Query  = "select _IDitem from cursus_items ";
+				$Query .= "where _file = '".@$_FILES["UploadedFile"]["name"]."' ";
+				$Query .= "AND _IDmat = '$IDdata' AND _IDdata = '$row[0]'";
+
+				$result = mysql_query($Query, $mysql_link);
+				$error  = ( $result ) 
+					? ( mysql_numrows($result)
+						? 5
+						: 0
+					  )
+					: 0 ;
+				}
+
+			if ( !$error ) {
+				$status = $msg->read($CURSUS_TRANSFERT) ." ";
+
+				// on détermine le répertoire de stockage
+				$dest = "$DOWNLOAD/cursus/" . stripaccent($cursus[1]);
+				if ( !is_dir($dest) )
+					mymkdir($dest, $CHMOD);
+
+				$dest = $dest . "/" . stripaccent($module[0]);
+				if ( !is_dir($dest) )
+					mymkdir($dest, $CHMOD);
+
+				$dest = stripaccent($dest . "/" . $_FILES["UploadedFile"]["name"]);
+
+				// copie du fichier temporaire -> répertoire de stockage
+				if ( move_uploaded_file($file, $dest) )
+					mychmod($dest, $CHMOD);
+				else {
+					$error   = 3;
+					$status .= "<img src=\"".$_SESSION["ROOTDIR"]."/images/bad.gif\" title=\"\" alt=\"\" /> <span style=\"color:#FF0000\">". $msg->read($CURSUS_NOFILE) ."</span>";
+					}
+				}
+
+			if ( !$error ) {
+				$status = $msg->read($CURSUS_INSERT) ." ";
+
+				// initialisation des champs
+				$date     = date("Y-m-d H:i:s", time());
+				$filename = stripaccent(@$_FILES["UploadedFile"]["name"]);
+
+				// groupes autorisés
+				$grpid = " ";
+				@sort($group);
+				for ( $i = 0; $i < count($group); $i++ )
+					$grpid .= ( @$group[$i] ) ? "$group[$i] " : "" ;
+
+				// et on insére une nouvelle ressource dans la base de données
+				$Query  = "insert into cursus_items ";
+				$Query .= "values('', '$row[0]', '$date', '".$_SESSION["CnxID"]."', '".$_SESSION["CnxIP"]."', '$grpid', '$titre', '$texte', '$filename', '".@$_FILES["UploadedFile"]["size"]."')";
+
+				if ( !mysql_query($Query, $mysql_link) ) {
+					$status .= "<img src=\"".$_SESSION["ROOTDIR"]."/images/bad.gif\" title=\"\" alt=\"\" />";
+					sql_error($mysql_link);
+					}
+				else
+					$status .= "<img src=\"".$_SESSION["ROOTDIR"]."/images/ok.gif\" title=\"\" alt=\"\" />";
+				}
+			break;
+
+		case "Update" :
+			$status = $msg->read($CURSUS_MODIFICATION) ." ";
+
+			// groupes autorisés
+			$grpid = " ";
+			@sort($group);
+			for ( $i = 0; $i < count($group); $i++ )
+				$grpid .= ( @$group[$i] ) ? "$group[$i] " : "" ;
+
+			$Query  = "update cursus_items ";
+			$Query .= "set _titre = '$titre', _texte = '$texte', _IDgrprd = '$grpid' ";
+			$Query .= "where _IDitem = '$IDitem' ";
+
+			if ( ! mysql_query($Query, $mysql_link) ) {
+				mysql_error($mysql_link);
+				$status .= "<img src=\"".$_SESSION["ROOTDIR"]."/images/bad.gif\" title=\"\" alt=\"\" />";
+				}
+			else 
+				$status .= "<img src=\"".$_SESSION["ROOTDIR"]."/images/ok.gif\" title=\"\" alt=\"\" />";
+			break;
+
+		default :
+			break;
+		}
+
+	$Query   = "select _titre, _texte, _IDgrprd ";
+	$Query  .= "from cursus_items where _IDitem = '$IDitem'";
+
+	$result  = mysql_query($Query, $mysql_link);
+	$row     = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+		if ( mysql_affected_rows($mysql_link) ) {
+		// initialisation des champs de saisie
+		$titre  = $row[0];
+		$texte  = $row[1];
+		$group  = $row[2];
+		}
+	else
+		if ( !$error ) {
+			// réinitialisation des champs de saisie
+			$titre = "";
+			$texte = "";
+			}
+?>				
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($CURSUS_FORMFEED, $cursus[1])); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+
+		<form id="formulaire" action="index.php" method="post" enctype="multipart/form-data">
+		<?php
+			print("
+				<p class=\"hidden\"><input type=\"hidden\" name=\"item\"   value=\"$item\" /></p>
+				<p class=\"hidden\"><input type=\"hidden\" name=\"cmde\"   value=\"$cmde\" /></p>
+				<p class=\"hidden\"><input type=\"hidden\" name=\"IDsel\"  value=\"$IDsel\" /></p>
+				<p class=\"hidden\"><input type=\"hidden\" name=\"IDmat\"  value=\"$IDmat\" /></p>
+				<p class=\"hidden\"><input type=\"hidden\" name=\"IDdata\" value=\"$IDdata\" /></p>
+				");
+
+			if ( $IDitem )
+				print("
+					<p class=\"hidden\"><input type=\"hidden\" name=\"IDitem\" value=\"$IDitem\" /></p>
+					<p class=\"hidden\"><input type=\"hidden\" name=\"submit\" value=\"Update\" /></p>
+					");
+			else
+				print("
+					<p class=\"hidden\"><input type=\"hidden\" name=\"submit\" value=\"Valider\" /></p>
+					");
+		?>
+
+		<table class="width100">
+		    <tr>
+		      <td style="width:15%;" class="align-right"><?php print($msg->read($CURSUS_MODULE)); ?></td>
+		      <td style="width:45%;" class="align-left"><?php print("$module[0]"); ?></td>
+		      <td style="width:40%;" class="align-right"><?php print($msg->read($CURSUS_STATUS)." $status"); ?></td>
+		    </tr>
+
+		    <tr>
+		      <td class="align-right"><?php print($msg->read($CURSUS_AUTHOR)); ?></td>
+		      <td colspan="2"><?php print($_SESSION["CnxName"]); ?></td>
+		    </tr>
+		</table>
+
+	<hr style="width:80%; text-align:center;" />
+
+	  <table class="width100">
+	   <tr>
+	     <td style="width:10%;">&nbsp;</td>
+	     <td style="width:80%;">
+
+		  <table class="width100">
+		  <?php
+		  // intitulé non renseigné
+		  if ( $error == 1 )
+		  	print("
+			    <tr>
+			      <td style=\"width:100%;\">
+					<span style=\"color:#FF0000;\">". $msg->read($CURSUS_ERRIDENT) ."</span>
+			      </td>
+			    </tr>
+				");
+		  ?>
+	    
+		    <tr style="background-color:#eeeeee;">
+		      <td style="width:100%;">
+		        <?php print($msg->read($CURSUS_IDENT)); ?>
+		      </td>
+		    </tr>
+	    
+		    <tr>
+		      <td>
+		        <label for="titre"><?php print("<input type=\"text\" id=\"titre\" name=\"titre\" size=\"55\" value=\"$titre\" />"); ?></label>
+		      </td>
+		    </tr>
+	    
+		    <tr style="background-color:#eeeeee;">
+		      <td>
+		        <?php print($msg->read($CURSUS_DESCRIPTION)); ?>
+		      </td>
+		    </tr>
+	    
+		    <tr>
+		      <td>
+		        <label for="texte"><?php print("<textarea id=\"texte\" name=\"texte\" rows=\"6\" cols=\"42\">$texte</textarea>"); ?></label>
+		      </td>
+		    </tr>
+
+		  <?php
+		  // nom de fichier non renseigné
+		  if ( $error == 3 )
+		  	print("
+			    <tr>
+			      <td class=\"align-justify\">
+					<span style=\"color:#FF0000;\">". $msg->read($CURSUS_ERRFILE) ."</span>
+			      </td>
+			    </tr>
+				");
+
+		  // extension de fichier non autorisée
+		  if ( $error == 4 )
+		  	print("
+			    <tr>
+			      <td class=\"align-justify\">
+					<span style=\"color:#FF0000;\">". $msg->read($CURSUS_BADFORMAT) ."</span>
+			      </td>
+			    </tr>
+				");
+
+		  // fichier déjà existant OU
+		  // fichier de taille trop importante
+		  if ( $error == 2 OR $error == 5 ) {
+		  	$errmsg = ( $error == 5 )
+		  		? $msg->read($CURSUS_ERREXIST)
+		  		: $msg->read($CURSUS_ERRSIZE, $FILESIZE) ;
+		  		
+		  	print("
+			    <tr>
+			      <td class=\"align-justify\">
+			        <span style=\"color:#FF0000;\">". $msg->read($CURSUS_WARNING, $errmsg) ."</span>
+			      </td>
+			    </tr>
+				");
+		    } 
+
+		  // fichier à transférer
+		  if ( !$IDitem )
+		  	print("
+			    <tr style=\"background-color:#eeeeee;\">
+			      <td>
+			        ". $msg->read($CURSUS_DOWNLOAD) ."
+			      </td>
+			    </tr>
+	    
+			    <tr>
+			      <td>
+			        <p class=\"hidden\"><input type=\"hidden\" name=\"MAX_FILE_SIZE\" value=\"$FILESIZE\" /></p>
+			        <input type=\"file\" name=\"UploadedFile\" />
+			      </td>
+			    </tr>
+				");
+		  ?>
+
+  		    <tr style="background-color:#eeeeee;">
+		      <td>
+		        <?php print($msg->read($CURSUS_SHARE)); ?>
+		      </td>
+		    </tr>
+
+		    <tr>
+		      <td>
+			<?php
+				// affichage des centres
+				$Query  = "select _IDcentre, _ident from config_centre ";
+				$Query .= "where _visible = 'O' AND _lang = '".$_SESSION["lang"]."' ";
+				$Query .= "order by _ident";
+
+				$return = mysql_query($Query, $mysql_link);
+				$row    = ( $return ) ? remove_magic_quotes(mysql_fetch_row($return)) : 0 ;
+
+				while ( $row ) {
+					print("<fieldset style=\"border:#cccccc solid 1px; margin-bottom:5px;\">");
+					print("<legend>$row[1]</legend>");
+
+					print("<table class=\"width100\">");
+
+					// affichage des classes
+					$Query  = "select _IDclass, _ident from campus_classe ";
+					$Query .= "where _visible = 'O' ";
+					$Query .= "AND _IDcentre = '$row[0]' ";
+					$Query .= "order by _ident";
+
+					$result = mysql_query($Query, $mysql_link);
+					$grp    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+					$i = 0;
+					while ( $grp ) {
+						if ( $i++ % 2 == 0 )
+							print("<tr>");
+
+						if ( $IDitem )
+							$check = ( in_array($grp[0], explode(" ", $group)) ) ? "checked=\"checked\"" : "" ;
+						else
+							$check = ( $IDsel )
+								? (( $IDsel == $grp[0] ) ? "checked=\"checked\"" : "")
+								: "checked=\"checked\"" ;
+
+						print("
+							<td style=\"width:50%;\">
+								<label for=\"group_$grp[0]\"><input type=\"checkbox\" id=\"group_$grp[0]\" name=\"group[]\" value=\"$grp[0]\" $check />
+								$grp[1]</label>
+							</td>
+							");
+
+						if ( $i % 2 == 0 )
+							print("</tr>");
+
+						$grp = remove_magic_quotes(mysql_fetch_row($result));
+						}
+
+					if ( $i % 2 )
+						print("
+							<td style=\"width:50%;\"></td>
+							</tr>
+							");
+							
+				print("</table>");
+				print("</fieldset>");
+				
+				$row = remove_magic_quotes(mysql_fetch_row($return));
+				}
+			 ?>
+		      </td>
+		    </tr>
+		  </table>
+
+		</td>
+		<td style="width:10%;"></td>
+	    </tr>
+	  </table>
+
+	<hr style="width:80%; text-align:center;" />
+
+         <table class="width100">
+           <tr>
+              <td style="width:10%;" class="valign-middle align-center">
+              	<?php print("<input type=\"image\" src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/valid.gif\" name=\"valid\" alt=\"".$msg->read($CURSUS_INPUTOK)."\" />"); ?>
+              </td>
+              <td class="valign-middle">
+              	<?php print($msg->read($CURSUS_CLICK2ADD, $IDitem)); ?>
+              </td>
+           </tr>
+           <tr>
+              <td class="valign-middle align-center">
+              	<?php print("<a href=\"".myurlencode("index.php?item=$item&IDsel=$IDsel&IDmat=$IDmat&IDdata=$IDdata&salon=".$_SESSION["CampusName"])."\">"); ?>
+              	<?php print("<img src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/cancel.gif\" title=\"\" alt=\"".$msg->read($CURSUS_INPUTCANCEL)."\" />"); ?></a>
+              </td>
+              <td class="valign-middle">
+              	<?php print($msg->read($CURSUS_GOBACK)); ?>
+              </td>
+           </tr>
+         </table>
+
+         </form>
+
+</div>

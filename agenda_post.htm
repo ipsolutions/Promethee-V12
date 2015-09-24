@@ -1,0 +1,627 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2003-2009 by Dominique Laporte(C-E-D@wanadoo.fr)
+   Copyright (c) 2006 by Nordine Zetoutou (nordine.zetoutou@educagri.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : agenda_post.htm
+ *		projet   : la page de saisie des annonces des agendas
+ *
+ *		version  : 1.0
+ *		auteur   : laporte
+ *		creation : 9/11/03
+ *		modif    : 17/07/06 - Nordine Zetoutou
+ * 	                 migration des balises HTML en XHTML 1.0 strict
+ */
+
+
+$IDgroup = ( @$_POST["IDgroup"] )		// identifiant du e-groupe
+	? (int) $_POST["IDgroup"]
+	: (int) @$_GET["IDgroup"] ;
+$IDdata  = ( @$_POST["IDdata"] )		// ID de l'agenda
+	? (int) $_POST["IDdata"]
+	: (int) @$_GET["IDdata"] ;
+$IDitem   = ( @$_POST["IDitem"] )		// ID de l'évènement
+	? (int) $_POST["IDitem"]
+	: (int) @$_GET["IDitem"] ;
+$weekly  = ( @$_POST["weekly"] )		// affichage hebdo / mensuel
+	? (int) $_POST["weekly"]
+	: (int) @$_GET["weekly"] ;
+
+$subject = addslashes(trim(@$_POST["subject"]));
+$texte   = addslashes(trim(@$_POST["texte"]));
+$PJdesc  = @$_POST["PJdesc"];
+$rb      = ( @$_POST["rb"] ) ? $_POST["rb"] : "B" ;
+$cb      = ( @$_POST["cb"] ) ? "O" : "N" ;
+$weeks   = (int) @$_POST["weeks"];
+
+$year    = ( @$_POST["year"] )
+	? (int) $_POST["year"]
+	: (int) @$_GET["year"] ;
+$month   = ( @$_POST["month"] )
+	? (int) $_POST["month"]
+	: (int) @$_GET["month"] ;
+$day     = ( @$_POST["day"] )
+	? (int) $_POST["day"]
+	: (int) @$_GET["day"] ;
+$hour    = (int) (strlen(@$_POST["hour"]) ? $_POST["hour"] : -1) ;
+$minute  = (int) (strlen(@$_POST["minute"]) ? $_POST["minute"] : -1) ;
+
+$y_end   = (int) @$_POST["y_end"];
+$m_end   = (int) @$_POST["m_end"];
+$d_end   = (int) @$_POST["d_end"];
+$h_end   = (int) @$_POST["h_end"];
+$min_end = (int) @$_POST["min_end"];
+
+$submit  = @$_POST["valid_x"];		// bouton de validation
+?>
+
+
+<script type="text/javascript" src="script/edit.js"></script>
+
+
+<?php
+	// lecture de la base de données des agendas
+	$query  = "select _titre, _IDmod, _PJ, _rss, _IDgrprd, _IDgrpwr from agenda ";
+	$query .= "where _IDdata = '$IDdata' ";
+	$query .= "AND _lang = '".$_SESSION["lang"]."' ";
+	$query .= "limit 1";
+
+	$result = mysql_query($query, $mysql_link);
+	$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+	// vérification des autorisations
+	verifySessionAccess($row[1], $row[5]);
+
+	// autorisation de la saisie des PJ et du flux rss
+	$is_pj  = $row[2];
+	$is_rss = $row[3];
+	$idgrp  = $row[4];
+?>
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($AGENDA_MYDIARY, $row[0])); ?><br/>
+		<?php print($msg->read($AGENDA_FORMEVENT)); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+
+<?php
+	// initialisation
+	$m_idx = $month;
+
+	if ( !$year )
+		$year   = date("Y");
+	else
+		$year   = ( $year < date("Y") ) ? date("Y") : $year ;
+
+	if ( !$m_idx  )
+		$m_idx  = (int) date("m");
+	else
+		$m_idx  = (int) (( $year == date("Y") AND $m_idx < date("m") ) ? date("m") : $m_idx );
+
+	if ( !$day )
+		$day    = date("d");
+	else
+		$day    = ( $year == date("Y") AND $m_idx == date("m") AND $day < date("d") ) ? date("d") : $day ;
+
+//	if ( $hour < 0 )
+//		$hour   = (int) date("H");
+//	else {
+		if ( @$_GET["time"] )
+			list($hour, $minute) = explode(":", $_GET["time"]);
+		else
+			$hour = (int) (( $year == date("Y") AND $m_idx == date("m") AND $day == date("d") AND $hour < date("H") ) ? date("H") : $hour );
+
+		// on cherche la plage horaire
+		$query  = "select _delta from agenda_user ";
+		$query .= "where _IDmod = '".$_SESSION["CnxID"]."' ";
+		$query .= "limit 1";
+
+		$result = mysql_query($query, $mysql_link);
+		$row    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+		switch ( $row[0] ) {
+			case 1 :	// 1/2 heure
+				$next_h = $hour;
+				$next_m = 30;
+				break;
+			case 2 :	// 1/4 heure
+				$next_h = $hour;
+				$next_m = 14;
+				break;
+			default :	// heure
+				$next_h = $hour + 1;
+				$next_m = 0;
+				break;
+			}
+//		}
+
+	if ( $minute < 0 )
+		$minute = roundup(date("i"));
+	else
+		$minute = ( $year == date("Y") AND $m_idx == date("m") AND $day == date("d") AND $hour == date("H") AND $minute < date("i") ) ? roundup(date("i")) : $minute ;
+
+	$error_subject = $error_texte = 0;
+
+	// l'utilisateur a posté son message
+	if ( $submit ) {
+		// test de la saisie
+		$error_subject = ( strlen($subject) ) ? 0 : 1 ;
+		$error_texte   = ( strlen($texte) )   ? 0 : 1 ;
+
+		if ( !$error_subject AND !$error_texte ) {
+			// date de création du message
+			$date    = date("Y-m-d H:i:s");
+
+			// dates début et fin dans l'agenda
+			$start   = "$year-$m_idx-$day $hour:$minute";
+			$end     = "$y_end-$m_end-$d_end $h_end:$min_end";
+
+			if ( $IDitem ) {
+				$Query  = "update agenda_items ";
+				$Query .= "set _titre = '$subject', _texte = '$texte', ";
+				$Query .= "_start = '$start', _end = '$end', _priority = '$rb', _update = '$date' ";
+				$Query .= "where _IDitem = '$IDitem' ";
+				$Query .= "limit 1";
+
+				$isok   = mysql_query($Query, $mysql_link);
+
+				// supression des plages de report
+				if ( $isok )
+					mysql_query("delete from agenda_items where _parent = '$IDitem'", $mysql_link);
+				}
+			else {
+				$Query  = "insert into agenda_items ";
+				$Query .= "values('', '$IDdata', '0', '".$_SESSION["CnxID"]."', '".$_SESSION["CnxIP"]."', '$date', '$date', '$date', '$rb', '$start', '$end', '$subject', '$texte', '0', 'N')";
+
+				$isok   = mysql_query($Query, $mysql_link);
+				}
+
+			if ( !$isok )
+				sql_error($mysql_link);
+			else {
+				$parent = ( $IDitem ) ? $IDitem : mysql_insert_id() ;
+
+				// mise à jour des reports (limité à 52 semaines)
+				for ($i = 0; $i < $weeks AND $i < 52; $i++ ) {
+					list($year, $m_idx, $day, $hour, $min) = preg_split("/[- :]/", $start);
+					$s_stamp = mktime($hour, $minute, 0, $m_idx, $day, $year) + (($i + 1) * 7 * 24 * 3600);
+
+					list($year, $m_idx, $day, $hour, $min) = preg_split("/[- :]/", $end);
+					$e_stamp = mktime($hour, $minute, 0, $m_idx, $day, $year) + (($i + 1) * 7 * 24 * 3600);
+
+					$Query   = "insert into agenda_items ";
+					$Query  .= "values('', '$IDdata', '$parent', '".$_SESSION["CnxID"]."', '".$_SESSION["CnxIP"]."', '$date', '$date', '$date', '$rb', '".date("Y-m-d H:i:s", $s_stamp)."', '".date("Y-m-d H:i:s", $e_stamp)."', '$subject', '$texte', '0', 'N')";
+
+					mysql_query($Query, $mysql_link);
+					}
+
+				// transfert d'une Pièce Jointe
+				$file = @$_FILES["UploadPJ"]["tmp_name"];
+				if ( $file AND authfile(@$_FILES["UploadPJ"]["name"]) ) {
+					// fichier destination
+					$ext  = extension(@$_FILES["UploadPJ"]["name"]);
+					$dest = "$DOWNLOAD/agenda/$parent.$ext";
+
+					// copie du fichier temporaire -> répertoire de stockage
+					if ( move_uploaded_file($file, $dest) ) {
+						mychmod($dest, $CHMOD);
+
+						$Query  = "INSERT INTO agenda_pj ";
+						$Query .= "values('', '$parent', '$PJdesc', '$ext', '".@$_FILES["UploadPJ"]["size"]."')";
+
+						if ( !mysql_query($Query, $mysql_link) )
+							sql_error($mysql_link);
+						}
+					}
+
+				// alimentation flux rss
+				if ( $is_rss == "O" ) {
+					$query  = "insert into rss_items ";
+					$query .= "values('', '0', '$subject', '', '$texte', '".addslashes(getUserName($_SESSION["CnxID"], false))."', '".addslashes($msg->read($AGENDA_MYDIARY))."', '".date("Y-m-d H:i:s", time())."', '".$_SESSION["lang"]."')";
+
+					mysql_query($query, $mysql_link);
+					}
+				}
+
+			// affichage dans le calendrier
+			if ( $cb == "O" AND !$IDitem ) {
+				$date   = "$year-$m_idx-$day 00:00:00";
+//				$date   = "$year-$m_end-$day 00:00:00";
+				$mytext = $msg->read($AGENDA_FROMTO, Array(date2longfmt("$start:00"), date2longfmt("$end:00"))) ."<br/>$texte"; 
+
+				$Query  = "insert into flash_fil ";
+				$Query .= "values('', '0', '0', '$date', '', '', '".$_SESSION["CnxID"]."', '".$_SESSION["CnxIP"]."', '$idgrp', '$subject', '$mytext', 'calendar.gif', '0', 'N', 'N')";
+
+				@mysql_query($Query, $mysql_link);
+
+				// mise à jour des reports (limité à 52 semaines)
+				for ($i = 0; $i < $weeks AND $i < 52; $i++ ) {
+					list($year, $m_idx, $day, $hour, $min) = preg_split("/[- :]/", $start);
+					$s_stamp = mktime($hour, $minute, 0, $m_idx, $day, $year) + (($i + 1) * 7 * 24 * 3600);
+
+					list($year, $m_idx, $day, $hour, $min) = preg_split("/[- :]/", $end);
+					$e_stamp = mktime($hour, $minute, 0, $m_idx, $day, $year) + (($i + 1) * 7 * 24 * 3600);
+
+					$mytext  = $msg->read($AGENDA_FROMTO, Array(date2longfmt(date("Y-m-d H:i:00", $s_stamp)), date2longfmt(date("Y-m-d H:i:00", $e_stamp)))) ."<br/>$texte"; 
+
+					$Query   = "insert into flash_fil ";
+					$Query  .= "values('', '0', '".date("Y-m-d 00:00:00", $s_stamp)."', '', '', '".$_SESSION["CnxID"]."', '".$_SESSION["CnxIP"]."', '$idgrp', '$subject', '$mytext', 'calendar.gif', '0', 'N', 'N')";
+
+					@mysql_query($Query, $mysql_link);
+					}
+				}
+
+			$month--;
+
+			print("
+				<p class=\"center\">
+				". $msg->read($AGENDA_RECORDING) ."<br/>
+				". $msg->read($AGENDA_THANX) ."<br/>
+				[<a href=\"".myurlencode("index.php?item=$item&IDgroup=$IDgroup&IDdata=$IDdata&year=$year&month=$month&day=$day&weekly=$weekly")."\">". $msg->read($AGENDA_BACK) ."</a>]
+				</p>
+				");
+			}
+		}
+	else
+		if ( $IDitem ) {
+			// lecture de l'annonce
+			$query   = "select _start, _end, _titre, _texte, _priority from agenda_items ";
+			$query  .= "where _IDitem = '$IDitem' AND _IDdata = '$IDdata' ";
+			$query  .= "limit 1";
+
+			$result  = mysql_query($query, $mysql_link);
+			$row     = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+			$year    = substr($row[0], 0, 4);
+			$m_idx   = substr($row[0], 5, 2);
+			$day     = substr($row[0], 8, 2);
+			$hour    = substr($row[0], 11, 2);
+			$minute  = substr($row[0], 14, 2);
+
+			$y_end   = substr($row[1], 0, 4);
+			$m_end   = substr($row[1], 5, 2);
+			$d_end   = substr($row[1], 8, 2);
+			$h_end   = substr($row[1], 11, 2);
+			$min_end = substr($row[1], 14, 2);
+
+			$subject = $row[2];
+			$texte   = $row[3];
+			$rb      = $row[4];
+
+			// lecture des annonces reportées
+			$query   = "select _IDitem from agenda_items ";
+			$query  .= "where _parent = '$IDitem' AND _IDdata = '$IDdata'";
+
+			mysql_query($query, $mysql_link);
+
+			$weeks   = (int) mysql_affected_rows($mysql_link);
+			}
+
+	// saisie du formulaire si
+	// - l'utilisateur n'a pas validé OU
+	// - il y a une erreur de saisie => on redemande de compléter le formulaire
+	if ( !strlen($submit) OR $error_subject OR $error_texte ) {
+
+		print("
+		<form id=\"formulaire\" action=\"index.php\" method=\"post\" enctype=\"multipart/form-data\">
+			<p class=\"hidden\"><input type=\"hidden\" name=\"item\"    value=\"$item\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"cmde\"    value=\"$cmde\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"IDgroup\" value=\"$IDgroup\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"IDdata\"  value=\"$IDdata\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"IDitem\"  value=\"$IDitem\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"year\"    value=\"$year\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"month\"   value=\"$month\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"day\"     value=\"$day\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"weekly\"  value=\"$weekly\" /></p>
+
+		  <table class=\"width100\">
+		  <tr>
+		    <td style=\"width:19%;\" class=\"valign-middle align-right\">". $msg->read($AGENDA_AUTHOR) ."</td>
+		    <td style=\"width:81%;\" class=\"valign-middle\">".$_SESSION["CnxName"]."</td>
+		  </tr>
+			");
+
+		//----- date de début -----
+	    	print("
+		    <tr>
+		      <td class=\"valign-middle align-right\">". $msg->read($AGENDA_FROM) ."</td>
+		      <td>
+		    	");
+
+		$mois = array_merge(Array(''), explode(",", $msg->read($AGENDA_MONTHFULL)));
+
+		// sélection de l'année
+		print("<label for=\"year\">");
+		print("<select id=\"year\" name=\"year\" onchange=\"document.forms.formulaire.submit()\">");
+		for ($i = date("Y"); $i < date("Y") + 3; $i++) {
+			$select = ( $year == $i ) ? "selected=\"selected\"" : "" ;
+			print("<option $select value=\"$i\">$i</option>");
+			}
+	    	print("</select>");
+	    	print("</label>");
+
+		// sélection du mois
+		print("<label for=\"month\">");
+		print("<select id=\"month\" name=\"month\" onchange=\"document.forms.formulaire.submit()\">");
+		$start = (int) ( $year == date("Y") ? date("m") : 1 );
+		for ($i = $start; $i <= 12; $i++) {
+			$select = ( $m_idx == $i ) ? "selected=\"selected\"" : "" ;
+			print("<option $select value=\"$i\">$mois[$i]</option>");
+			}
+	    	print("</select>");
+	    	print("</label>");
+
+		// sélection du jour
+		print("<label for=\"day\">");
+		print("<select id=\"day\" name=\"day\" onchange=\"document.forms.formulaire.submit()\">");
+		$start = (int) ( $year == date("Y") AND $m_idx == date("m") ) ? date("d") : 1 ;
+		for ($i = $start; $i <= getmaxdays($year, $m_idx); $i++) {
+			$select = ( $day == $i ) ? "selected=\"selected\"" : "" ;
+			print("<option $select value=\"$i\">$i</option>");
+			}
+	    	print("</select>");
+	    	print("</label>");
+
+		print(" - ");
+
+		// sélection de l'heure
+		print("<label for=\"hour\">");
+		print("<select id=\"hour\" name=\"hour\" onchange=\"document.forms.formulaire.submit()\">");
+		$start = (int) (( $year == date("Y") AND $m_idx == date("m") AND $day == date("d") ) ? date("H") : 0 );
+		for ($i = $start; $i < 24; $i++) {
+			$select = ( $hour == $i ) ? "selected=\"selected\"" : "" ;
+			print("<option $select value=\"$i\">$i</option>");
+			}
+	    	print("</select>");
+	    	print("</label>");
+
+		print(" ". $msg->read($AGENDA_HOUR) ." ");
+
+		//sélection des minutes
+		print("<label for=\"minute\">");
+		print("<select id=\"minute\" name=\"minute\" onchange=\"document.forms.formulaire.submit()\">");
+		$start = ( $year == date("Y") AND $m_idx == date("m") AND $day == date("d") AND $hour == date("H") ) ? roundup(date("i")) : 0 ;
+		for ($i = $start; $i < 60; $i += 5) {
+			$select = ( $minute == $i ) ? "selected=\"selected\"" : "" ;
+			print("<option $select value=\"$i\">$i</option>");
+			}
+	    	print("</select>");
+	    	print("</label>");
+
+	    	print("
+		      </td>
+		    </tr>
+		    	");
+
+		//----- date de fin -----
+	    	print("
+		    <tr>
+		      <td class=\"valign-middle align-right\">". $msg->read($AGENDA_TO) ."</td>
+		      <td>
+		    	");
+
+		// sélection de l'année
+		print("<label for=\"y_end\">");
+		print("<select id=\"y_end\" name=\"y_end\" onchange=\"document.forms.formulaire.submit()\">");
+		$y_end = ( $y_end < $year ) ? $year : $y_end ;
+		for ($i = $year; $i < date("Y") + 3; $i++) {
+			$select = ( $y_end == $i ) ? "selected=\"selected\"" : "" ;
+			print("<option $select value=\"$i\">$i</option>");
+			}
+	    	print("</select>");
+	    	print("</label>");
+
+		// sélection du mois
+		print("<label for=\"m_end\">");
+		print("<select id=\"m_end\" name=\"m_end\" onchange=\"document.forms.formulaire.submit()\">");
+		$m_end = ( $y_end == $year AND $m_end < $m_idx ) ? $m_idx : $m_end ;
+		$start = (int) ( $year == $y_end ? $m_idx : 1 );
+		for ($i = $start; $i <= 12; $i++) {
+			$select = ( $m_end == $i ) ? "selected=\"selected\"" : "" ;
+			print("<option $select value=\"$i\">$mois[$i]</option>");
+			}
+	    	print("</select>");
+	    	print("</label>");
+
+		// sélection du jour
+		print("<label for=\"d_end\">");
+		print("<select id=\"d_end\" name=\"d_end\" onchange=\"document.forms.formulaire.submit()\">");
+		$d_end = ( $y_end == $year AND $m_end == $m_idx AND $d_end < $day ) ? $day : $d_end ;
+		$start = (int) ( $y_end == $year AND $m_end == $m_idx ) ? $day : 1 ;
+		for ($i = $start; $i <= getmaxdays($y_end, $m_end); $i++) {
+			$select = ( $d_end == $i ) ? "selected=\"selected\"" : "" ;
+			print("<option $select value=\"$i\">$i</option>");
+			}
+	    	print("</select>");
+	    	print("</label>");
+
+		print(" - ");
+
+		// sélection de l'heure
+		print("<label for=\"h_end\">");
+		print("<select id=\"h_end\" name=\"h_end\" onchange=\"document.forms.formulaire.submit()\">");
+		$h_end = ( $y_end == $year AND $m_end == $m_idx AND $d_end == $day AND $h_end < $hour ) ? $hour : $h_end ;
+		$start = ( $y_end == $year AND $m_end == $m_idx AND $d_end == $day ) ? @$next_h : 0 ;
+		for ($i = $start; $i < 24; $i++) {
+			$select = ( $h_end == $i ) ? "selected=\"selected\"" : "" ;
+			print("<option $select value=\"$i\">$i</option>");
+			}
+	    	print("</select>");
+	    	print("</label>");
+
+		print(" ". $msg->read($AGENDA_HOUR) ." ");
+
+		// sélection des minutes
+		print("<label for=\"min_end\">");
+		print("<select id=\"min_end\" name=\"min_end\">");
+		$min_end = ( $y_end == $year AND $m_end == $m_idx AND $d_end == $day AND $h_end == $hour AND $min_end < $minute ) ? $minute : $min_end ;
+		$start   = ( $y_end == $year AND $m_end == $m_idx AND $d_end == $day AND $h_end == $hour ) ? @$next_m : 0 ;
+		for ($i = $start; $i < 60; $i += 5) {
+			$select = ( $min_end == $i ) ? "selected=\"selected\"" : "" ;
+			print("<option $select value=\"$i\">$i</option>");
+			}
+	    	print("</select>");
+	    	print("</label>");
+
+  	  	print("
+		      </td>
+		    </tr>
+		    	");
+
+		// saisie du sujet
+		if ( $error_subject )
+			print("    
+		    <tr>
+			<td style=\"width:100%;\" class=\"valign-middle align-left\" colspan=\"2\">
+				<span style=\"color:#FF0000;\">". $msg->read($AGENDA_ERRSUBJECT) ."</span>
+			</td>
+		    </tr>
+		    	");
+
+	    	print("
+		    <tr>
+		      <td class=\"valign-middle align-right\">". $msg->read($AGENDA_SUBJECT) ."</td>
+		      <td><label for=\"subject\"><input type=\"text\" id=\"subject\" name=\"subject\" size=\"45\" value=\"$subject\" /></label></td>
+		    </tr>
+		    	");
+
+		// saisie de l'évènement à poster
+		if ( $error_texte )
+			print("    
+			    <tr>
+			   	   <td style=\"width:100%;\" class=\"valign-middle align-left\" colspan=\"2\">
+			   		<span style=\"color:#FF0000;\">". $msg->read($AGENDA_ERREVENT) ."</span>
+			   	   </td>
+			    </tr>
+			    	");
+
+	    	print("
+		    <tr>
+		      <td class=\"align-right valign-top\">
+		        <strong>". $msg->read($AGENDA_MESSAGE) ." <a href=\"#\" onclick=\"popWin('".$_SESSION["ROOTDIR"]."/spip_typo.php?lang=".$_SESSION["lang"]."', '450', '350'); return false;\">
+		        <img src=\"".$_SESSION["ROOTDIR"]."/images/spip/aide.gif\" title=\"". $msg->read($AGENDA_HELP) ."\" alt=\"". $msg->read($AGENDA_HELP) ."\" /></a> :</strong>
+		      </td>
+		      <td><label for=\"texte\"><textarea id=\"texte\" name=\"texte\" rows=\"10\" cols=\"39\">$texte</textarea></label></td>
+		    </tr>
+		    	");
+
+		// affichage des smileys d'édition
+	    	print("
+		    <tr>
+		      <td class=\"valign-middle align-right\"><strong>Smileys :</strong></td>
+		      <td>
+		    	");
+
+		$res   = mysql_query("select _code, _ident from smileys where _type = 'T'", $mysql_link);
+		$smile = ( $res ) ? mysql_fetch_row($res) : 0 ;
+
+		while ( $smile ) {
+			print("
+				<img src=\"".$_SESSION["ROOTDIR"]."/images/smiley/forum/$smile[1].gif\" title=\" code: $smile[0] \" alt=\" code: $smile[0] \"
+				onclick=\"Javacript:ajoutsmile('$smile[0]')\" style=\"cursor: hand;\" />
+				");
+				
+			$smile = ( $res ) ? mysql_fetch_row($res) : 0 ;
+			}
+
+	    	print("
+		      </td>
+		    </tr>
+		    	");
+
+		// Pièce Jointe sur une annonce
+		if ( $is_pj == "O" AND !$IDitem )
+		    	print("
+			    <tr>
+			      <td class=\"align-right valign-top\">". $msg->read($AGENDA_ATTACHMENT) ."</td>
+			      <td>
+					<p class=\"hidden\"><input type=\"hidden\" name=\"MAX_FILE_SIZE\" value=\"$FILESIZE\" /></p>
+					<input type=\"file\" name=\"UploadPJ\" style=\"font-size:9px;\" />
+			      </td>
+			    </tr>
+
+			    <tr>
+			      <td class=\"align-right valign-top\">". $msg->read($AGENDA_DESCRIPTION) ."</td>
+			      <td>
+					<label for=\"PJdesc\"><input type=\"text\" id=\"PJdesc\" name=\"PJdesc\" size=\"45\" value=\"$PJdesc\" /></label>
+			      </td>
+			    </tr>
+			    ");
+
+		// priorité de l'annonce
+		$check1 = ( $rb == "B" ) ? "checked=\"checked\"" : "" ;
+		$check2 = ( $rb == "H" ) ? "checked=\"checked\"" : "" ;
+		$check3 = ( $cb == "O" ) ? "checked=\"checked\"" : "" ;
+
+	    	print("
+		    <tr>
+		      <td class=\"align-right valign-top\">". $msg->read($AGENDA_PRIORITY) ."</td>
+		      <td>
+				<label for=\"rb_B\"><input type=\"radio\" id=\"rb_B\" name=\"rb\" value=\"B\" $check1 /> ". $msg->read($AGENDA_LOW) ."</label>
+				<label for=\"rb_H\"><input type=\"radio\" id=\"rb_H\" name=\"rb\" value=\"H\" $check2 /> ". $msg->read($AGENDA_HIGH) ."</label>
+		      </td>
+		    </tr>
+
+		    <tr>
+		      <td class=\"align-right valign-top\">". $msg->read($AGENDA_OPTION) ."</td>
+		      <td>
+	      		<label for=\"cb\"><input type=\"checkbox\" id=\"cb\" name=\"cb\" value=\"O\" $check3 /></label> ". $msg->read($AGENDA_CALENDAR) ."
+		      </td>
+		    </tr>
+
+		    <tr>
+		      <td class=\"align-right valign-top\">". $msg->read($AGENDA_POSTPONE) ."</td>
+		      <td>
+				<label for=\"weeks\"><input type=\"text\" id=\"weeks\" name=\"weeks\" size=\"2\" value=\"$weeks\" /></label> ". $msg->read($AGENDA_NBWEEKS) ."
+		      </td>
+		    </tr>
+
+		  </table>
+			");
+
+	    	print("
+	         <table class=\"width100\">
+	           <tr>
+	              <td style=\"width:100%;\" class=\"align-center\" colspan=\"2\"><hr style=\"width:80%;\" /></td>
+	           </tr>
+	           <tr>
+	              <td style=\"width:19%;\" class=\"valign-middle align-right\">
+	              	<input type=\"image\" src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/valid.gif\" name=\"valid\" alt=\"".$msg->read($AGENDA_INPUTOK)."\" />
+	              </td>
+	              <td class= \"valign-middle\">". $msg->read($AGENDA_POST) ."</td>
+	           </tr>
+	           <tr>
+	              <td class=\"valign-middle align-right\">
+	              	<a href=\"".myurlencode("index.php?item=$item&IDgroup=$IDgroup&IDdata=$IDdata&year=$year&month=$month&day=$day&weekly=$weekly")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/cancel.gif\" title=\"\" alt=\"".$msg->read($AGENDA_INPUTCANCEL)."\" /></a>
+	              </td>
+	              <td class= \"valign-middle\">". $msg->read($AGENDA_BACK) ."</td>
+	           </tr>
+	         </table>
+
+		</form>
+			");
+		}
+?>
+
+</div>

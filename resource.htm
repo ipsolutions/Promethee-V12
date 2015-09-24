@@ -1,0 +1,1145 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2002-2008 by Dominique Laporte(C-E-D@wanadoo.fr)
+   Copyright (c) 2006 by Nordine Zetoutou (nordine.zetoutou@educagri.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : resource.htm
+ *		projet   : la page des ressources pédagogiques et administratives
+ *
+ *		version  : 1.3
+ *		auteur   : laporte
+ *		creation : 20/10/02
+ *		modif    : 7/11/02 - par D. Laporte
+ *                     remplacement des caractères accentués dans le path des fichiers
+ *                     fix du bug d'affichage des ressources
+ *                     fenêtre popup sur la description des ressources
+ *                     affichage du niveau de difficulté des exos sur les ressources pédagos
+ *
+ *                     29/07/03 - par D. Laporte
+ *                     suppression et modification d'une ressource
+ *
+ *                     29/10/03 - par D. Laporte
+ *                     mise en place d'un compteur sur les ressources
+ *
+ *                     17/03/04 - par D. Laporte
+ *                     accès direct à un espace ressource pour campus virtuel
+ *
+ *		           17/07/06 - Nordine Zetoutou
+ * 	                 migration des balises HTML en XHTML 1.0 strict
+ */
+
+
+$IDgroup  = ( @$_POST["IDgroup"] )			// identifiant du e-groupe
+	? (int) $_POST["IDgroup"]
+	: (int) @$_GET["IDgroup"] ;
+$IDres    = ( @$_POST["IDres"] )			// identifiant de la ressource
+	? (int) $_POST["IDres"]
+	: (int) @$_GET["IDres"] ;
+$IDmat    = ( @$_POST["IDmat"] )			// identifiant de la matière/formation
+	? (int) $_POST["IDmat"]
+	: (int) @$_GET["IDmat"] ;
+$IDcat    = ( strlen(@$_POST["IDcat"]) )		// identifiant de la catégorie
+	? (int) $_POST["IDcat"]
+	: (int) @$_GET["IDcat"] ;
+$IDcentre = ( strlen(@$_POST["IDcentre"]) )	// identifiant du centre
+	? (int) $_POST["IDcentre"]
+	: (int) (strlen(@$_GET["IDcentre"]) ? $_GET["IDcentre"] : $_SESSION["CnxCentre"]) ;
+$IDsel    = ( strlen(@$_POST["IDsel"]) )		// identifiant de la classe
+	? (int) $_POST["IDsel"]
+	: (int) (strlen(@$_GET["IDsel"]) ? $_GET["IDsel"] : $_SESSION["CnxClass"]) ;
+$IDroot   = ( @$_POST["IDroot"] )			// ID répertoire racine
+	? (int) $_POST["IDroot"]
+	: (int) @$_GET["IDroot"] ;
+$IDparent = ( @$_POST["IDparent"] )			// ID répertoire parent
+	? (int) $_POST["IDparent"]
+	: (int) @$_GET["IDparent"] ;
+$IDitem   = ( @$_POST["IDitem"] )			// ID du fichier
+	? (int) $_POST["IDitem"]
+	: (int) @$_GET["IDitem"] ;
+$sort     = ( @$_POST["sort"] )			// sélecteur de tri
+	? (int) $_POST["sort"]
+	: (int) @$_GET["sort"] ;
+$sort2    = ( @$_POST["sort2"] )			// utilisabilité
+	? (int) $_POST["sort2"]
+	: (int) @$_GET["sort2"] ;
+
+$skpage   = ( @$_GET["skpage"] )			// n° de la page affichée
+	? (int) $_GET["skpage"]
+	: 1 ;
+$skshow   = ( @$_GET["skshow"] )			// n° du flash info
+	? (int) $_GET["skshow"]
+	: 1 ;
+
+$submit = ( @$_POST["submit"] )			// bouton de validation
+	? $_POST["submit"]
+	: @$_GET["submit"] ;
+$submit = ( @$_POST["del_x"] )			// bouton de suppression
+	? "delete"
+	: $submit ;
+
+//---------------------------------------------------------------------------
+function recurseFolder($IDcentre, $IDcat)
+{
+	/*
+	 * fonction :	détermine si un utilisateur est abonné à un forum
+	 * in :		ID de la ressource
+	 * out :		
+	 */
+
+	require "globals.php";
+
+	$select = "";
+
+	$Query  = "select _IDroot, _titre from resource_root ";
+	$Query .= "where _IDcat = '$IDcat' AND _IDcentre = $IDcentre ";
+	$Query .= "order by _titre";
+
+	$result = mysql_query($Query, $mysql_link);
+	$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+	while ( $row ) {
+		$select .= "<option value=\"-$row[0]\">$row[1]</option>";
+
+		$row     = remove_magic_quotes(mysql_fetch_row($result));
+		}
+
+	return $select;
+}
+//---------------------------------------------------------------------------
+?>
+
+
+<?php
+	// initialisation
+	$_SESSION["CampusName"] = str_replace(":", "", @$_GET["salon"]);
+	$href = "item=$item&IDgroup=$IDgroup&IDres=$IDres&IDmat=$IDmat&IDcentre=$IDcentre&IDsel=$IDsel&sort=$sort";
+
+	// création du dossier s'il n'existe pas
+	if ( !$IDres AND $IDgroup ) {
+		$titre  = "e-groupe";
+
+		$result = mysql_query("select _IDres from resource where _titre = '$titre' AND _lang = '".$_SESSION["lang"]."' limit 1", $mysql_link);
+		$row    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+		$IDres  = (int) $row[0];
+
+		$Query  = "insert into resource_data ";
+		$Query .= "values('', '$IDres', '".$_SESSION["CnxID"]."', '255', '255', '".$_SESSION["eGroupName"]."', '', '3', '1', 'N', '1', 'O', 'O', '".$_SESSION["lang"]."')";
+
+		mysql_query($Query, $mysql_link);
+		}
+
+	// recherche du dossier
+	$query   = "select _titre, _texte from resource ";
+	$query  .= "where _IDres = '$IDres' AND _lang = '".$_SESSION["lang"]."' AND _visible = 'O' ";
+	$query  .= "limit 1";
+
+	$result  = mysql_query($query, $mysql_link);
+	$matiere = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+	// recherche de la catégorie de la ressource
+	if ( @$_SESSION["CampusName"] != "" AND $IDmat >= 0 ) {
+		$query  = "select _IDcat from resource_data ";
+		$query .= "where _nom = '".$_SESSION["CampusName"]."' AND _lang = '".$_SESSION["lang"]."' ";
+		$query .= "limit 1";
+
+		$result = mysql_query($query, $mysql_link);
+		$row    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+		// initialisation
+		$IDcat  = (int) $row[0];
+		}
+
+	// recherche de la catégorie de la ressource
+	if ( $IDcat ) {
+		$query  = "select _IDmod, _IDgrpwr, _IDgrprd, _nom, _lock, _texte ";
+		$query .= "from resource_data ";
+		$query .= "where _IDcat = '$IDcat' ";
+		$query .= "limit 1";
+
+		$result = mysql_query($query, $mysql_link);
+		$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+		// initialisation
+		$IDmod  = $row[0];
+		$grpwr  = $row[1];
+		$grprd  = $row[2];
+		}
+	else
+		$IDmod = $grpwr = $grprd = 0;
+
+	// seuls le big chef, le modérateur ou le propriétaire
+	// peuvent supprimer une ressource
+	switch ( $submit ) {
+		case "delete" :	// suppression ressource
+			$cb = @$_POST["rm"];
+
+			for ($i = 0; $i < count($cb); $i++)
+				if ( @$cb[$i] ) {
+					$query  = "select _file, _ver from resource_items ";
+					$query .= "where _IDitem = '$cb[$i]' ";
+					$query .= ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $IDmod )
+						? ""
+						: "AND _ID = '".$_SESSION["CnxID"]."' ";
+					$query .= "limit 1";
+
+					$result = mysql_query($query, $mysql_link);
+					$file   = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+					// fichier à effacer
+					if ( $file )
+						if ( mysql_query("delete from resource_items where _IDitem = '$cb[$i]' limit 1", $mysql_link) )
+							@unlink( stripaccent("$DOWNLOAD/ressources/$matiere[0]/$row[3]/v$file[1]-$file[0]") );
+					}
+			break;
+
+		case "lock" :	// on verrouille la ressource
+			$date   = date("Y-m-d H:i:s", time() + ($row[4] * 3600));
+
+			$query  = "update resource_items ";
+			$query .= "set _modify = '$date' " ;
+			$query .= "where _IDitem = '$IDitem' ";
+			$query .= "limit 1";
+
+			mysql_query($query, $mysql_link);
+			// on enchaine...
+
+		case "unlock" :	// on déverrouille la ressource
+			$query  = "update resource_items ";
+			$query .= ( $submit == "lock" ) ? "set _lock = '".$_SESSION["CnxID"]."' " : "set _lock = '-1' " ;
+			$query .= "where _IDitem = '$IDitem' ";
+			$query .= ( $submit == "unlock" ) ? "AND _lock = '".$_SESSION["CnxID"]."' " : "" ;
+			$query .= "limit 1";
+
+			mysql_query($query, $mysql_link);
+			break;
+
+		case "deldir" :	// on efface le répertoire
+			$query  = "delete from resource_root ";
+			$query .= "where _IDroot = '".@$_GET["mydir"]."' ";
+			$query .= ( $_SESSION["CnxAdm"] == 255 ) ? "" : "AND _IDmod = '".$_SESSION["CnxID"]."' ";
+			$query .= "limit 1";
+
+			mysql_query($query, $mysql_link);
+			break;
+
+		case "fermer" :	// fermer le dossier ou la ressource
+		case "ouvrir" :	// ouvrir le dossier ou la ressource
+			$Query  = ( $IDitem ) ? "update resource_items " : "update resource_root ";
+			$Query .= ( $submit == "fermer" ) ? "set _visible = 'N' " : "set _visible = 'O' ";
+			$Query .= ( $IDitem ) ? "where _IDitem = '$IDitem' " : "where _IDroot = '".@$_GET["IDdir"]."' ";
+			$Query .= ( $_SESSION["CnxAdm"] == 255 ) ? "" : "AND _ID = '".$_SESSION["CnxID"]."' ";
+			$Query .= "limit 1";
+
+			mysql_query($Query, $mysql_link);
+			break;
+
+		default :
+			$form_cmde = @$_POST["form_cmde"];
+			$newdir    = @$_POST["newdir"];
+
+			if ( $form_cmde ) {
+				$result = mysql_query("select _nom from resource_data where _IDcat = '$newdir' limit 1", $mysql_link);
+				$sql    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+				$files  = ( $form_cmde == $msg->read($RESOURCE_COPY) ) ? $_POST["cp"] : $_POST["mv"] ;
+
+				for ($i = 0; $i < count($files); $i++) {
+					$Query  = "select * from resource_items ";
+					$Query .= "where _IDitem = '$files[$i]' ";
+					$Query .= "limit 1";
+
+					$result = mysql_query($Query, $mysql_link);
+					$myrow  = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+					// on détermine le répertoire de stockage
+					$src    = stripaccent("$DOWNLOAD/ressources/$matiere[0]/$row[3]/v$myrow[16]-$myrow[12]");
+
+					$dst    = stripaccent("$DOWNLOAD/ressources/$matiere[0]/$sql[0]");
+					if ( !is_dir($dst) )
+						mymkdir($dst, $CHMOD);
+
+					// attention aux fichiers qui existent déjà
+					$ver    = ( file_exists("$dst/v$myrow[16]-".stripaccent($myrow[12])) ) ? "$myrow[16].$IDitem" : $myrow[16] ;
+					$dst    = $dst . stripaccent("/v$ver-$myrow[12]");
+
+					$IDroot = ( $newdir > 0 ) ? 0 : abs($newdir) ;
+					$IDcat  = ( $newdir > 0 ) ? $newdir : $myrow[10] ;
+
+					// copie de la ressource
+					if ( $form_cmde == $msg->read($RESOURCE_COPY) ) {
+						$Query  = "insert into resource_items ";
+						$Query .= "values('', '$IDroot', '$myrow[2]', '$myrow[3]', '$myrow[4]', '$myrow[5]', '$myrow[6]', '$myrow[7]', '$myrow[8]', '$myrow[9]', '$IDcat', '$myrow[11]', '$myrow[12]', '$myrow[13]', '$myrow[14]', '$myrow[15]', '$ver', '$myrow[17]', '$myrow[18]', '$myrow[19]', '$myrow[20]', '$myrow[21]', '$myrow[22]', '$myrow[23]')";
+
+						if ( mysql_query($Query, $mysql_link) ) 
+							copy($src, $dst);
+						}
+
+					// déplacement de la ressource
+					if ( $form_cmde == $msg->read($RESOURCE_MOVE) ) {
+						$Query  = "update resource_items ";
+						$Query .= "set _IDcat = '$IDcat', _ver = '$ver', _IDroot = '$IDroot' ";
+						$Query .= "where _IDitem = '$files[$i]' ";
+						$Query .= "limit 1";
+
+						if ( mysql_query($Query, $mysql_link) ) 
+							rename($src, $dst);
+						}
+					}	// endif files
+				}
+			else
+				// RAZ des visualisations
+				if ( @$_POST["clear_x"] )
+					if ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $IDmod ) {
+						$Query  = "select distinctrow resource_items._ver, resource_items._file ";
+						$Query .= "from resource_items, resource_data ";
+						$Query .= "where resource_data._IDcat = resource_items._IDcat " ;
+						$Query .= "AND resource_data._IDres = '$IDres' " ;
+						$Query .= "AND resource_items._IDgroup = '$IDgroup' " ;
+						$Query .= "AND resource_data._lang = '".$_SESSION["lang"]."' " ;
+						$Query .= ( $IDcat ) ? "AND resource_items._IDcat = '$IDcat' " : "" ;
+						$Query .= ( $IDroot ) ? "AND resource_items._IDroot = '$IDroot' " : "" ;
+						$Query .= ( $IDcentre ) ? "AND resource_items._IDcentre like '% $IDcentre %' " : "" ;
+						$Query .= ( strlen($_SESSION["CampusName"]) AND $IDmat > 0 ) ? "AND resource_data._nom = '".$_SESSION["CampusName"]."' " : "" ;
+
+						$ret    = mysql_query($Query, $mysql_link);
+						$sql    = ( $ret ) ? remove_magic_quotes(mysql_fetch_row($ret)) : 0 ;
+
+						while ( $sql ) {
+							$myfile = stripaccent("$DOWNLOAD/ressources/$matiere[0]/$row[3]/v$sql[0]-$sql[1]");
+
+							$return = mysql_query("select _IDdown from download_data where _file = '$myfile' limit 1", $mysql_link);
+							$myrow  = ( $return ) ? mysql_fetch_row($return) : 0 ;
+
+							// RAZ du compteur des téléchargements
+							if ( mysql_query("delete from download where _IDdown = '$myrow[0]' ", $mysql_link) )
+								mysql_query("delete from download_data where _IDdown = '$myrow[0]' ", $mysql_link);
+
+							$sql    = remove_magic_quotes(mysql_fetch_row($ret));
+							}
+						}
+
+			// suppression des ressources
+			$query  = "select resource_items._file, resource_items._ver, resource_items._IDitem, resource_data._nom ";
+			$query .= "from resource_items, resource_data ";
+			$query .= "where resource_items._valid != '0000-00-00 00:00:00' ";
+			$query .= "AND resource_items._valid < '". date("Y-m-d H:i:s") ."' ";
+			$query .= "AND resource_data._IDcat = resource_items._IDcat";
+
+			$result = mysql_query($query, $mysql_link);
+			$file   = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+			while ( $file ) {
+				if ( mysql_query("delete from resource_items where _IDitem = '$file[2]' limit 1", $mysql_link) )
+					@unlink( stripaccent("$DOWNLOAD/ressources/$matiere[0]/$file[3]/v$file[1]-$file[0]") );
+
+				$file = remove_magic_quotes(mysql_fetch_row($result));
+				}
+
+			// suppression des verroux
+			$query  = "update resource_items ";
+			$query .= "set _lock = '-1' ";
+			$query .= "where _lock > 0 AND _modify <= '".date("Y-m-d H:i:s")."' ";
+
+			mysql_query($query, $mysql_link);
+			break;
+		}
+?>
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($RESOURCE_DOCUMENTS, $matiere[0])); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+
+	<?php
+		// commentaire
+		if ( strlen($matiere[1]) )
+			print("<div style=\"background-color:#eeeeee;\">$matiere[1]</div>");
+	?>
+
+		<p style="margin-top:0px; margin-bottom:0px; text-align:justify;">
+		<?php
+			print($msg->read($RESOURCE_AVAILFORMAT));
+
+			// description des ressources
+			if ( @$row[5] != "" )
+				print("<br/>$row[5]");
+		?>
+		</p>
+
+		<form id="formulaire" action="index.php" method="post">
+		<?php
+			print("
+				<p class=\"hidden\"><input type=\"hidden\" name=\"item\"     value=\"$item\" /></p>
+				<p class=\"hidden\"><input type=\"hidden\" name=\"IDgroup\"  value=\"$IDgroup\" /></p>
+				<p class=\"hidden\"><input type=\"hidden\" name=\"IDres\"    value=\"$IDres\" /></p>
+				<p class=\"hidden\"><input type=\"hidden\" name=\"IDmat\"    value=\"$IDmat\" /></p>
+				<p class=\"hidden\"><input type=\"hidden\" name=\"IDcat\"    value=\"$IDcat\" /></p>
+				<p class=\"hidden\"><input type=\"hidden\" name=\"IDsel\"    value=\"$IDsel\" /></p>
+				<p class=\"hidden\"><input type=\"hidden\" name=\"IDroot\"   value=\"$IDroot\" /></p>
+				<p class=\"hidden\"><input type=\"hidden\" name=\"IDparent\" value=\"$IDparent\" /></p>");
+		?>
+
+		      <hr style="width:80%; text-align:center;" />
+
+			<table class="width100">
+			  <tr>
+			    <td style="width:50%;" class="align-right">
+					<?php print($msg->read($RESOURCE_CHOOSERES)); ?>
+			    </td>
+			    <td>
+					<label for="IDcat">
+				  	<select id="IDcat" name="IDcat" onchange="document.forms.formulaire.submit()">
+					<?php
+						print("<option value=\"0\">". $msg->read($RESOURCE_ALLRESOURCE) ."</option>");
+
+						// affichage des catégories
+						$query  = "select _IDcat, _nom, _IDmod, _IDgrprd, _IDgrpwr from resource_data ";
+						$query .= "where _IDres = '$IDres' AND _visible = 'O' ";
+						$query .= "AND _lang = '".$_SESSION["lang"]."' ";
+						$query .= ( $_SESSION["CnxAdm"] == 255 ) ? "" : "AND (_IDgrprd & ".pow(2, $_SESSION["CnxGrp"] - 1).") " ;
+						$query .= ( strlen($_SESSION["CampusName"]) AND $IDmat > 0 ) ? "AND _nom = '".$_SESSION["CampusName"]."' " : "" ;
+						$query .= "order by _nom";
+
+						$result = mysql_query($query, $mysql_link);
+						$cat    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+						$list   = Array();
+
+						while ( $cat ) {			
+							$list = $list +  Array($cat[0] => $cat[1]);
+
+							//-- détermination du nombre d'items
+							$Query  = "select distinctrow resource_items._IDitem ";
+							$Query .= "from resource_items, resource_data ";
+							$Query .= "where resource_items._IDcat = '$cat[0]' ";
+							$Query .= "AND resource_data._IDcat = resource_items._IDcat " ;
+							$Query .= "AND resource_data._IDres = '$IDres' " ;
+							$Query .= "AND resource_items._IDroot = '$IDroot' " ;
+							$Query .= "AND resource_items._IDgroup = '$IDgroup' " ;
+							$Query .= ( $IDcentre ) ? "AND resource_items._IDcentre like '% $IDcentre %' " : "" ;
+							$Query .= ( $_SESSION["CnxAdm"] == 255 ) ? "" : "AND (resource_data._IDgrprd & ". pow(2, $_SESSION["CnxGrp"] - 1) .") " ;
+							$Query .= ( $_SESSION["CnxAdm"] == 255 ) ? "" : "AND (resource_items._visible = 'O' OR resource_items._ID = '".$_SESSION["CnxID"]."') " ;
+							$Query .= ( strlen($_SESSION["CampusName"]) AND $IDmat > 0 ) ? "AND _nom = '".$_SESSION["CampusName"]."' " : "" ;
+
+							switch ( $IDres ) {
+								case 1 :	// ressource administrative
+									$Query .= ( $_SESSION["CnxAdm"] == 255 ) ? "" : "AND (resource_items._IDgrprd like '% ". $_SESSION["CnxGrp"] ." %') " ;
+									break;
+								case 2 :	// ressource pédagogique
+									$Query .= ( $IDsel ) ? "AND resource_items._IDgrprd like '% $IDsel %' " : "" ;
+									break;
+								default :
+									break;
+								}
+
+							$return = mysql_query($Query, $mysql_link);
+							$nbfile = ( $return ) ? mysql_numrows($return) : 0 ;
+
+							//-- détermination du nombre de dossiers
+							$Query  = "select _IDroot from resource_root ";
+							$Query .= "where _IDcentre = '$IDcentre' ";
+							$Query .= "AND _IDcat = '$cat[0]' AND _IDparent = '$IDroot'";
+
+							$return = mysql_query($Query, $mysql_link);
+							$nbdir  = ( $return ) ? mysql_numrows($return) : 0 ;
+
+							$select = ( $IDcat == $cat[0] OR $_SESSION["CampusName"] == $cat[1] ) ? "selected=\"selected\"" : "" ;
+
+			         			if ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $cat[2] OR ($cat[4] & pow(2, $_SESSION["CnxGrp"] - 1))
+								OR $nbdir OR $nbfile )
+								print("<option value=\"$cat[0]\" $select >$cat[1] ($nbdir/$nbfile)</option>");
+
+							$cat = remove_magic_quotes(mysql_fetch_row($result));
+							}	// endwhile catégorie
+					?>
+					</select> <img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/document.gif" title="" alt="" />
+					</label>
+			    </td>
+			  </tr>
+
+			  <tr>
+			    <td class="align-right">
+					<?php print($IDres == 2 ? $msg->read($RESOURCE_CHOOSECLASS) : $msg->read($RESOURCE_CHOOSEGROUP)); ?>
+			    </td>
+			    <td>
+					<label for="IDsel">
+				  	<select id="IDsel" name="IDsel" onchange="document.forms.formulaire.submit()">
+					<?php
+						if ( $IDres == 2 )
+							print("<option value=\"0\">". $msg->read($RESOURCE_ALLCLASS) ."</option>");
+						else
+							print("<option value=\"0\">". $msg->read($RESOURCE_ALLGROUP) ."</option>");
+
+						// affichage des groupes
+						if ( $IDres == 2 ) {
+							$query  = "select _IDclass, _ident from campus_classe ";
+							$query .= "where _visible = 'O' AND _IDcentre = '$IDcentre' ";
+							$query .= ( strlen($_SESSION["CampusName"]) AND $IDmat < 0 ) ? "AND _ident = '".$_SESSION["CampusName"]."' " : "" ;
+							$query .= "order by _ident";
+							}
+						else {
+							$query  = "select _IDgrp, _ident from user_group ";
+							$query .= "where _visible = 'O' AND _lang = '".$_SESSION["lang"]."' ";
+							$query .= "order by _IDgrp" ;
+							}
+
+						$result = mysql_query($query, $mysql_link);
+						$grp    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+						while ( $grp ) {
+							if ( $IDsel == $grp[0] OR $_SESSION["CampusName"] == $grp[1] )
+								print("<option selected=\"selected\" value=\"$grp[0]\">$grp[1]</option>");
+							else
+								print("<option value=\"$grp[0]\">$grp[1]</option>");
+
+							$grp = remove_magic_quotes(mysql_fetch_row($result));
+							}
+					?>
+					</select> <img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/group.gif" title="" alt="" />
+					</label>
+			    </td>
+			  </tr>
+			</table>
+
+			<hr style="width:80%; text-align:center;" />
+
+		<?php
+			// cartable numérique
+			if (  $_SESSION["CnxAdm"] == 255 OR ($grprd & pow(2, $_SESSION["CnxGrp"] - 1)) )
+				$submit = ( @$_POST["mybag_x"] AND count(@$_POST["bag"]) )
+					? "addbag"
+					: "" ;
+
+			// les commandes de manipulation de fichiers (prioritaires)
+			if (  $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $IDmod OR ($grpwr & pow(2, $_SESSION["CnxGrp"] - 1)) )
+				$submit = ( @$_POST["move_x"] AND count(@$_POST["mv"]) )
+					? "move"
+					: ((@$_POST["copy_x"] AND count(@$_POST["cp"]))
+						? "copy"
+						: $submit) ;
+
+			switch ( $submit ) {
+				case "addbag" :	// ajout au cartable numérique
+					$cb = @$_POST["bag"];
+					$id = @$_POST["path"];
+
+					for ($i = 0; $i < count($cb); $i++)
+						if ( @$cb[$i] ) {
+							$query  = "insert into resource_bag ";
+							$query .= "values('', '".$_SESSION["CnxID"]."', '".date("Y-m-d H:i:s")."', '".addslashes($cb[$i])."', '".addslashes($id[$i])."')";
+
+							mysql_query($query, $mysql_link);
+							}
+					break;
+
+				case "move" :	// déplacement ressource
+				case "copy" :	// copie ressource
+					$value   = ( $submit == "move" ) ? $msg->read($RESOURCE_MOVE) : $msg->read($RESOURCE_COPY) ;
+
+					list($a, $b) = explode("|", $msg->read($RESOURCE_FOLDERLIST));
+
+					$select  = "<label for=\"newdir\">" ;
+					$select .= "<select id=\"newdir\" name=\"newdir\">" ;
+
+					$select .= "<optgroup label=\"$a\">" ;
+					foreach ($list as $clef => $valeur)
+						$select .= ( $IDcat != $clef ) ? "<option value=\"$clef\">$valeur</option>" : "" ;
+					$select .= "</optgroup>" ;
+
+					if ( $IDcat ) {
+						$select .= "<optgroup label=\"$b\">" ;
+						$select .= "<option value=\"0\">". $msg->read($RESOURCE_ROOTDIR) ."</option>";
+						$select .= recurseFolder($IDcentre, $IDcat);
+						$select .= "</optgroup>" ;
+						}
+
+					$select .= "</select>";
+					$select .= "</label>";
+
+					print("
+						<p style=\"margin:0px;\">
+						<img src=\"".$_SESSION["ROOTDIR"]."/images/mvcopy.gif\" title=\"\" alt=\"\" />
+						". $msg->read($RESOURCE_SELECTION, $value) ." $select
+						<input type=\"submit\" value=\"$value\" name=\"form_cmde\" style=\"font-size: 9px;\" />
+						". $msg->read($RESOURCE_OR) ."
+						<input type=\"submit\" value=\"".$msg->read($RESOURCE_INPUTCANCEL)."\" name=\"form_cancel\" style=\"font-size: 9px;\" />
+						</p>
+						");
+					break;
+
+				default :
+					if ( $IDcat ) {
+				         	$add    = ( $_SESSION["CnxAdm"] == 255 OR ($grpwr & pow(2, $_SESSION["CnxGrp"] - 1)) )
+							? "<a href=\"".myurlencode("index.php?$href&cmde=newdir&IDparent=$IDroot&IDcat=$IDcat")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/folder-new.gif\" title=\"". $msg->read($RESOURCE_NEWDIR) ."\" alt=\"". $msg->read($RESOURCE_NEWDIR) ."\"/></a>"
+							: "" ;
+
+						$result = mysql_query("select _titre, _IDparent from resource_root where _IDroot = '$IDroot' limit 1", $mysql_link);
+						$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+						$mydir  = ( $row ) ? $row[0] :  $msg->read($RESOURCE_ROOTDIR) ;
+						$IDparent = $row[1];
+
+		         			if ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $IDmod OR ($grpwr & pow(2, $_SESSION["CnxGrp"] - 1)) )
+					    		print("
+						            <table class=\"width100\">
+						              <tr>
+						                <td style=\"width:10%;\" class=\"valign-middle\">
+									<a href=\"".myurlencode("index.php?$href&cmde=upload&IDroot=$IDroot&IDparent=$row[1]&IDcat=$IDcat")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/post.gif\" title=\"". $msg->read($RESOURCE_NEW) ."\" alt=\"". $msg->read($RESOURCE_NEW) ."\" /></a>
+							          </td>
+							          <td class= \"valign-middle\">". $msg->read($RESOURCE_ADDRESOURCE) ."</td>
+							          <td class=\"valign-middle align-right\">[$add $mydir ]</td>
+						              </tr>
+						            </table>
+						            ");
+						}
+					break;
+				}
+
+			// choix des centres
+			$select1  = "<label for=\"IDcentre\">";
+			$select1 .= "<select id=\"IDcentre\" name=\"IDcentre\" onchange=\"document.forms.formulaire.submit()\" style=\"font-size: 9px;\">";
+
+			$select1 .= "<option value=\"0\">".$msg->read($RESOURCE_ALLCENTER)."</option>";
+
+			$Query    = "select _IDcentre, _ident from config_centre ";
+			$Query   .= "where _visible = 'O' AND _lang = '".$_SESSION["lang"]."' ";
+			$Query   .= "order by _ident";
+
+			// affichage des centres
+			$result   = mysql_query($Query, $mysql_link);
+			$row      = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+			while ( $row ) {
+				$select   = ( $IDcentre == $row[0] ) ? "selected=\"selected\"" : "" ;
+
+				$select1 .= "<option value=\"$row[0]\" $select>$row[1]</option>";
+
+				$row      = remove_magic_quotes(mysql_fetch_row($result));
+				}
+
+			$select1 .= "</select>";
+			$select1 .= "</label>";
+
+			// tri des documents
+			$select2  = "<label for=\"sort\">";
+			$select2 .= "<select id=\"sort\" name=\"sort\" onchange=\"document.forms.formulaire.submit()\" style=\"font-size: 9px;\">";
+
+			$mylist  = explode(",", $msg->read($RESOURCE_SORT));
+
+			for ($i = 0; $i < count($mylist); $i++) {
+				$select   = ( $sort == $i ) ? "selected=\"selected\"" : "" ;
+
+				$select2 .= "<option value=\"$i\" $select>".$mylist[$i]."</option>";
+				}
+
+			$select2 .= "</select>";
+			$select2 .= "</label>";
+
+			// utilisabilité des documents
+			$select3  = "<label for=\"sort2\">";
+			$select3 .= "<select id=\"sort2\" name=\"sort2\" onchange=\"document.forms.formulaire.submit()\" style=\"font-size: 9px;\">";
+			$select3 .= "<option value=\"0\">".$msg->read($RESOURCE_FORMAT)."</option>";
+
+			$mylist  = explode(",", $msg->read($RESOURCE_ACCESSIBILITY));
+
+			for ($i = 0; $i < count($mylist); $i++) {
+				$select   = ( $sort2 == pow(2, $i) ) ? "selected=\"selected\"" : "" ;
+
+				$select3 .= "<option value=\"".pow(2, $i)."\" $select>".$mylist[$i]."</option>";
+				}
+
+			$select3 .= "</select>";
+			$select3 .= "</label>";
+
+			// cartable électronique
+			$mybag    = ( $_SESSION["CnxAdm"] == 255 OR ($grprd & pow(2, $_SESSION["CnxGrp"] - 1)) )
+				? "<input type=\"image\" src=\"".$_SESSION["ROOTDIR"]."/images/bag.png\" name=\"mybag\" title=\"". $msg->read($RESOURCE_ADDSCHOOLBAG) ."\" alt=\"". $msg->read($RESOURCE_ADDSCHOOLBAG) ."\" />"
+				: "<img src=\"".$_SESSION["ROOTDIR"]."/images/bag.png\" title=\"\" alt=\"*\" />" ;
+
+			// suppression des ressources
+			$delete   = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $IDmod OR ($grpwr & pow(2, $_SESSION["CnxGrp"] - 1)) )
+				? "<input type=\"image\" src=\"".$_SESSION["ROOTDIR"]."/images/corb.gif\" name=\"del\" title=\"". $msg->read($RESOURCE_DELFILE) ."\" alt=\"". $msg->read($RESOURCE_DELFILE) ."\" />"
+				: "<img src=\"".$_SESSION["ROOTDIR"]."/images/corb.gif\" title=\"\" alt=\"*\" />" ;
+
+			// déplacement des ressources
+			$move     = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $IDmod OR ($grpwr & pow(2, $_SESSION["CnxGrp"] - 1)) )
+				? "<input type=\"image\" src=\"".$_SESSION["ROOTDIR"]."/images/mv.gif\" name=\"move\" title=\"". $msg->read($RESOURCE_MVFILE) ."\" alt=\"". $msg->read($RESOURCE_MVFILE) ."\" />"
+				: "<img src=\"".$_SESSION["ROOTDIR"]."/images/mv.gif\" title=\"\" alt=\"*\" />" ;
+
+			// copie des ressources
+			$copy     = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $IDmod OR ($grpwr & pow(2, $_SESSION["CnxGrp"] - 1)) )
+				? "<input type=\"image\" src=\"".$_SESSION["ROOTDIR"]."/images/add.gif\" name=\"copy\" title=\"". $msg->read($RESOURCE_CPFILE) ."\" alt=\"". $msg->read($RESOURCE_CPFILE) ."\" />"
+				: "<img src=\"".$_SESSION["ROOTDIR"]."/images/add.gif\" title=\"\" alt=\"*\" />" ;
+
+			// raz des fichiers vus
+			$reset  = ( ($_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $IDmod) AND $IDcat )
+				? "<input type=\"image\" src=\"".$_SESSION["ROOTDIR"]."/images/corb.gif\" name=\"clear\" title=\"". $msg->read($RESOURCE_RESET) ."\" alt=\"". $msg->read($RESOURCE_RESET) ."\" />"
+				: "" ;
+
+			// entête tableau
+			print("
+		            <table class=\"width100\">
+		              <tr style=\"background-color:#c0c0c0;\">
+		                <td style=\"width:1%;\" class=\"align-center\"><span style=\"cursor: pointer;\" onclick=\"$('list')._display.toggle(); return false;\"><img src=\"".$_SESSION["ROOTDIR"]."/images/visible.gif\" title=\"\" alt=\"\" /></span></td>
+		                <td style=\"width:53%;\">". $msg->read($RESOURCE_DOCTITLE) ." $select1|$select2</td>
+		                <td style=\"width:1%;\" class=\"align-center\">$mybag</td>
+		                <td style=\"width:1%;\" class=\"align-center\">$delete</td>
+		                <td style=\"width:1%;\" class=\"align-center\">$move</td>
+		                <td style=\"width:1%;\" class=\"align-center\">$copy</td>
+		                <td style=\"width:12%;\" class=\"align-center\">". $msg->read($RESOURCE_DATE) ."</td>
+		                <td style=\"width:10%;\" class=\"align-center\">". $msg->read($RESOURCE_HIT) ." $reset</td>
+		                <td style=\"width:10%;\" class=\"align-center\">". $msg->read($RESOURCE_SIZE) ."</td>
+		                <td style=\"width:10%;\" class=\"align-center\">$select3</td>
+		              </tr>
+		              ");
+
+			// pour les dossiers privés (gestion par ACL)
+			//$acl    = new user_acl("resource_root");
+
+			//---- lecture des répertoires ----
+			$Query  = "select _IDroot, _titre, _IDmod, _IDgrprd, _visible, _IDparent, _ID, _date, _private from resource_root ";
+			$Query .= "where _IDcentre = '$IDcentre' " ;
+			$Query .= "AND _IDparent = '$IDroot' AND _IDgroup = '$IDgroup' " ;
+			$Query .= "AND _IDcat = '$IDcat' " ;
+			$Query .= "order by _titre";
+
+			$result = ( $skpage == 1 ) ? mysql_query($Query, $mysql_link) : 0 ;
+			$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+			// accès au répertoire parent
+	         	if ( $IDroot )
+				print("
+					<tr>
+	   			        <td><img src=\"".$_SESSION["ROOTDIR"]."/images/folder-up.gif\" title=\"\" alt=\"..\" /></td>
+      		    		  <td colspan=\"8\">
+						<a href=\"".myurlencode("index.php?$href&IDroot=$IDparent&IDcat=$IDcat")."\">". $msg->read($RESOURCE_PARENTDIR) ."</a>
+      		    		  </td>
+					</tr>
+     					");
+
+			$i = 0;
+			while ( $row ) {
+				// accès protégé en lecture
+				if ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $row[2] OR $_SESSION["CnxID"] == $row[6] OR ($row[3] & pow(2, $_SESSION["CnxGrp"] - 1) AND $row[4] == "O") ) {
+					$bgcol  = ( $i++ % 2 ) ? "item" : "menu" ;
+
+					// détermination du nombre de répertoires
+					$return = mysql_query("select _IDparent from resource_root where _IDcentre = '$IDcentre' AND _IDcat = '$IDcat' AND _IDparent = '$row[0]'", $mysql_link);
+					$myrow  = ( $return ) ? mysql_fetch_row($return) : 0 ;
+					$nbr    = ( $return ) ? mysql_affected_rows($mysql_link) : 0 ;
+
+					$msg->isPlural = (bool) ( $nbr > 1 );
+					$text   = "(". $msg->read($RESOURCE_NBDIR, strval($nbr)) .", ";
+
+					// détermination du nombre de documents
+					$return = mysql_query("select _IDitem from resource_items where _IDcat = '$IDcat' AND _IDroot = '$row[0]'", $mysql_link);
+					$nbd    = ( $return ) ? mysql_affected_rows($mysql_link) : 0 ;
+
+					$msg->isPlural = (bool) ( $nbd > 1 );
+					$text  .= $msg->read($RESOURCE_NBFILE, strval($nbd)) .")";
+
+					// accés des répertoires
+					$file   = ( $row[4] == "O" ) ? "folder-closed.gif" : "folder-lock.jpg" ;
+					$action = ( $row[4] == "O" ) ? $msg->read($RESOURCE_CLOSING)   : $msg->read($RESOURCE_OPENING) ;
+					$access = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $row[2] )
+						? "<a href=\"".myurlencode("index.php?$href&IDroot=$IDroot&IDparent=$myrow[0]&IDcat=$IDcat&IDdir=$row[0]&submit=$action")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/$file\" title=\"$action\" alt=\"$action\" /></a>"
+						: "<img src=\"".$_SESSION["ROOTDIR"]."/images/$file\" title=\"\" alt=\"\" />" ;
+
+					if ( $row[8] == "O" )
+						$link   = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $row[2] )
+							? "<a href=\"". myurlencode("index.php?$href&IDroot=$row[0]&IDparent=$myrow[0]&IDcat=$IDcat")."\">$row[1]</a>"
+							: $row[1] ;
+					else
+						$link   = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $row[2] OR $_SESSION["CnxID"] == $row[6] OR ($row[3] & pow(2, $_SESSION["CnxGrp"] - 1) AND $row[4] == "O") )
+							? "<a href=\"". myurlencode("index.php?$href&IDroot=$row[0]&IDparent=$myrow[0]&IDcat=$IDcat")."\">$row[1]</a>"
+							: $row[1] ;
+
+					if ( $row[8] == "O" )
+						$priv   = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $row[2] )
+							? "<a href=\"".myurlencode("index.php?item=1&cmde=acl&ident=resource_root&IDident=$row[0]")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/invisible.gif\" title=\"". $msg->read($RESOURCE_PRIVATE) ."\" alt=\"". $msg->read($RESOURCE_PRIVATE) ."\" /></a>"
+							: "<img src=\"".$_SESSION["ROOTDIR"]."/images/invisible.gif\" title=\"". $msg->read($RESOURCE_PRIVATE) ."\" alt=\"". $msg->read($RESOURCE_PRIVATE) ."\" />" ;
+					else
+						$priv = "";
+
+					// suppression du répertoire
+					$req   = $msg->read($RESOURCE_DELDIR, str_replace('"', '&quot;', $row[1]));
+					$del   = ( !$nbr AND !$nbd AND ($_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $row[2]) )
+						? "<a href=\"".myurlencode("index.php?$href&IDroot=$IDroot&IDparent=$myrow[0]&IDcat=$IDcat&mydir=$row[0]&submit=deldir")."\" onclick=\"return confirmLink(this, '$req');\"><img src=\"".$_SESSION["ROOTDIR"]."/images/corb.gif\" title=\"$req\" alt=\"$req\" /></a>"
+						: "" ;
+
+					// modification du répertoire
+					$maj   = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $row[2] )
+						? "<a href=\"".myurlencode("index.php?$href&IDroot=$row[0]&IDparent=$IDroot&IDcat=$IDcat&cmde=newdir")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/stats/post.gif\" title=\"". $msg->read($RESOURCE_UPDATING) ."\" alt=\"". $msg->read($RESOURCE_UPDATING) ."\" /></a>"
+						: "" ;
+
+					print("
+						<tr class=\"$bgcol\">
+   		   			        <td style=\"width:1%;\" class=\"align-center\">$access</td>
+	      		    		  <td style=\"width:49%;\">
+      		    		  		$link $priv $del $maj<br/>
+	      		    		  	<span class=\"x-small\">$text</span>
+	      		    		  </td>
+			       	        <td></td>
+			       	        <td></td>
+			       	        <td></td>
+			       	        <td></td>
+			       	        <td class=\"x-small align-center\">". str_replace(" ", "<br/>", $row[7]) ."</td>
+			       	        <td></td>
+			       	        <td></td>
+			       	        <td></td>
+						</tr>
+       					");
+					}
+
+				$row = remove_magic_quotes(mysql_fetch_row($result));
+				}
+
+			//---- lecture des documents ----
+			$Query  = "select distinctrow _title, _file, _date, _size, resource_items._texte, _ver, _level, _ID, _IP, _IDitem, _IDres, resource_items._IDcat, _IDlicense, resource_items._visible, _valid, _comment, resource_items._lock, _modify, _usability, _note ";
+			$Query .= "from resource_items, resource_data ";
+			$Query .= "where resource_data._IDcat = resource_items._IDcat " ;
+			$Query .= "AND resource_data._IDres = '$IDres' " ;
+			$Query .= "AND resource_items._IDgroup = '$IDgroup' " ;
+			$Query .= "AND resource_data._lang = '".$_SESSION["lang"]."' " ;
+			$Query .= ( $IDcat ) ? "AND resource_items._IDcat = '$IDcat' " : "" ;
+			$Query .= ( $IDcat ) ? "AND resource_items._IDroot = '$IDroot' " : "" ;
+			$Query .= ( $sort2 ) ? "AND (resource_items._usability & '$sort2') " : "" ;
+			$Query .= ( $IDcentre ) ? "AND resource_items._IDcentre like '% $IDcentre %' " : "" ;
+			$Query .= ( $_SESSION["CnxAdm"] == 255 ) ? "" : "AND (resource_data._IDgrprd & ". pow(2, $_SESSION["CnxGrp"] - 1) .") " ;
+			$Query .= ( $_SESSION["CnxAdm"] == 255 ) ? "" : "AND (resource_items._visible = 'O' OR resource_items._ID = '".$_SESSION["CnxID"]."') " ;
+			$Query .= ( strlen($_SESSION["CampusName"]) AND $IDmat > 0 ) ? "AND resource_data._nom = '".$_SESSION["CampusName"]."' " : "" ;
+
+			switch ( $IDres ) {
+				case 1 :	// ressource administrative
+					$Query .= ( $_SESSION["CnxAdm"] == 255 ) ? "" : "AND (resource_items._IDgrprd like '% ". $_SESSION["CnxGrp"] ." %') " ;
+					break;
+				case 2 :	// ressource pédagogique
+					$Query .= ( $IDsel ) ? "AND resource_items._IDgrprd like '% $IDsel %' " : "" ;
+					break;
+				default :
+					break;
+				}
+
+			switch ( $sort ) {
+				case 1 :
+					$Query .= "order by _title asc";
+					break;
+				case 2 :
+					$Query .= "order by _size desc";
+					break;
+				default :
+					$Query .= "order by _IDitem desc";
+					break;
+				}
+
+			// détermination du nombre de pages
+			$result = mysql_query($Query, $mysql_link);
+			$nbelem = ( $result ) ? mysql_affected_rows($mysql_link) : 0 ;
+
+			$page   = $nbelem;
+			$show   = 1;
+
+			if ( $nbelem ) {
+				$page  = ( $page % $MAXPAGE )
+					? (int) ($page / $MAXPAGE) + 1
+					: (int) ($page / $MAXPAGE) ;
+
+				$show  = ( $page % $MAXSHOW )
+					? (int) ($page / $MAXSHOW) + 1
+					: (int) ($page / $MAXSHOW) ;
+
+				// initialisation
+				$i     = 1;
+				$first = 1 + (($skpage - 1) * $MAXPAGE);
+
+				// se positionne sur la page ad hoc
+				mysql_data_seek($result, $first - 1);
+				$row   = remove_magic_quotes(mysql_fetch_row($result));
+
+				while ( $row AND $i <= $MAXPAGE ) {
+					$bgcol = ( $i++ % 2 ) ? "item" : "menu" ;
+
+					// pour indiquer les nouvelles ressources (moins de 7 jours)
+					$new   = ( $row[2] > date("Y-m-d H:i:s", (time() - 7 * $TIMEFORUM)) )
+						? " <img src=\"".$_SESSION["ROOTDIR"]."/images/new.gif\" title=\"\" alt=\"\" />"
+						: "" ;
+
+					// extraction de l'icone
+					$ext   = extension($row[1]);
+
+					// lecture de l'icone associée à l'extension
+					if ( mysql_query("select _ext from config_mime where _ext = '$ext'", $mysql_link) )
+						if ( !mysql_affected_rows($mysql_link) )
+							$ext = "-";
+
+					$res = mysql_query("select _nom, _lang from resource_data where _IDcat = '$row[11]'", $mysql_link);
+					$cat = ( $res ) ? remove_magic_quotes(mysql_fetch_row($res)) : 0 ;
+
+		             	// lien des ressources
+					$target = "onclick=\"window.open(this.href, '_blank'); return false;\"";
+					$path   = stripaccent("$DOWNLOAD/ressources/$matiere[0]/$cat[0]/v$row[5]-$row[1]");
+
+					// on filtre les caractères accentués
+					$lien   = myurlencode("index.php?file=$path");
+
+					// texte descriptif de la ressource
+					$texte  = ( strlen($row[4]) > 35 )
+						? substr($row[4], 0, 35) . "..."
+						: $row[4] ;
+					$texte  = str_replace("<br/>", " ", $texte);
+
+					// lecture de l'auteur de la ressource
+					$desc  = $msg->read($RESOURCE_AUTHOR) ." ". getUserName($row[7], false);
+
+					// lecture de l'adresse IP
+					$desc .= " " . _getHostName($row[8], false) . "<br/>" ;
+
+					// description du menu popup sur le lien
+					$desc .= $msg->read($RESOURCE_VER) ." $row[5]<br/>";
+					$desc .= $msg->read($RESOURCE_RESIDENT) ." $cat[0]<br/>";
+
+					// lecture de la license
+					$res   = mysql_query("select _texte from resource_license where _IDlicense = '$row[12]' AND _lang = '".$_SESSION["lang"]."' limit 1", $mysql_link);
+					$lic   = ( $res ) ? remove_magic_quotes(mysql_fetch_row($res)) : 0 ;
+
+					$desc .= ( $IDres == 2 )
+						? $msg->read($RESOURCE_LICENSE) ." $lic[0]"
+						: "" ;
+					$desc  = str_replace("'", "\'", $desc);
+
+					// priorité (niveau de difficulté des exos ou niveau d'importance)
+					$title = ( $row[6] < 0 )
+						? array_merge(Array('&nbsp;'), explode(",", $msg->read($RESOURCE_LEVELTYPE)))
+						: array_merge(Array('&nbsp;'), explode(",", $msg->read($RESOURCE_PRIORITYLEVEL))) ;
+					$alt   = ( $row[6] < 0 )
+						? $msg->read($RESOURCE_EXERCICE)
+						: $msg->read($RESOURCE_IMPORTANCELEVEL) ;
+					$idx   = abs($row[6]);
+
+					$image = ( $row[6] < 0 ) ? "roue".abs($row[6]).".jpg" : "etoile$row[6].gif" ;
+					$level = ( $row[6] )
+						? "<img src=\"".$_SESSION["ROOTDIR"]."/images/stats/$image\" title=\"$alt ($title[$idx])\" alt=\"$alt ($title[$idx])\" />"
+						: "" ;
+
+					// document collaboratif
+					$req   = ( $row[16] < 0 )
+						? $msg->read($RESOURCE_LOCK)
+						: $msg->read($RESOURCE_LOCKBY, Array(getUserName($row[16]), date2longfmt($row[17]))) ;
+					$lock  = ( $row[16] )
+						? ($row[16] < 0
+							? "<a href=\"".myurlencode("index.php?$href&IDroot=$IDroot&IDcat=$row[11]&IDitem=$row[9]&submit=lock")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/unlocked.gif\" title=\"$req\" alt=\"$req\" /></a>"
+							: ($row[16] == $_SESSION["CnxID"] 
+								? "<a href=\"".myurlencode("index.php?$href&IDroot=$IDroot&IDcat=$row[11]&IDitem=$row[9]&submit=unlock")."\" ><img src=\"".$_SESSION["ROOTDIR"]."/images/locked.gif\" title=\"$req\" alt=\"$req\" /></a>"
+								: "<img src=\"".$_SESSION["ROOTDIR"]."/images/locked.gif\" title=\"$req\" alt=\"$req\" />"))
+						: "" ;
+
+					// note associée
+					$over = ( strlen($row[19]) ) 
+						? "<span>". str_replace(Array("\r", "\n"), Array("", "<br/>"), $row[19]) ."</span>"
+						: "";
+
+					$click = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $row[7] )
+						? "onclick=\"popWin('".myurlencode($_SESSION["ROOTDIR"]."/resource_note.php?sid=".$_SESSION["sessID"]."&item=$item&IDitem=$row[9]&IDgroup=$IDgroup&IDres=$IDres&IDmat=$IDmat&IDcat=$IDcat&IDcentre=$IDcentre&IDsel=$IDsel&IDroot=$IDroot&sort=$sort&lang=".$_SESSION["lang"])."', '450', '305'); return false;\""
+						: "" ;
+
+					$note  = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $row[7] OR $over )
+						? "<a href=\"#\" class=\"overlib\" $click><img src=\"".$_SESSION["ROOTDIR"]."/images/document.gif\" title=\"\" alt=\"\" />$over</a>"
+						: "" ;
+
+					// modification des ressources
+					$maj   = ( $row[16] )
+						? ($row[16] == $_SESSION["CnxID"]
+							? "<a href=\"".myurlencode("index.php?$href&cmde=upload&IDroot=$IDroot&IDcat=$row[11]&IDitem=$row[9]&submit=update")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/stats/post.gif\" title=\"". $msg->read($RESOURCE_RESMODIFY) ."\" alt=\"". $msg->read($RESOURCE_RESMODIFY) ."\"/></a>"
+							: "")
+						: (($_SESSION["CnxAdm"] == 255 OR $row[7] == $_SESSION["CnxID"])
+							? "<a href=\"".myurlencode("index.php?$href&cmde=upload&IDroot=$IDroot&IDcat=$row[11]&IDitem=$row[9]&submit=update")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/stats/post.gif\" title=\"". $msg->read($RESOURCE_RESMODIFY) ."\" alt=\"". $msg->read($RESOURCE_RESMODIFY) ."\" /></a>"
+							: "");
+
+					// cartable électronique
+					$res   = mysql_query("select _IDitem from resource_bag where _file = '".addslashes($path)."' AND _ID = '".$_SESSION["CnxID"]."' limit 1", $mysql_link);
+					$myrow = ( $res ) ? mysql_fetch_row($res) : 0 ;
+
+					$isbag = ( $_SESSION["CnxAdm"] == 255 OR ($grprd & pow(2, $_SESSION["CnxGrp"] - 1)) )
+						? ($myrow ? "checked=\"checked\"" : "")
+						: "disabled=\"disabled\"" ;
+
+					// suppression des ressources
+					$isrm  = ( $_SESSION["CnxAdm"] == 255 OR $row[7] == $_SESSION["CnxID"] )
+						? ""
+						: "disabled=\"disabled\"" ;
+
+					// déplacement des ressources
+					$ismv  = ( $_SESSION["CnxAdm"] == 255 OR $row[7] == $_SESSION["CnxID"] )
+						? ((@$_POST["move_x"] AND @in_array($row[9], @$_POST["mv"])) ? "checked=\"checked\"" : "")
+						: "disabled=\"disabled\"" ;
+
+					// copie des ressources
+					$iscp  = ( $_SESSION["CnxAdm"] == 255 OR $row[7] == $_SESSION["CnxID"] )
+						? ((@$_POST["copy_x"] AND @in_array($row[9], @$_POST["cp"])) ? "checked=\"checked\"" : "")
+						: "disabled=\"disabled\"" ;
+
+					// lecture du compteur des téléchargements
+					$res   = mysql_query("select _IDdown, _count from download_data where _file = '$path'", $mysql_link);
+					$down  = ( $res ) ? mysql_fetch_row($res) : 0 ;
+
+					$link  = ( $down[0] )
+						? "<a href=\"#\" onclick=\"popWin('".$_SESSION["ROOTDIR"]."/user_list.php?sid=".$_SESSION["sessID"]."&amp;IDdown=$down[0]&amp;cmde=dwload&amp;lang=".$_SESSION["lang"]."', '450', '200'); return false;\">$down[1]</a>"
+						: "0" ;
+
+					// lecture du compteur des commentaires
+					$res   = mysql_query("select _IDmsg from resource_post where _IDitem = '$row[9]' limit 1", $mysql_link);
+					$count = ( $res ) ? mysql_affected_rows($mysql_link) : 0 ;
+
+					$msg->isPlural = (bool) ( $count > 1 );
+
+					$post  = ( $row[15] == "O" )
+						? "(<a href=\"".myurlencode("index.php?$href&IDroot=$IDroot&IDcat=$row[11]&IDitem=$row[9]&cmde=post")."\">". $msg->read($RESOURCE_COMMENT, strval($count)) ."</a>)"
+						: "&nbsp;" ;
+
+					// accés des fichiers
+					$file   = ( $row[13] == "O" ) ? "file.gif" : "lock.gif" ;
+					$text   = ( $row[13] == "O" ) ? $msg->read($RESOURCE_CLOSING) : $msg->read($RESOURCE_OPENING) ;
+					$access = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $row[7] )
+						? "<a href=\"".myurlencode("index.php?$href&IDroot=$IDroot&IDcat=$IDcat&IDitem=$row[9]&submit=$text")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/$file\" title=\"$text\" alt=\"$text\" /></a>"
+						: "<img src=\"".$_SESSION["ROOTDIR"]."/images/$file\" title=\"\" alt=\"\" />" ;
+
+					$valid  = ( $row[14] != "0000-00-00 00:00:00" )
+						? "<img src=\"".$_SESSION["ROOTDIR"]."/images/hourglass.png\" title=\"".date2longfmt($row[14])."\" alt=\"".date2longfmt($row[14])."\" />"
+						: "" ;
+
+					// ressource verrouillée
+					$mydoc  = ( $row[16] <= 0 )
+      		    			? "<a href=\"$lien\" class=\"overlib\" $target>$row[0]<span>$desc</span></a>"
+      		    			: $row[0] ;
+
+					// utilisabilité
+					$vak    = "";
+					$alt    = explode(",", $msg->read($RESOURCE_ACCESSIBILITY));
+
+					for ($k = 1; $k <= 3; $k++)
+						$vak .= ( $row[18] & pow(2, $k - 1) )
+							? "<img src=\"".$_SESSION["ROOTDIR"]."/images/usability/vak$k.png\" title=\"".$alt[$k - 1]."\" alt=\"".$alt[$k - 1]."\" /> "
+							: "" ;
+
+					// accès protégé en lecture
+					print("
+						<tr class=\"$bgcol\">
+   		   			        <td class=\"align-center\">$access</td>
+	      		    		  <td>
+      		    		  		$mydoc $level $new $lock $maj $note
+							<span class=\"x-small\">$post</span><br/>
+      		    		  		<span class=\"x-small\">". $msg->read($RESOURCE_DESCRIPTION) ." $texte</span>
+	      		    		  </td>
+			       	        <td class=\"align-center\">
+							<input type=\"checkbox\" id=\"bag_$row[9]\" name=\"bag[]\" value=\"$row[0]\" $isbag />
+							<input type=\"hidden\" name=\"path[]\" value=\"$path\" />
+						  </td>
+			       	        <td class=\"align-center\"><label for=\"rm_$row[9]\"><input type=\"checkbox\" id=\"rm_$row[9]\" name=\"rm[]\" value=\"$row[9]\" $isrm /></label></td>
+			       	        <td class=\"align-center\"><label for=\"mv_$row[9]\"><input type=\"checkbox\" id=\"mv_$row[9]\" name=\"mv[]\" value=\"$row[9]\" $ismv /></label></td>
+			       	        <td class=\"align-center\"><label for=\"cp_$row[9]\"><input type=\"checkbox\" id=\"cp_$row[9]\" name=\"cp[]\" value=\"$row[9]\" $iscp /></label></td>
+			       	        <td class=\"x-small align-center\">". str_replace(" ", "<br/>", $row[2]) ."$valid</td>
+			       	        <td class=\"align-center\">[$link]</td>
+   	   		   			  <td class=\"align-center\">". number_format($row[3], 0, ",", " ") ."</td>
+				              <td class=\"align-center\"><img src=\"".$_SESSION["ROOTDIR"]."/images/mime/$ext.gif\" title=\"$ext\" alt=\"$ext\" /> $vak</td>
+						</tr>
+       					");
+
+					$row = remove_magic_quotes(mysql_fetch_row($result));
+					}	// endwhile ressource
+				}	// endif nbelem
+
+			print("
+           			</table>
+				");
+		?>
+
+		<?php
+			// bouton précédent
+			$where = $skshow - 1;
+
+			if ( $skshow == 1 )
+				$prev = "";
+			else {
+				$skpg = 1 + (($skshow - 2) * $MAXSHOW);
+				$prev = "[<a href=\"".myurlencode("index.php?$href&IDroot=$IDroot&IDcat=$IDcat&skpage=$skpg&skshow=$where")."\">". $msg->read($RESOURCE_PREV) ."</a>]";
+				}
+
+			// liens directs sur n° de page
+			$start = 1 + (($skshow - 1) * $MAXSHOW);
+			$end   = $skshow * $MAXSHOW;
+
+			$choix = ( $skpage == $start )
+				? "<img src=\"".$_SESSION["ROOTDIR"]."/images/nav_left.gif\" title=\"«\" alt=\"«\" /><strong>$start</strong><img src=\"".$_SESSION["ROOTDIR"]."/images/nav_right.gif\" title=\"»\" alt=\"»\" />"
+				: "<a href=\"".myurlencode("index.php?$href&IDroot=$IDroot&IDcat=$IDcat&skpage=$start&skshow=$skshow")."\">$start</a>" ;
+
+			for ($j = $start + 1; $j <= $end AND $j <= $page; $j++)
+				$choix .= ( $skpage == $j )
+					? "|<img src=\"".$_SESSION["ROOTDIR"]."/images/nav_left.gif\" title=\"«\" alt=\"«\" /><strong>$j</strong><img src=\"".$_SESSION["ROOTDIR"]."/images/nav_right.gif\" title=\"»\" alt=\"»\" />"
+					: "|<a href=\"".myurlencode("index.php?$href&IDroot=$IDroot&IDcat=$IDcat&skpage=$j&skshow=$skshow")."\">$j</a>" ;
+
+			// bouton suivant
+			$where = $skshow + 1;
+			$next  = ( $skshow == $show )
+				? ""
+				: "[<a href=\"".myurlencode("index.php?$href&IDroot=$IDroot&IDcat=$IDcat&skpage=$j&skshow=$where")."\">". $msg->read($RESOURCE_NEXT) ."</a>]" ;
+		?>
+
+		<hr/>
+			<?php if ( $nbelem ) print("<div style=\"text-align:center;\">$prev $choix $next</div>"); ?>
+		<hr/>
+
+		</form>
+
+		<?php
+			// connexion P2P
+			$connect  = "";
+
+			// recherche du serveur
+			$result   = mysql_query("select _server from p2p where _visible = 'O' limit 1", $mysql_link);
+			$row      = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+			if ( $row ) {
+				$connect  = "<input type=\"submit\" value=\"".$msg->read($RESOURCE_CONNEXION)."\" style=\"font-size:9px;\" />";
+				$connect .= " | ";
+				}
+		?>
+
+	<!-- recherche d'une ressource dans les archives -->
+	<table class="width100">
+	  <tr>
+	    <td style="width:1%;">
+		<form id="connect" action="<?php print("$row[0]/server.php?cmde=share&amp;lang=".$_SESSION["lang"]); ?>" method="post" onclick="window.open(this.action, '_blank'); return false;" >
+			<div style="white-space:nowrap;"><?php echo $connect; ?></div>
+		</form>
+	    </td>
+	    <td>
+	      <img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/search.gif" title="" alt="?" />
+		<?php print($msg->read($RESOURCE_SEARCH, myurlencode("index.php?item=91&IDgroup=$IDgroup&IDcat=$IDcat&IDres=$IDres&cmde=search&rub=2"))); ?>
+	    </td>
+	  </tr>
+	</table>
+
+</div>

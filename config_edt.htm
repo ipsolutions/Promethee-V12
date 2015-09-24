@@ -1,0 +1,360 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2008 by Dominique Laporte(C-E-D@wanadoo.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : config_kwords.htm
+ *		projet   : paramétrage de l'interface intranet
+ *
+ *		version  : 1.0
+ *		auteur   : laporte
+ *		creation : 24/08/08
+ *		modif    : 
+ */
+
+
+$IDconf   = ( @$_POST["IDconf"] )			// ID de la configuration
+	? (int) $_POST["IDconf"]
+	: (int) @$_GET["IDconf"] ;
+$IDcentre = ( @$_POST["IDcentre"] )			// ID du centre
+	? (int) $_POST["IDcentre"]
+	: (int) (@$_GET["IDcentre"] ? $_GET["IDcentre"] : $_SESSION["CnxCentre"]) ;
+
+$IDdef   = @$_POST["IDdef"];
+$text    = @$_POST["text"];
+$kwords  = addslashes(trim(@$_POST["kwords"]));
+
+$submit  = (int) @$_POST["valid_x"];		// bouton de validation
+
+function lundo($jaro,$semajno){
+	$semo=mktime(0,0,0,1,1,$jaro);
+	$semajno+=date('W',$semo)=='52' ? 1 :0;
+	$semo=strtotime("+$semajno week",$semo);
+	while(date('w',$semo)!='1'){$semo=strtotime("-1 day",$semo);}
+	return ($semo);
+	}
+?>
+
+
+<?php
+	// vérification des autorisations
+	admSessionAccess();
+
+
+?>
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($CONFIG_EDT)); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+
+	<form id="formulaire" action="index.php?item=21&amp;cmde=edt&amp;<?php echo $IDconf; ?>" method="post">
+	<?php
+		print("
+			<p class=\"hidden\"><input type=\"hidden\" name=\"item\"     value=\"$item\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"cmde\"     value=\"$cmde\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"IDconf\"   value=\"$IDconf\" /></p>
+			");
+	?>
+
+        <table class="width100">
+          <tr>
+            <td class="align-center">
+			<span class="menucfg">
+			<img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/options.png" title="" alt="" />
+			<?php print("<a href=\"index.php?item=$item&amp;IDconf=$IDconf\">". $msg->read($CONFIG_OPTION) ."</a>"); ?>
+			</span>
+
+			<span class="menucfg">
+			<img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/config.png" title="" alt="" />
+			<?php print("<a href=\"index.php?item=$item&amp;cmde=skin&amp;IDconf=$IDconf\">". $msg->read($CONFIG_TUNE) ."</a>"); ?>
+			</span>
+
+			<span class="menucfg">
+			<img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/database.gif" title="" alt="" />
+			<?php print("<a href=\"index.php?item=$item&amp;cmde=dba&amp;IDconf=$IDconf\">". $msg->read($CONFIG_DATABASE) ."</a>"); ?>
+			</span>
+
+			<span class="menucfg">
+			<img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/personnaliser.gif" title="" alt="" /> <?php print($msg->read($CONFIG_KEYWORDS)); ?>
+			</span>
+
+			<span class="menucfg">
+			<img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/liste.png" title="" alt="" />
+			<?php print("<a href=\"index.php?item=$item&amp;cmde=menu&amp;IDconf=$IDconf\">". $msg->read($CONFIG_MENU) ."</a>"); ?>
+			</span>
+
+			<span class="menucfg">
+			<img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/p2p.png" title="" alt="" />
+			<?php print("<a href=\"index.php?item=$item&amp;cmde=p2p&amp;IDconf=$IDconf\">". $msg->read($CONFIG_P2P) ."</a>"); ?>
+			</span>
+			
+			<span style="margin:5px; padding:2px; border-style:solid; border-color:#000000; border-width:1px; background-color:#eeeeee;">
+			<img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/personnaliser.gif" title="" alt="" /> <?php print($msg->read($CONFIG_EDT)); ?>
+			</span>
+            </td>
+          </tr>
+        </table>
+
+        <hr/>
+		
+		<?php
+			$select = "<select id=\"IDcentre\" name=\"IDcentre\" onchange=\"document.forms.formulaire.submit()\">";
+
+			// lecture des centres constitutifs
+			$query  = "select _IDcentre, _ident from config_centre ";
+			$query .= "where _visible = 'O' AND _lang = '".$_SESSION["lang"]."' ";
+			$query .= "order by _IDcentre";
+
+			$result = mysql_query($query, $mysql_link);
+			$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+			while ( $row ) {
+				$check   = ( $IDcentre == $row[0] ) ? "selected=\"selected\"" : "" ;
+
+				$select .= "<option value=\"$row[0]\" $check >$row[1]</option>";
+
+				$row     = remove_magic_quotes(mysql_fetch_row($result));
+				}
+			
+			$select .= "</select>";
+			echo "<div class=\"align-center\">".$select."</div><br />";
+
+		?>
+		
+	<div class="tabbable"> <!-- Only required for left/right tabs -->
+		<ul class="nav nav-tabs" style="height: 37px; margin-bottom: 0px;">
+			<li class="active"><a href="#tab1" data-toggle="tab"><?php echo $msg->read($CONFIG_CONFSEM); ?></a></li>
+			<li><a href="#tab2" data-toggle="tab"><?php echo $msg->read($CONFIG_CONFVAC); ?></a></li>
+		</ul>
+	
+	<?php
+	if($submit)
+	{
+		// Traitement semaines
+		$tab = Array();
+		$tab[] = $IDcentre;
+		
+		for($i = 1; $i <= 52; $i++)
+		{
+			$tab[] = @$_POST["num_".$i];
+		}
+		
+		$json = json_encode($tab);
+				
+		$query  = "update config_centre set _semaines = '$json' ";
+		$query .= "where _visible = 'O' AND _lang = '".$_SESSION["lang"]."' AND _IDcentre = $IDcentre";
+		
+		$result = mysql_query($query, $mysql_link);
+		
+		// Traitement vacances
+		$vac = Array();
+		$vac["start"] = Array();
+		$vac["end"] = Array();
+		
+		foreach($_POST as $key => $val)
+		{
+			if(substr($key, 0, 10) == "vac_start_")
+			{
+				$vac["start"][] = $val;
+			}
+			
+			if(substr($key, 0, 8) == "vac_end_")
+			{
+				$vac["end"][] = $val;
+			}
+		}
+		
+		$json_vac = json_encode($vac);
+		
+		$query  = "update config_centre set _vacances = '$json_vac' ";
+		$query .= "where _visible = 'O' AND _lang = '".$_SESSION["lang"]."' AND _IDcentre = $IDcentre";
+		
+		$result = mysql_query($query, $mysql_link);
+		
+		?>
+		    <div class="alert alert-success"><center><strong>Ok !</strong></center></div>
+		<?php
+	}
+	?>
+	
+	<div class="tab-content">
+		<div class="tab-pane active" id="tab1" style="background-color: #ffffff; padding-top: 10px;">
+				<p style="margin:0px; background-color:#eeeeee;">
+					<strong><?php echo $msg->read($CONFIG_CONFSEM); ?></strong>
+					<span style="cursor: pointer;">
+					<img alt="" title="" src="./images/updown.png">
+					</span>
+				</p>
+				<br />
+			
+				<div style="background-color: #FFFFFF; border: 1px solid #cccccc; padding: 5px">
+				<table class="table-hover width100">
+				<?php
+				$query  = "select _semaines from config_centre ";
+				$query .= "where _visible = 'O' AND _lang = '".$_SESSION["lang"]."' AND _IDcentre = $IDcentre ";
+				$query .= "order by _IDcentre";
+
+				$result = mysql_query($query, $mysql_link);
+				$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+				
+				$res = json_decode($row[0]);
+				
+				for($i = 31; $i <= 52; $i++)
+				{
+					?>
+					<tr>
+						<td class="align-center">
+							<strong><?php echo $msg->read($CONFIG_SEMAINE); ?> n° <?php echo $i; ?></strong>
+						</td>
+						<td class="align-center">
+							<?php
+								if(lundo(date('Y',time()), $i) >= 31 && lundo(date('Y',time()), $i) <= 52)
+								{
+									echo "<em>".$msg->read($CONFIG_SEMAINE)." ".date('d/m/Y', lundo(date('Y',time())+1, $i))."</em>";
+								}
+								else
+								{
+									echo "<em>".$msg->read($CONFIG_SEMAINE)." ".date('d/m/Y', lundo(date('Y',time()), $i))."</em>";
+								}
+							?>
+						</td>
+						<td class="align-center">
+							<input type="radio" name="num_<?php echo $i; ?>" value="1" <?php if($res[$i]=="1"){echo "checked";} ?> /> S1
+							<input type="radio" name="num_<?php echo $i; ?>" value="2" <?php if($res[$i]=="2"){echo "checked";} ?> /> S2
+						</td>
+					</tr>
+					<?php
+				}
+				for($i = 1; $i <= 30; $i++)
+				{
+					?>
+					<tr>
+						<td class="align-center">
+							<strong><?php echo $msg->read($CONFIG_SEMAINE); ?> n° <?php echo $i; ?></strong>
+						</td>
+						<td class="align-center">
+							<em><?php echo $msg->read($CONFIG_SEMAINE)." ".date('d/m/Y', lundo(date('Y',time())+1, $i)); ?></em>
+						</td>
+						<td class="align-center">
+							<input type="radio" name="num_<?php echo $i; ?>" value="1" <?php if($res[$i]=="1"){echo "checked";} ?> /> S1
+							<input type="radio" name="num_<?php echo $i; ?>" value="2" <?php if($res[$i]=="2"){echo "checked";} ?> /> S2
+						</td>
+					</tr>
+					<?php
+				}
+				?>
+				</table>
+				</div>
+			</div>
+			<div class="tab-pane" id="tab2" style="background-color: #ffffff; padding-top: 10px;">
+				<p style="margin:0px; background-color:#eeeeee; text-align: right">
+					<strong><?php echo $msg->read($CONFIG_CONFVAC); ?></strong>
+					<span style="cursor: pointer;">
+					<img alt="" title="" src="./images/updown.png">
+					</span>
+				</p>
+				<br />
+				
+				<?php
+				$query  = "select _vacances from config_centre ";
+				$query .= "where _visible = 'O' AND _lang = '".$_SESSION["lang"]."' AND _IDcentre = $IDcentre ";
+				$query .= "order by _IDcentre";
+
+				$result = mysql_query($query, $mysql_link);
+				$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+				
+				$res = json_decode($row[0]);
+				?>
+				
+				<div style="background-color: #FFFFFF; border: 1px solid #cccccc; padding: 5px">
+					<div style="text-align: center" id="div_vac">
+						<?php
+						if($row[0] == "")
+						{
+							?>
+							Du <input type="text" name="vac_start_0" /> au <input type="text" name="vac_end_0" /><img alt="img" src="images/add.gif" id="add_vac" style="float: right; position: absolute; margin-left: 5px; margin-top: 2px" /><br />
+							<?php
+							$nbvac = 1;
+						}
+						else
+						{
+							$start = $res->start;
+							$end = $res->end;
+							
+							foreach($start as $key => $val)
+							{
+								if($key == 0)
+								{
+									echo $msg->read($CONFIG_SEMAINE)." <input type=\"text\" name=\"vac_start_".$key."\" value=\"".$start[$key]."\" /> ".$msg->read($CONFIG_AU)." <input type=\"text\" name=\"vac_end_".$key."\" value=\"".$end[$key]."\" /><img alt=\"img\" src=\"images/add.gif\" id=\"add_vac\" style=\"float: right; position: absolute; margin-left: 5px; margin-top: 2px\" /><br />";
+								}
+								else
+								{
+									echo $msg->read($CONFIG_SEMAINE)." <input type=\"text\" name=\"vac_start_".$key."\" value=\"".$start[$key]."\" /> ".$msg->read($CONFIG_AU)." <input type=\"text\" name=\"vac_end_".$key."\" value=\"".$end[$key]."\" /><br />";
+								}
+							}
+							$nbvac = $key + 1;
+						}
+						?>
+					</div>
+				</div>
+				
+				<script>
+				var num_vac = <?php echo $nbvac ?>;
+				
+				$("#add_vac").click(function() {
+					$("#div_vac").append("<?php echo $msg->read($CONFIG_SEMAINE); ?> <input type=\"text\" name=\"vac_start_"+num_vac+"\" /> <?php echo $msg->read($CONFIG_AU); ?> <input type=\"text\" name=\"vac_end_"+num_vac+"\" /><br />");
+					num_vac++;
+				});
+				</script>
+	
+			</div>
+		</div>
+	</div>
+	
+	<hr/>
+
+        <table class="width100">
+          <tr>
+             <td style="width:10%;" class="valign-middle align-center">
+			<?php print("<input type=\"image\" src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/valid.gif\" name=\"valid\" alt=\"".$msg->read($CONFIG_INPUTOK)."\" />"); ?>
+             </td>
+             <td class="valign-middle">
+			<?php print($msg->read($CONFIG_VALIDATE)); ?>
+             </td>
+          </tr>
+	       
+          <tr>
+             <td class="valign-middle align-center">
+			<a href="index.php"><?php print("<img src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/cancel.gif\" title=\"\" alt=\"".$msg->read($CONFIG_INPUTCANCEL)."\" />"); ?></a>
+             </td>
+             <td class="valign-middle">
+			<?php print($msg->read($CONFIG_GOHOME)); ?>
+             </td>
+          </tr>
+        </table>
+		
+      </form>
+      
+</div>

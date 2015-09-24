@@ -1,0 +1,488 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2004-2007 by Dominique Laporte(C-E-D@wanadoo.fr)
+   Copyright (c) 2006 by Didier Roy (miraceti@free.fr)
+   Copyright (c) 2006 by Nordine Zetoutou (nordine.zetoutou@educagri.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : campus_download.htm
+ *		projet   : la page de dépôt des travaux du campus virtuel
+ *
+ *		version  : 1.1
+ *		auteur   : laporte
+ *		creation : 20/03/04
+ *		modif    : 08/06/06 - par Didier Roy
+ *		           migration PHP5  
+ *		modif    : 17/07/06 - Nordine Zetoutou
+ * 	                 migration des balises HTML en XHTML 1.0 strict
+ */
+
+
+$IDroot   = ( @$_POST["IDroot"] )			// ID répertoire racine
+	? (int) $_POST["IDroot"]
+	: (int) @$_GET["IDroot"] ;
+$IDmat    = ( @$_POST["IDmat"] )			// ID de la matière/formation
+	? (int) $_POST["IDmat"]
+	: (int) @$_GET["IDmat"] ;
+$IDwork   = ( strlen(@$_POST["IDwork"]) )		// ID du travail à télécharger
+	? (int) $_POST["IDwork"]
+	: (int) @$_GET["IDwork"] ;
+$IDupload = ( @$_POST["IDupload"] )			// # ID du dépôt de travail
+	? (int) $_POST["IDupload"]
+	: (int) @$_GET["IDupload"] ;
+$sort     = (int) @$_POST["sort"];			// méthode de tri
+$alldel   = (int) @$_POST["alldel"];		// supprimer un devoir (tous)
+
+$submit   = ( @$_POST["submit"] )			// bouton de validation
+	? $_POST["submit"]
+	: @$_GET["submit"] ;
+?>
+
+
+<?php
+	// on sélectionne la matière pédagogique ou la formation des campus
+	if ( $IDmat < 0 ) {
+		$Query  = "select _ident from campus_classe ";
+		$Query .= "where _IDclass = abs($IDmat) ";
+		$Query .= "AND _visible = 'O' ";
+		$Query .= "limit 1";
+		}
+	else {
+		$Query  = "select _titre from campus_data ";
+		$Query .= "where _IDmat = '$IDmat' ";
+		$Query .= "AND _visible = 'O' AND _lang = '".$_SESSION["lang"]."' ";
+		$Query .= "limit 1";
+		}
+
+	$result = mysql_query($Query, $mysql_link);
+	$campus = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+?>
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($CAMPUS_REPOSITORY, $campus[0])); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+
+	<?php
+		// lecture de la base de données des campus
+		$Query   = "select _date, _ID, _IP, _titre, _texte, _open, _close, _start, _end, _IDgrprd ";
+		$Query  .= "from campus_download ";
+		$Query  .= "where _IDwork ='$IDwork' ";
+		$Query  .= "limit 1";
+
+		$result  = mysql_query($Query, $mysql_link);
+		$row     = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+		// lecture de l'auteur du travail et des groupes de lecteurs autorisés
+		$owner   = $row[1];
+		$grprd   = $row[9];
+
+		// attention au hors délai pour le dépot !!
+		$timeout = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $owner )
+			? false
+			: (bool) !( $row[7] == $row[8] OR (date("Y-m-d H:i:s") > $row[7] AND date("Y-m-d H:i:s") < $row[8]) );
+
+		if ( strlen($row[4]) )
+			print("
+				<p style=\"background-color:#eeeeee; text-align:justify; margin-top:0px; margin-bottom:5px; padding:5px;\">
+				<img style=\"float:left; margin-right:5px;\" src=\"".$_SESSION["ROOTDIR"]."/images/annonce.gif\" title=\"\" alt=\"\" />". str_replace("\n", "<br/>", $row[4]) ."
+				</p>
+				");
+	?>
+
+	<p style="margin-top: 0px; text-align:justify;">
+	<?php print($msg->read($CAMPUS_DOWNLOAD)); ?>
+	</p>
+
+	<div style="border:#000000 solid 1px; padding:4px;">
+
+            <table class="width100">
+		<?php 
+			// téléchargement du travail
+			$Query  = "select _file, _size, _text, _visible ";
+			$Query .= "from campus_upload ";
+			$Query .= "where _IDwork ='$IDwork' AND _type = 'E' ";
+			$Query .= "order by _IDupload";
+
+			$result = mysql_query($Query, $mysql_link);
+			$myrow  = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+			if ( $myrow ) {
+				print("
+				        <tr>
+				          <td class=\"align-right\">". $msg->read($CAMPUS_DOC) ."</td>
+				          <td style=\"width:75%;\">");
+
+				while ( $myrow ) {
+					// lecture de l'extension
+					$ext    = extension($myrow[0], "-");
+
+					$myfile = "$DOWNLOAD/campus/" . stripaccent($campus[0]) . "/$IDwork/$myrow[0]";
+					$action = ( $row[5] == $row[6] OR (date("Y-m-d H:i:s") > $row[5] AND date("Y-m-d H:i:s") < $row[6]) )
+						? "<a href=\"".myurlencode("index.php?file=$myfile")."\" onclick=\"window.open(this.href, '_blank'); return false;\">$myrow[2]</a>"
+						: $myrow[2] ;
+
+					print("<img src=\"".$_SESSION["ROOTDIR"]."/images/mime/$ext.gif\" title=\"$ext\" alt=\"$ext\" /> $action ".$msg->read($CAMPUS_BYTE, number_format($myrow[1], 0, ",", " "))."<br/>");
+
+					$myrow  = remove_magic_quotes(mysql_fetch_row($result));
+					}
+
+				// lecture de la date du dernier téléchargement
+				$path   = addslashes("$DOWNLOAD/campus/". stripaccent($campus[0]) ."/$IDwork/");
+				$return = mysql_query("select _date, _count, _IDdown from download_data where _file like '$path%' order by _date limit 1", $mysql_link);
+				$down   = ( $return ) ? mysql_fetch_row($return) : 0 ;
+
+				$link   = ( $down[0] )
+					? "<a href=\"#\" onclick=\"popWin('".$_SESSION["ROOTDIR"]."/user_list.php?sid=".$_SESSION["sessID"]."&amp;IDdown=$down[2]&amp;cmde=dwload&amp;lang=".$_SESSION["lang"]."', '450', '200'); return false;\">$down[1]</a>"
+					: "0" ;
+
+				print("
+				          </td>
+				        </tr>");
+				}
+		?>
+
+	        <tr>
+	          <td style="width:25%;" class="align-right"><?php print($msg->read($CAMPUS_AUTHOR)); ?></td>
+	          <td style="width:75%;"><?php print(getUserName($row[1]) ." ". _getHostName($row[2])); ?></td>
+	        </tr>
+	        <tr>
+	          <td class="align-right"><?php print($msg->read($CAMPUS_ONLINE)); ?></td>
+	          <td><?php print(date2longfmt($row[0])); ?></td>
+	        </tr>
+
+		<?php
+			if ( mysql_numrows($result) ) {
+				$value = $down ? date2longfmt($down[0]) . " (x$link)" : "" ;
+
+				print("
+				        <tr>
+				          <td class=\"align-right\">". $msg->read($CAMPUS_UPLOAD) ."</td>
+				          <td>$value</td>
+				        </tr>");
+				}
+		?>
+            </table>
+
+	</div>
+
+	<form id="formulaire" action="index.php" method="post" enctype="multipart/form-data">
+	<?php
+		print("
+			<p class=\"hidden\"><input type=\"hidden\" name=\"item\"   value=\"$item\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"cmde\"   value=\"$cmde\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"IDmat\"  value=\"$IDmat\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"IDroot\" value=\"$IDroot\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"IDwork\" value=\"$IDwork\" /></p>
+			");
+	?>
+
+	<?php
+		// initialisation
+		$error  = 0;
+		$option = "";
+
+		// suppression de documents
+		if ( @$_POST["del_x"] ) {
+			//---- suppression des fichiers
+			$cb = @$_POST["cbitem"];
+
+			for ($i = 0; $i < count($cb); $i++) {
+				$IDitem = (int) $cb[$i];
+
+				$Query  = "select _IDwork, _ID, _file from campus_upload ";
+				$Query .= "where _IDupload = '$IDitem' ";
+				$Query .= "limit 1";
+
+				$result = mysql_query($Query, $mysql_link);
+				$myrow  = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+				while ( $myrow ) {
+					// attention au hors délai !
+					$Query  = "delete from campus_upload ";
+					$Query .= "where _IDupload = '$IDitem' ";
+					$Query .= ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $owner )
+						? ""
+						: ($timeout ? "AND _ID = '0' " : "AND _ID = '". $_SESSION["CnxID"] ."' ") ;
+					$Query .= "limit 1";
+
+					if ( mysql_query($Query, $mysql_link) )
+						// et on efface les dépôts associés
+						unlink("$DOWNLOAD/campus/". stripaccent($campus[0]) ."/$myrow[0]/$myrow[1]-$myrow[2]");
+
+					$myrow  = remove_magic_quotes(mysql_fetch_row($result));
+					}
+				}
+			}
+
+		// fichier à transférer
+		if ( $submit == $msg->read($CAMPUS_VALIDATE) ) {
+			$file = @$_FILES["UploadedFile"]["tmp_name"];
+
+			for ($i = 0; $i < count($file) && @$file[$i] && !$error; $i++) {
+				// Vérification du type de fichier à transférer		    
+				$error = authfile(@$_FILES["UploadedFile"]["name"][$i])  ? 0 : 4 ;
+
+				if ( !$error AND !$timeout ) {
+					// on détermine le répertoire de stockage
+					$dest = "$DOWNLOAD/campus/" . stripaccent($campus[0]);
+					if ( !is_dir($dest) )
+						mymkdir($dest, $CHMOD);
+
+					$dest = $dest . "/$IDwork";
+					if ( !is_dir($dest) )
+						mymkdir($dest, $CHMOD);
+
+					$dest = stripaccent($dest . "/" . $_SESSION["CnxID"] . "-" . @$_FILES["UploadedFile"]["name"][$i]);
+
+					// copie du fichier temporaire -> répertoire de stockage
+					if ( move_uploaded_file($_FILES["UploadedFile"]["tmp_name"][$i], $dest) ) {
+						mychmod($dest, $CHMOD);
+
+						// initialisation des champs
+						$date     = date("Y-m-d H:i:s");
+						$filename = addslashes(@$_FILES["UploadedFile"]["name"][$i]);
+						$type     =  ( $_SESSION["CnxID"] == $owner ) ? "C" : "R" ;
+
+						// et on insére un nouveau travail dans la base de données
+						$Query  = "insert into campus_upload ";
+						$Query .= "values('', '$IDwork', '$date', '".$_SESSION["CnxID"]."', '".$_SESSION["CnxIP"]."', '$filename', '', '".@$_FILES["UploadedFile"]["size"][$i]."', '$type', 'O')";
+
+						mysql_query($Query, $mysql_link);
+						}
+					}	// endif move_uploaded
+				}	// endfor
+			}	// endif submit
+
+		// on transfére le fichier si pas d'erreur
+		if ( !$error )
+		     	// dépôt des travaux
+			$option = "<img src=\"".$_SESSION["ROOTDIR"]."/images/item-add.gif\" title=\"".$msg->read($CAMPUS_ADDOC)."\" alt=\"".$msg->read($CAMPUS_ADDOC)."\" /> <a href=\"index.php?item=$item&amp;IDmat=$IDmat&amp;IDwork=$IDwork&amp;cmde=download&amp;submit=addfile\">".$msg->read($CAMPUS_ADDOC)."</a>";
+		else
+			// on redemande la saisie de fichier
+			$submit = "addfile";
+
+         	// seul le big chef ou le modérateur peut effacer un travail
+		switch ( $submit ) {
+			case "addfile" :
+				// message d'invite ou d'erreur
+				switch ( $error ) {
+					case 2 :
+						$errmsg = "<span style=\"color:#FF0000;\">". $msg->read($CAMPUS_ERRSIZE, $FILESIZE) ."</span>";
+						break;
+
+					case 3 :
+						$errmsg = "<span style=\"color:#FF0000;\">". $msg->read($CAMPUS_ERRLOC) ."</span>";
+						break;
+
+					case 4 :
+						$errmsg = "<span style=\"color:#FF0000;\">". $msg->read($CAMPUS_ERRFILETYPE) ."</span>";
+						break;
+
+					default :
+						$errmsg = $msg->read($CAMPUS_LOCATION);
+						break;
+					}
+
+				$option = "
+						<p style=\"margin-bottom: 0px;\">$errmsg</p>
+						<p style=\"margin: 0;\">
+							<span style=\"cursor: pointer;\" onclick=\"$('PJ')._display.toggle(); return false;\"><img src=\"".$_SESSION["ROOTDIR"]."/images/max.gif\" title=\"\" alt=\"\" /></span>
+							<input type=\"file\" name=\"UploadedFile[]\" size=\"50\" style=\"font-size: 9px;\" /> ". $msg->read($CAMPUS_VALID) ." <input type=\"submit\" name=\"submit\" value=\"". $msg->read($CAMPUS_VALIDATE) ."\" style=\"font-size: 9px;\" />
+						</p>
+
+						<div id=\"PJ\" style=\"display:none;\">
+						<p style=\"margin-top:2px; margin-bottom:2px;\">
+							<img src=\"".$_SESSION["ROOTDIR"]."/images/branche.gif\" title=\"\" alt=\"-\" />
+							<input type=\"file\" name=\"UploadedFile[]\" size=\"50\" style=\"font-size:9px;\" />
+						</p>
+						<p style=\"margin-top:2px; margin-bottom:2px;\">
+							<img src=\"".$_SESSION["ROOTDIR"]."/images/branche.gif\" title=\"\" alt=\"-\" />
+							<input type=\"file\" name=\"UploadedFile[]\" size=\"50\" style=\"font-size:9px;\" />
+						</p>
+						<p style=\"margin-top:2px; margin-bottom:2px;\">
+							<img src=\"".$_SESSION["ROOTDIR"]."/images/branche.gif\" title=\"\" alt=\"-\" />
+							<input type=\"file\" name=\"UploadedFile[]\" size=\"50\" style=\"font-size:9px;\" />
+						</p>
+						</div>
+
+						<p class=\"hidden\"><input type=\"hidden\" name=\"MAX_FILE_SIZE\" value=\"$FILESIZE\" /></p>";
+				break;
+
+			default :
+		         	// le modérateur peut déposer une correction
+         			$texte = ( $_SESSION["CnxID"] == $owner )
+					? $msg->read($CAMPUS_UPLOADTEXT)
+					: $msg->read($CAMPUS_UPLOADWORK) ;
+
+		         	// dépôt des travaux
+				$option = ( $_SESSION["CnxID"] == $owner OR $row[7] == $row[8] OR (date("Y-m-d H:i:s") > $row[7] AND date("Y-m-d H:i:s") < $row[8]) )
+					? "<img src=\"".$_SESSION["ROOTDIR"]."/images/item-add.gif\" title=\"$texte\" alt=\"$texte\" /> <a href=\"".myurlencode("index.php?item=$item&IDmat=$IDmat&IDwork=$IDwork&cmde=download&submit=addfile")."\">$texte</a>"
+					: "" ;
+				break;
+			}
+	?>
+
+	<table class="width100">
+	  <tr>
+		<td colspan="4"><?php print($option); ?></td>
+	  </tr>
+
+	  <tr style="background-color:#c0c0c0;">
+		<td class="align-center" style="width:1%; white-space:nowrap;">
+		<?php
+			$chkdel = ( $alldel ) ? "checked=\"checked\"" : "" ;
+
+			$chkbox = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $owner )
+             		? "<label for=\"alldel\"><input type=\"checkbox\" id=\"alldel\" name=\"alldel\" value=\"1\" onclick=\"document.forms.formulaire.submit()\" $chkdel /></label>"
+				: "" ;
+
+			// suppression des dépôts
+			print("<input type=\"image\" src=\"".$_SESSION["ROOTDIR"]."/images/corb.gif\" name=\"del\" title=\"". $msg->read($CAMPUS_DELWORK) ."\" alt=\"". $msg->read($CAMPUS_DELWORK) ."\" />$chkbox");
+		?>
+		</td>
+		<td class="align-center" style="width:1%;"><img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/pj.gif" title="" alt="" /></td>
+		<td style="width:63%;">
+		<?php
+			print($msg->read($CAMPUS_WORKS));
+			print("|");
+			print("
+				<label for=\"sort\">
+				<select id=\"sort\" name=\"sort\" onchange=\"document.forms.formulaire.submit()\">
+             			<option value=\"0\">". $msg->read($CAMPUS_SORTBY) ."</option>");
+
+			$list = explode(",", $msg->read($CAMPUS_SORTLIST));
+
+			for ($i = 0; $i < count($list); $i++) {
+				list($ident, $value) = explode(":", $list[$i]);
+
+				$select = ( $value == $sort ) ? "selected=\"selected\"" : "" ; 
+
+	           		print("<option value=\"$value\" $select>-- $ident</option>");
+				}
+
+			print("
+				</select>
+				</label>");
+		?>
+		</td>
+		<td class="align-center" style="width:25%;"><?php print($msg->read($CAMPUS_DONE)); ?></td>
+		<td class="align-center" style="width:10%;"><?php print($msg->read($CAMPUS_SIZE)); ?></td>
+	  </tr>
+
+	<?php
+		// lecture de la base de données
+		$Query  = "select _IDwork, _date, _ID, _IP, _file, _size, _IDupload, _type from campus_upload ";
+		$Query .= "where _IDwork = '$IDwork' AND _type != 'E' AND _visible = 'O' ";
+		switch ( $sort ) {
+			case 3 :
+				$Query .= "order by _size desc";
+				break;
+			case 2 :
+				$Query .= "order by _date desc";
+				break;
+			default :
+				$Query .= "order by _IDupload asc";
+				break;
+			}
+
+		$result = mysql_query($Query, $mysql_link);
+		$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+		$i = 0;
+		while ( $row ) {
+			$bgcolor = ( $i++ % 2 ) ? "item" : "menu" ;
+
+			// lecture de l'auteur du travail
+			$who    = getUserName($row[2]);
+
+			// lecture de l'extension
+			$ext    = extension($row[4], "-");
+
+			// répertoire de stockage des travaux
+			$file   = "$DOWNLOAD/campus/" . stripaccent($campus[0]) . "/$IDwork/$row[2]-" . stripaccent($row[4]);
+
+			$upload = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $row[2] OR $_SESSION["CnxID"] == $owner OR $owner == $row[2] OR ($grprd & pow(2, $_SESSION["CnxGrp"] - 1)) )
+				? "<a href=\"$file\" onclick=\"window.open(this.href, '_blank'); return false;\">$row[4]</a>"
+				: ($timeout
+					? $row[4]
+					: $msg->read($CAMPUS_WORKDONE)) ;
+
+			// on signale la présence du corrigé
+			$signet = ( $row[7] == "C" )
+				? "<img src=\"".$_SESSION["ROOTDIR"]."/images/annonce.gif\" title=\"".$msg->read($CAMPUS_CORRECTION)."\" alt=\"".$msg->read($CAMPUS_CORRECTION)."\" />"
+				: "" ;
+
+			// suppression des ressources
+			if ( $timeout )
+				$isrm = "disabled=\"disabled\"";
+			else
+				$isrm = (($_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $owner OR $_SESSION["CnxID"] == $row[2])
+					? ($alldel ? "checked=\"checked\"" : "")
+					: "disabled=\"disabled\"") ;
+
+			print("            
+				<tr class=\"$bgcolor\">
+					<td class=\"align-center\">
+						<label for=\"cbitem_$row[6]\">
+						<input type=\"checkbox\" id=\"cbitem_$row[6]\" name=\"cbitem[]\" value=\"$row[6]\" $isrm />
+						</label>
+					</td>
+					<td><img src=\"".$_SESSION["ROOTDIR"]."/images/mime/$ext.gif\" title=\"$ext\" alt=\"$ext\" /></td>
+					<td>
+       		    		  	$upload $signet<br/>
+       		    		  	<span class=\"x-small\">$who</span>
+      				</td>
+					 <td class=\"align-center\">
+       		    		  	<span class=\"x-small\"><img src=\"".$_SESSION["ROOTDIR"]."/images/in.gif\" title=\"\" alt=\"\" /> ". date2longfmt($row[1]) ."</span><br/>
+       		    		  	<span class=\"x-small\">". _getHostName($row[3]) ."</span>
+					</td>
+					<td class=\"align-center\">
+						". number_format($row[5], 0, ",", " ") ."
+					</td>
+	       		</tr>
+	       		");
+
+			$row = remove_magic_quotes(mysql_fetch_row($result));
+			}
+	?>
+	</table>
+
+	<hr/>
+
+         <table class="width100">
+           <tr>
+              <td style="width:10%;" class="valign-middle align-center">
+              	<?php print("<a href=\"".myurlencode("index.php?item=$item&IDmat=$IDmat&IDroot=$IDroot&cmde=work")."\">"); ?>
+              	<?php print("<img src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/cancel.gif\" title=\"\" alt=\"".$msg->read($CAMPUS_INPUTCANCEL)."\" />"); ?></a>
+              </td>
+              <td class="valign-middle">
+              	<?php print($msg->read($CAMPUS_BACK)); ?>
+              </td>
+           </tr>
+         </table>
+
+	</form>
+
+</div>

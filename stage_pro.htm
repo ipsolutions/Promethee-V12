@@ -1,0 +1,388 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2007 by Dominique Laporte(C-E-D@wanadoo.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : stage_pro.htm
+ *		projet   : la page de visualisation des offres
+ *
+ *		version  : 1.0
+ *		auteur   : laporte
+ *		creation : 9/08/07
+ *		modif    : 
+ */
+
+
+$IDsociete = (int) @$_GET["IDsociete"];		// ID de l'entreprise
+$del       = (int) @$_GET["del"];			// ID de l'offre à supprimer
+
+$IDalpha   = @$_POST["IDalpha"];			// filtre par nom d'entreprise
+$IDposte   = (int) @$_POST["IDposte"];		// ID du type de poste
+$IDcontrat = (int) @$_POST["IDcontrat"];		// ID du type de contrat
+$IDregion  = (int) @$_POST["IDregion"];		// ID de la région
+
+$skpage    = ( @$_GET["skpage"] )			// n° de la page affichée
+	? (int) $_GET["skpage"]
+	: 1 ;
+$skshow    = ( @$_GET["skshow"] )			// n° du flash info
+	? (int) $_GET["skshow"]
+	: 1 ;
+
+
+//---------------------------------------------------------------------------
+function filter($id)
+{
+	/*
+	 * fonction :	détermine les éléments bornés d'une plage de recherche
+	 * in :		$id : valeur d'entrée (format xxyyzz)
+	 * out :		tableau des bornes inf et sup
+	 */
+
+	$niv1 = (int) ($id / 10000);
+	$niv2 = (int) ($id / 100) - ($niv1 * 100);
+	$niv3 = $id - ($niv1 *10000) - ($niv2 * 100);
+
+	return ( $niv3 )
+		? Array($id, $id + 1)
+		: ($niv2
+			? Array($niv1 * 10000 + $niv2 * 100, $niv1 * 10000 + ($niv2 + 1) * 100)
+			: Array($niv1 * 10000, ($niv1 + 1) * 10000)) ;
+}
+//---------------------------------------------------------------------------
+?>
+
+
+<?php
+	if ( $del ) {
+		$Query  = "delete from cv_offre ";
+		$Query .= "where _IDoffre = '$del' ";
+		$Query .= ( $_SESSION["CnxAdm"] == 255 ) ? "" : "AND _IDuser = '".$_SESSION["CnxID"]."' " ;
+		$Query .= "limit 1";
+
+		mysql_query($Query, $mysql_link);
+		}
+?>
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($STAGE_LISTOFFER)); ?>
+	</div>
+</div>
+
+	<div class="maincontent">
+
+		<p style="margin-top:0px; text-align:justify;">
+		<?php print($msg->read($STAGE_DISCLAIMER2)); ?>
+		</p>
+
+		<form id="selection" action="" method="post">
+
+		<?php
+			// lecture des droits
+			$Query  = "select _IDmod, _IDgrpwr, _IDgrprd from stage_data ";
+			$Query .= "where _visible = 'O' AND _mod = '$cmde' ";
+			$Query .= "limit 1";
+
+			$result = mysql_query($Query, $mysql_link);
+			$row    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+			// vérification des autorisations
+			verifySessionAccess($row[0], $row[2]);
+
+			$IDmod  = $row[0];
+
+			// autorisation d'écrire une offre
+			if ( $_SESSION["CnxAdm"] == 255 OR $IDmod == $_SESSION["CnxID"] OR ($row[1] & pow(2, $_SESSION["CnxGrp"] -1)) )
+				print("
+			            <table class=\"width100\">
+		      	        <tr>
+			                <td style=\"width:10%;\" class=\"valign-middle\">
+			                	<a href=\"index.php?item=$item&amp;cmde=new\"><img src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/post.gif\" title=\"\" alt=\"\" /></a>
+			                </td>
+			                <td class= \"valign-middle\">". $msg->read($STAGE_CREATOFFER) ."</td>
+			              </tr>
+			            </table>
+			            ");
+
+			// entreprise
+			$label0  = "<select style=\"font-size: 9px;\" onchange=\"document.forms.selection.submit()\" name=\"IDalpha\">";
+			$label0 .= "<option value=\"\">". $msg->read($STAGE_MYCOMPANY) ."</option>";
+
+			// accès par ordre alphabétique
+			$alpha   = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
+			for ($i = 0; $i < 25; $i++)
+				if ( $IDalpha == $alpha[$i] )
+					$label0 .= "<option selected=\"selected\" value=\"$alpha[$i]\">$alpha[$i]*</option>";
+				else
+					$label0 .= "<option value=\"$alpha[$i]\">$alpha[$i]*</option>";
+
+			$label0 .= "</select>";
+
+			// lecture des postes
+			$label1  = "<select style=\"font-size: 9px;\" onchange=\"document.forms.selection.submit()\" name=\"IDposte\">";
+
+			$query   = "select _IDposte, _ident from cv_poste ";
+			$query  .= "where _lang = '".$_SESSION["lang"]."' ";
+			$query  .= "order by _IDposte";
+
+			$result  = mysql_query($query, $mysql_link);
+			$row     = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+			$label1 .= "<option value=\"0\">". $msg->read($STAGE_JOB) ."</option>";
+
+			while ( $row ) {
+				if ( $IDposte == $row[0] )
+					$label1 .= "<option selected=\"selected\" value=\"$row[0]\">$row[1]</option>";
+				else
+					$label1 .= "<option value=\"$row[0]\">$row[1]</option>";
+
+				$row = remove_magic_quotes(mysql_fetch_row($result));
+				}
+
+			$label1 .= "</select>";
+
+			// lecture des régions
+			$label2  = "<select style=\"font-size: 9px;\" onchange=\"document.forms.selection.submit()\" name=\"IDregion\">";
+
+			$query  = "select _IDregion, _ident from cv_region ";
+			$query .= "where _lang = '".$_SESSION["lang"]."' ";
+			$query .= "order by _IDregion";
+
+			$result = mysql_query($query, $mysql_link);
+			$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+			$label2 .= "<option value=\"0\">". $msg->read($STAGE_REGION) ."</option>";
+
+			while ( $row ) {
+				if ( $IDregion == $row[0] )
+					$label2 .= "<option selected=\"selected\" value=\"$row[0]\">$row[1]</option>";
+				else
+					$label2 .= "<option value=\"$row[0]\">$row[1]</option>";
+
+				$row = remove_magic_quotes(mysql_fetch_row($result));
+				}
+
+			$label2 .= "</select>";
+
+			// lecture des contrats
+			$label3  = "<select style=\"font-size: 9px;\" onchange=\"document.forms.selection.submit()\" name=\"IDcontrat\">";
+
+			$query  = "select _IDcontrat, _ident from cv_contrat ";
+			$query .= "where _lang = '".$_SESSION["lang"]."' ";
+			$query .= "order by _ident";
+
+			$result = mysql_query($query, $mysql_link);
+			$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+			$label3 .= "<option value=\"0\">". $msg->read($STAGE_CONTRACT) ."</option>";
+
+			while ( $row ) {
+				if ( $IDcontrat == $row[0] )
+					$label3 .= "<option selected=\"selected\" value=\"$row[0]\">$row[1]</option>";
+				else
+					$label3 .= "<option value=\"$row[0]\">$row[1]</option>";
+
+				$row = remove_magic_quotes(mysql_fetch_row($result));
+				}
+
+			$label3 .= "</select>";
+
+			// entête tableau
+			print("
+		            <table class=\"width100\">
+		              <tr style=\"background-color:#c0c0c0;\">
+		                <td class=\"align-center\" style=\"width:10%;\">". $msg->read($STAGE_DATE) ."</td>
+		                <td class=\"align-left\" style=\"width:30%;\">$label0</td>
+		                <td class=\"align-left\" style=\"width:30%;\">$label1</td>
+		                <td class=\"align-center\" style=\"width:10%;\">$label2</td>
+		                <td class=\"align-center\" style=\"width:10%;\">$label3</td>
+		                <td class=\"align-center\" style=\"width:10%;\">". $msg->read($STAGE_HIT) ."</td>
+		              </tr>
+		              ");
+
+			//---- lecture de la base de données ----
+			$poste  = filter($IDposte);
+			$region = filter($IDregion);
+
+			$Query  = "select cv_offre._IDoffre, cv_offre._date, cv_offre._titre, cv_offre._IDregion, cv_offre._IDcontrat, cv_offre._IDuser, cv_offre._IP, cv_offre._IDposte, cv_offre._IDsociete, cv_offre._vus ";
+			$Query .= "from cv_offre ";
+			$Query .= ( $IDalpha ) ? ", stage_lieu " : "" ;
+			$Query .= "where cv_offre._visible = 'O' ";
+			$Query .= ( $IDalpha ) ? "AND stage_lieu._societe like '$IDalpha%' AND stage_lieu._IDlieu = cv_offre._IDsociete " : "" ;
+			$Query .= ( $IDsociete ) ? "AND cv_offre._IDsociete = '$IDsociete' " : "" ;
+			$Query .= ( $IDposte ) ? "AND (cv_offre._IDposte >= '$poste[0]' AND cv_offre._IDposte < '$poste[1]') " : "" ;
+			$Query .= ( $IDregion ) ? "AND (cv_offre._IDregion >= '$region[0]' AND cv_offre._IDregion < '$region[1]') " : "" ;
+			$Query .= ( $IDcontrat ) ? "AND cv_offre._IDcontrat = '$IDcontrat' " : "" ;
+			$Query .= "order by _date desc";
+
+			// détermination du nombre de pages
+			$result = mysql_query($Query, $mysql_link);
+			$nbelem = ( $result ) ? mysql_affected_rows($mysql_link) : 0 ;
+
+			$page   = $nbelem;
+			$show   = 1;
+
+			if ( $nbelem ) {
+				$page  = ( $page % $MAXPAGE )
+					? (int) ($page / $MAXPAGE) + 1
+					: (int) ($page / $MAXPAGE) ;
+
+				$show  = ( $page % $MAXSHOW )
+					? (int) ($page / $MAXSHOW) + 1
+					: (int) ($page / $MAXSHOW) ;
+
+				// initialisation
+				$i     = 1;
+				$first = 1 + (($skpage - 1) * $MAXPAGE);
+
+				// se positionne sur la page ad hoc
+				mysql_data_seek($result, $first - 1);
+				$row   = remove_magic_quotes(mysql_fetch_row($result));
+
+				while ( $row AND $i <= $MAXPAGE ) {
+					$bgcol = ( $i++ % 2 ) ? "item" : "menu" ;
+
+					// lecture de l'auteur du CV
+					$who   = $msg->read($STAGE_BY) ." ". getUserName($row[5]);
+
+					// lecture de l'adresse IP
+					$who  .= " " . _getHostName($row[6]);
+
+					// raison sociale
+					$query  = "select _societe from stage_lieu ";
+					$query .= "where _IDlieu = '$row[8]' ";
+					$query .= "limit 1";
+
+					$return = mysql_query($query, $mysql_link);
+					$name   = ( $return ) ? remove_magic_quotes(mysql_fetch_row($return)) : 0 ;
+
+					// lecture du poste
+					$query  = "select _ident from cv_poste ";
+					$query .= "where _IDposte = '$row[7]' ";
+					$query .= "AND _lang = '".$_SESSION["lang"]."' ";
+					$query .= "limit 1";
+
+					$return = mysql_query($query, $mysql_link);
+					$myrow  = ( $return ) ? remove_magic_quotes(mysql_fetch_row($return)) : 0 ;
+
+					$ident  = trim(str_replace("-", "", $myrow[0]));
+
+					// lecture de la région
+					$query  = "select _ident from cv_region ";
+					$query .= "where _IDregion = '$row[3]' ";
+					$query .= "AND _lang = '".$_SESSION["lang"]."' ";
+					$query .= "limit 1";
+
+					$return = mysql_query($query, $mysql_link);
+					$region = ( $return ) ? remove_magic_quotes(mysql_fetch_row($return)) : 0 ;
+
+					// lecture du contrat
+					$query  = "select _ident from cv_contrat ";
+					$query .= "where _IDcontrat = '$row[4]' ";
+					$query .= "AND _lang = '".$_SESSION["lang"]."' ";
+					$query .= "limit 1";
+
+					$return = mysql_query($query, $mysql_link);
+					$job    = ( $return ) ? remove_magic_quotes(mysql_fetch_row($return)) : 0 ;
+
+					// pour savoir qui a lu les offres
+					$lien   = ( $row[9] )
+						? "<a href=\"#\" onclick=\"popWin('".$_SESSION["ROOTDIR"]."/user_list.php?sid=".$_SESSION["sessID"]."&amp;IDitem=-$row[0]&cmde=cv&lang=".$_SESSION["lang"]."', '450', '200'); return false;\">$row[9]</a>"
+						: "0" ;
+
+					// mise à jour
+					$update = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $row[5] )
+						? "<a href=\"".myurlencode("index.php?item=$item&cmde=new&IDoffre=$row[0]&skpage=$skpage&skshow=$skshow")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/modify.gif\" title=\"". $msg->read($STAGE_UPDATING) ."\" alt=\"\" /></a>"
+						: "" ;
+
+					// suppression
+					$delete = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $row[5] )
+						? "<a href=\"".myurlencode("index.php?item=$item&cmde=$cmde&del=$row[0]&skpage=$skpage&skshow=$skshow")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/corb.gif\" title=\"". $msg->read($STAGE_DELETE) ."\" alt=\"\" /></a>"
+						: "" ;
+
+					// accès protégé en lecture
+					print("
+						<tr class=\"$bgcol\">
+			       	        <td class=\"align-center\">". date2longfmt($row[1], "ma") ."<br />$update $delete</td>
+			       	        <td class=\"align-left\">
+
+
+
+							<a href=\"".myurlencode("index.php?item=$item&cmde=visu&IDlieu=$row[0]")."\">$name[0]</a>
+			       	        </td>
+			       	        <td class=\"align-left\">
+
+
+
+							<a href=\"".myurlencode("index.php?item=$item&cmde=offre&IDoffre=$row[0]&skpage=$skpage&skshow=$skshow")."\">$ident</a><br/>
+							<span class=\"x-small\">$who</span>
+			       	        </td>
+			       	        <td class=\"align-center\">". trim(str_replace("-", "", $region[0])) ."</td>
+   	   		   			  <td class=\"align-center\">$job[0]</td>
+   	   		   			  <td class=\"align-center\">$lien</td>
+						</tr>
+       					");
+
+					$row = remove_magic_quotes(mysql_fetch_row($result));
+					}	// endwhile ressource
+				}	// endif nbelem
+					
+			print("
+           			</table>
+				");
+
+			// bouton précédent
+			$where = $skshow - 1;
+
+			if ( $skshow == 1 )
+				$prev = "";
+			else {
+				$skpg = 1 + (($skshow - 2) * $MAXSHOW);
+				$prev = "[<a href=\"".myurlencode("index.php?item=$item&skpage=$skpg&skshow=$where")."\">". $msg->read($STAGE_PREV) ."</a>]";
+				}
+
+			// liens directs sur n° de page
+			$start = 1 + (($skshow - 1) * $MAXSHOW);
+			$end   = $skshow * $MAXSHOW;
+
+			$choix = ( $skpage == $start )
+				? "<img src=\"".$_SESSION["ROOTDIR"]."/images/nav_left.gif\" title=\"«\" alt=\"«\" /><strong>$start</strong><img src=\"".$_SESSION["ROOTDIR"]."/images/nav_right.gif\" title=\"»\" alt=\"»\" />"
+				: "<a href=\"".myurlencode("index.php?item=$item&skpage=$start&skshow=$skshow")."\">$start</a>" ;
+
+			for ($j = $start + 1; $j <= $end AND $j <= $page; $j++)
+				$choix .= ( $skpage == $j )
+					? "|<img src=\"".$_SESSION["ROOTDIR"]."/images/nav_left.gif\" title=\"«\" alt=\"«\" /><strong>$j</strong><img src=\"".$_SESSION["ROOTDIR"]."/images/nav_right.gif\" title=\"»\" alt=\"»\" />"
+					: "|<a href=\"".myurlencode("index.php?item=$item&skpage=$j&skshow=$skshow")."\">$j</a>" ;
+
+			// bouton suivant
+			$where = $skshow + 1;
+			$next = ( $skshow == $show )
+				? ""
+				: "[<a href=\"".myurlencode("index.php?item=$item&skpage=$j&skshow=$where")."\">". $msg->read($STAGE_NEXT) ."</a>]" ;
+		?>
+
+		</form>
+
+		<hr/>
+
+		<?php if ( $nbelem ) print("<div style=\"text-align:center;\">$prev $choix $next</div>"); ?>
+
+	</div>

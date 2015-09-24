@@ -1,0 +1,416 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2002-2007 by Dominique Laporte(C-E-D@wanadoo.fr)
+   Copyright (c) 2006 by Nordine Zetoutou (nordine.zetoutou@educagri.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : page_search.htm
+ *		projet   : la page de recherche
+ *
+ *		version  : 1.0
+ *		auteur   : laporte
+ *		creation : 10/11/02
+ *		modif    : 17/07/06 - Nordine Zetoutou
+ * 	                 migration des balises HTML en XHTML 1.0 strict
+ */
+
+
+$IDflash = ( @$_POST["IDflash"] )		// ID du flash info
+	? (int) $_POST["IDflash"]
+	: (int) @$_GET["IDflash"] ;
+$IDcat   = ( @$_POST["IDcat"] )		// ID de la catégorie
+	? (int) $_POST["IDcat"]
+	: (int) @$_GET["IDcat"] ;
+$IDres   = ( @$_POST["IDres"] )		// ID de la ressource
+	? (int) $_POST["IDres"]
+	: (int) @$_GET["IDres"] ;
+$IDmat   = ( @$_POST["IDmat"] )		// ID de la matière/formation
+	? (int) $_POST["IDmat"]
+	: (int) @$_GET["IDmat"] ;
+$IDdata  = ( @$_POST["IDdata"] )		// ID de la matière
+	? (int) $_POST["IDdata"]
+	: (int) @$_GET["IDdata"] ;
+$IDforum = ( @$_POST["IDforum"] )		// ID du forum
+	? (int) $_POST["IDforum"]
+	: (int) @$_GET["IDforum"] ;
+$IDgal   = ( @$_POST["IDgal"] )		// ID de la galerie
+	? (int) $_POST["IDgal"]
+	: (int) @$_GET["IDgal"] ;
+$IDpost  = ( @$_POST["IDpost"] )		// ID du post-it
+	? (int) $_POST["IDpost"]
+	: (int) @$_GET["IDpost"] ;
+$IDgroup = ( @$_POST["IDgroup"] )		// ID du e-groupe
+	? (int) $_POST["IDgroup"]
+	: (int) @$_GET["IDgroup"] ;
+
+$words   = @$_POST["words"];			// texte à chercher...
+$subject = @$_POST["subject"];		// dans le sujet
+$texte   = @$_POST["texte"];			// dans le message
+$rb      = @$_POST["rb"];			// tri par date
+$xrb     = @$_POST["xrb"];			// mot exact ou non
+$nbmsg   = @$_POST["nbmsg"];			// limite de la recherche
+
+$rub     = ( @$_POST["rub"] )			// n° de rubrique
+	? $_POST["rub"]
+	: (@$_GET["rub"] ? $_GET["rub"] : 3) ;
+?>
+
+
+<?php
+	// rubriques
+	switch ( $rub ) {
+		case 1 :	// flash-infos
+		case 5 :	// publications
+			$field1 = ( $rub == 1 ) ? $message->read($PAGE_INFOFLASH) : $message->read($PAGE_ARTICLE) ;
+			$field2 = ( !$IDcat ) 
+				? (($rub == 1)
+					? "<option value=\"0\">".$message->read($PAGE_ALLFLASH)."</option>" 
+					: "<option value=\"0\">".$message->read($PAGE_ALLARTICLE)."</option>" 
+					)
+				: "" ;
+			$field3 = $message->read($PAGE_TITLE);
+			$field4 = $message->read($PAGE_TEXT);
+			$field5 = ( $rub == 1 ) ? $message->read($PAGE_INFOFLASH) : $message->read($PAGE_ARTICLE) ;
+
+			$Query  = "select _IDflash, _title from flash ";
+			$Query .= "where _visible = 'O' ";
+			$Query .= ( $IDflash ) ? "AND _IDflash = '$IDflash' " : "" ;
+			$Query .= ( $rub == 1 ) ? "AND _type = 'F' " : "AND _type = 'P' " ;
+			$Query .= "AND (_IDgrprd & ".pow(2, $_SESSION["CnxGrp"] - 1).") ";
+			$Query .= "order by _title asc";
+			break;
+
+		case 2 :	// ressources
+			$field1 = $message->read($PAGE_RESOURCE);
+			$field2 = ( !$IDcat ) ? "<option value=\"0\"> ".$message->read($PAGE_RESOURCE)." </option>" : "" ;
+			$field3 = $message->read($PAGE_TITLE);
+			$field4 = $message->read($PAGE_DESCRIPTION);
+			$field5 = $message->read($PAGE_RESOURCE);
+
+			$Query  = "select _IDcat, _nom from resource_data ";
+			$Query .= "where _visible = 'O' ";
+			$Query .= "AND _IDres = '$IDres' ";
+			$Query .= ( $IDcat ) ? "AND _IDcat = '$IDcat' " : "" ;
+			$Query .= "AND (_IDgrprd & ".pow(2, $_SESSION["CnxGrp"] -1).") ";
+			$Query .= "order by _nom asc";
+			break;
+
+		case 3 :	// forums
+			$field1 = $message->read($PAGE_FORUM);
+			$field2 = ( !$IDforum ) ? "<option value=\"0\">".$message->read($PAGE_FORUM)."</option>" : "" ;
+			$field3 = $message->read($PAGE_SUBJECT);
+			$field4 = $message->read($PAGE_MESSAGE);
+			$field5 = $message->read($PAGE_FORUM);
+
+			$Query  = "select _IDforum, _title from forum_data ";
+			$Query .= "where _visible = 'O' AND _lang = '".$_SESSION["lang"]."' " ;
+			$Query .= ( $IDforum ) ? "AND _IDforum = '$IDforum' " : "" ;
+			$Query .= "AND (_IDgrprd & ".pow(2, $_SESSION["CnxGrp"] -1).") ";
+			$Query .= "order by _title asc";
+			break;
+
+		case 4 :	// galeries
+			$field1 = $message->read($PAGE_GALLERY);
+			$field2 = ( !$IDgal ) ? "<option value=\"0\">".$message->read($PAGE_GALLERY)."</option>" : "" ;
+			$field3 = $message->read($PAGE_GALLERYDESC);
+			$field4 = $message->read($PAGE_IMAGEDESC);
+			$field5 = $message->read($PAGE_GALLERY);
+
+			$Query  = "select _IDdata, _title from gallery_data ";
+			$Query .= "where _visible = 'O' " ;
+			$Query .= ( $IDgal ) ? "AND _IDgal = '$IDgal' " : "" ;
+			$Query .= "AND (_IDgrprd & ".pow(2, $_SESSION["CnxGrp"] -1).") ";
+			$Query .= "order by _title asc";
+			break;
+
+		case 6 :	// post-it
+			$field1 = $message->read($PAGE_POSTIT);
+			$field2 = ( !$IDpost ) ? "<option value=\"0\">".$message->read($PAGE_POSTIT)."</option>" : "" ;
+			$field3 = $message->read($PAGE_SUBJECT);
+			$field4 = $message->read($PAGE_MESSAGE);
+			$field5 = $message->read($PAGE_POSTIT);
+
+			$Query  = "select _IDpost from postit_items ";
+			$Query .= "where _visible = 'O' " ;
+			break;
+
+		case 7 :	// réservations
+			$field1 = $message->read($PAGE_BOOKING);
+			$field2 = ( !$IDres ) ? "<option value=\"0\">".$message->read($PAGE_ALLBOOKING)."</option>" : "" ;
+			$field3 = $message->read($PAGE_SUBJECT);
+			$field4 = $message->read($PAGE_MESSAGE);
+			$field5 = $message->read($PAGE_BOOKING);
+
+			$Query  = "select _IDres, _titre from reservation ";
+			$Query .= "where _visible = 'O' " ;
+			break;
+
+		case 8 :	// agendas
+			$field1 = $message->read($PAGE_DIARY);
+			$field2 = "";
+			$field3 = $message->read($PAGE_SUBJECT);
+			$field4 = $message->read($PAGE_EVENT);
+			$field5 = $message->read($PAGE_DIARY);
+
+			$Query  = "select _IDdata, _titre from agenda ";
+			$Query .= "where _visible = 'O' " ;
+			$Query .= "AND _private = '0' ";
+			$Query .= ( $_SESSION["CnxAdm"] == 255 ) ? "" : "AND (_IDgrprd & ".pow(2, $_SESSION["CnxGrp"] - 1).") " ;
+			$Query .= "order by _IDdata";
+			break;
+
+		case 9 :	// cours
+			$field1 = $message->read($PAGE_COURSE);
+			$field2 = "<option value=\"0\">&nbsp;</option>";
+			$field3 = $message->read($PAGE_TITLE);
+			$field4 = $message->read($PAGE_DESCRIPTION);
+			$field5 = $message->read($PAGE_COURSE);
+
+			$Query  = "select _IDclass, _ident from campus_classe ";
+			$Query .= "where _visible = 'O' ";
+			$Query .= "order by _ident";
+			break;
+
+		default :
+			break;
+		}			
+?>
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($PAGE_RESEARCH)); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+
+		<form id="formulaire" action="index.php" method="post">
+		<?php
+			print("
+				<p class=\"hidden\"><input type=\"hidden\" name=\"item\"  value=\"$item\" /></p>
+				<p class=\"hidden\"><input type=\"hidden\" name=\"cmde\"  value=\"find\" /></p>
+				<p class=\"hidden\"><input type=\"hidden\" name=\"rub\"   value=\"$rub\" /></p>
+				");
+
+			switch ( $rub ) {
+				case 1 :	// flash-infos
+				case 5 :	// publications
+					$form_name = "IDflash";
+					break;
+
+				case 2 :	// ressources
+					print("
+						<p class=\"hidden\"><input type=\"hidden\" name=\"IDres\"  value=\"$IDres\" /></p>
+						<p class=\"hidden\"><input type=\"hidden\" name=\"IDmat\"  value=\"$IDmat\" /></p>
+						");
+					$form_name = "IDmat";
+					break;
+
+				case 3 :	// forums
+					print("
+						<p class=\"hidden\"><input type=\"hidden\" name=\"IDgroup\" value=\"$IDforum\" /></p>
+						<p class=\"hidden\"><input type=\"hidden\" name=\"IDforum\" value=\"$IDforum\" /></p>
+						");
+					$form_name = "IDforum";
+					break;
+
+				case 4 :	// galeries
+					print("
+						<p class=\"hidden\"><input type=\"hidden\" name=\"IDgal\" value=\"$IDgal\" /></p>
+						");
+					$form_name = "IDgal";
+					break;
+
+				case 6 :	// post-it
+					print("
+						<p class=\"hidden\"><input type=\"hidden\" name=\"IDpost\" value=\"$IDpost\" /></p>
+						");
+					$form_name = "IDpost";
+					break;
+
+				case 7 :	// réservation
+					print("
+						<p class=\"hidden\"><input type=\"hidden\" name=\"IDres\" value=\"$IDres\" /></p>
+						");
+					$form_name = "IDres";
+					break;
+
+
+				case 8 :	// agendas
+					print("
+						<p class=\"hidden\"><input type=\"hidden\" name=\"IDdata\" value=\"$IDdata\" /></p>
+						");
+					$form_name = "IDdata";
+					break;
+
+				case 9 :	// cours
+					print("
+						<p class=\"hidden\"><input type=\"hidden\" name=\"IDmat\"  value=\"$IDmat\" /></p>
+						<p class=\"hidden\"><input type=\"hidden\" name=\"IDdata\" value=\"$IDdata\" /></p>
+						");
+					$form_name = "IDcat";
+					break;
+
+				default :
+					break;
+				}
+		?>
+
+        <table class="width100">
+          <tr>
+            <td style="width:30%;" class="align-right"><?php print($message->read($PAGE_TXT2SEARCH)); ?></td>
+            <td  style="width:70%;">
+			<label for="words"><input type="text" id="words" name="words" size="30" /></label>
+			<img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/loupe.gif" title="<?php print($message->read($PAGE_SEARCH)); ?>" alt="<?php print($message->read($PAGE_SEARCH)); ?>" />
+		</td>
+          </tr>
+
+          <tr>
+            <td style="width:100%;" class="align-center" colspan="2">
+              <hr style="width:80%;" />
+            </td>
+          </tr>
+
+          <tr>
+            <td class="align-right"><strong><?php print("$field1"); ?> :</strong></td>
+            <td>
+              <?php
+			print("<label for=\"search_$form_name\">");
+			print("<select id=\"search_$form_name\" name=\"$form_name\">");
+
+			// initialisation du menu déroulant
+              	print("$field2");
+              	
+			// on complète le menu déroulant
+			$result = mysql_query($Query, $mysql_link);
+			$row    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+						
+			while ( $row ) {
+				print("<option value=\"$row[0]\">".str_replace($keywords_search, $keywords_replace, $row[1])."</option>");
+
+				$row = mysql_fetch_row($result);
+				}
+
+			print("</select> <img src=\"".$_SESSION["ROOTDIR"]."/images/forums.gif\" title=\"\" alt=\"\" />");
+			print("</label>");
+              ?>
+            </td>
+          </tr>
+
+          <tr>
+            <td class="align-right valign-top"><?php print($message->read($PAGE_LOOKINTO)); ?></td>
+            <td>
+			<label for="subject"><input type="checkbox" id="subject" name="subject" value="ON" checked="checked" /><?php print("$field3"); ?></label>
+			<label for="texte"><input type="checkbox" id="texte" name="texte" value="ON" /><?php print("$field4"); ?></label>
+            </td>
+          </tr>
+
+          <tr>
+            <td class="align-right valign-top"><?php print($message->read($PAGE_SORTBYDATE)); ?></td>
+            <td>
+              <label for="rb_1"><input type="radio" id="rb_1" name="rb" value="1" checked="checked" /> <?php print($message->read($PAGE_DOWN)); ?></label><br/>
+              <label for="rb_2"><input type="radio" id="rb_2" name="rb" value="2" /> <?php print($message->read($PAGE_UP)); ?></label>
+            </td>
+          </tr>
+
+          <tr>
+            <td class="align-right valign-top"><?php print($message->read($PAGE_MYTEXT)); ?></td>
+            <td>
+              <label for="xrb_1"><input type="radio" id="xrb_1" name="xrb" value="1" checked="checked" /> <?php print($message->read($PAGE_INCLUDE)); ?></label><br/>
+              <label for="xrb_2"><input type="radio" id="xrb_2" name="xrb" value="2" /> <?php print($message->read($PAGE_EXACTLY)); ?></label>
+            </td>
+          </tr>
+
+          <tr>
+            <td class="align-right"><?php print($message->read($PAGE_PRINT)); ?></td>
+            <td>
+              <label for="nbmsg">&nbsp;<input type="text" id="nbmsg" name="nbmsg" size="5" value="20" /> <?php print($message->read($PAGE_FIRSTMSG)); ?></label>
+            </td>
+          </tr>
+        </table>
+        
+	<hr style="width:80%;" />
+
+        <table class="width100">
+          <tr>
+		    <td style="width:10%;" class="valign-middle align-center">
+			<?php print("<input type=\"image\" src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/valid.gif\" name=\"valid\" alt=\"".$msg->read($PAGE_INPUTOK)."\" />"); ?>
+		    </td>
+	          <td class="valign-middle">
+			<?php print($message->read($PAGE_LUNCHSEARCH)); ?>
+		    </td>
+	       </tr>
+
+	       <tr>
+	          <td class="valign-middle align-center">
+             	<?php
+             		switch ( $rub ) {
+             			case 1 :	// flash-infos
+	             			print("<a href=\"index.php?item=0\">");
+             				break;
+
+					case 5 :	// publications
+	             			print("<a href=\"index.php?item=6\">");
+             				break;
+
+             			case 2 :	// ressources
+	             			print("<a href=\"index.php?item=31&amp;IDres=$IDres\">");
+             				break;
+
+					case 3 :	// forums
+	             			print("<a href=\"index.php?item=3&amp;IDgroup=$IDgroup\">");
+						break;
+
+					case 4 :	// galeries
+	             			print("<a href=\"index.php?item=5\">");
+						break;
+
+					case 6 :	// post-it
+	             			print("<a href=\"index.php?item=4\">");
+						break;
+
+					case 7 :	// réservation
+	             			print("<a href=\"index.php?item=10\">");
+						break;
+
+
+					case 8 :	// agendas
+	             			print("<a href=\"index.php?item=8\">");
+						break;
+
+					case 9 :	// cours
+	             			print("<a href=\"index.php?item=33&amp;IDmat=$IDmat&amp;IDdata=$IDdata\">");
+						break;
+
+					default :
+						break;
+					}
+
+             		print("<img src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/cancel.gif\" title=\"\" alt=\"".$msg->read($PAGE_INPUTCANCEL)."\" /></a>");
+             	?>
+		    </td>
+	          <td class="valign-middle"><?php print($message->read($PAGE_BACKTO, $field5)); ?></td>
+	       </tr>
+	     </table>
+        
+      </form>
+      
+</div>

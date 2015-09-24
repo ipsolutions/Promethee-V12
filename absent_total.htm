@@ -1,0 +1,368 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2009 by Dominique Laporte(C-E-D@wanadoo.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : absent_total.htm
+ *		projet   : la page de visualisation des récapitulatifs des absences individuelles des élèves
+ *
+ *		version  : 1.0
+ *		auteur   : laporte
+ *		creation : 21/02/09
+ *		modif    : 
+ */
+
+
+$IDcentre  = ( @$_POST["IDcentre"] )			// Identifiant du centre
+	? (int) $_POST["IDcentre"]
+	: (int) (@$_GET["IDcentre"] ? $_GET["IDcentre"] : $_SESSION["CnxCentre"]) ;
+$IDeleve   = ( @$_POST["IDeleve"] )			// Identifiant de l'élève
+	? (int) $_POST["IDeleve"]
+	: (int) (@$_GET["IDeleve"] ? $_GET["IDeleve"] : @$IDeleve) ;
+
+$IDgroup   = ( @$_POST["IDgroup"] )			// Identifiant du groupe
+	? (int) $_POST["IDgroup"]
+	: (int) @$_GET["IDgroup"] ;
+$name      = ( @$_POST["name"] )			// nom alpha
+	? $_POST["name"]
+	: @$_GET["name"] ;
+$IDclass   = ( @$_POST["IDclass"] )			// Identifiant de la classe
+	? (int) $_POST["IDclass"]
+	: (int) @$_GET["IDclass"] ;
+$year      = ( @$_POST["year"] )
+	? (int) $_POST["year"]
+	: (int) date("Y") ;
+$IDmotif   = (int) @$_POST["IDmotif"];		// Identifiant motif absence
+$abs_idmat = (int) @$_POST["abs_idmat"];		// Identifiant matière
+
+$submit    = ( @$_POST["valid_x"] )			// bouton validation
+	? $_POST["valid_x"]
+	: @$_GET["submit"] ;
+//---------------------------------------------------------------------------
+?>
+
+
+<?php
+	// lecture des droits
+	$Query  = "select _IDmod, _IDgrprd, _IDgrpwr from absent ";
+	$Query .= "where _IDcentre = '".$_SESSION["CnxCentre"]."' AND _IDgrp = '1' ";
+	$Query .= "limit 1";
+
+	$result = mysql_query($Query, $mysql_link);
+	$auth   = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+	// vérification des autorisations
+	verifySessionAccess($auth[0], $auth[1]);
+
+	$IDeleve = ( getAccess() == 2 ) ? $IDeleve : $_SESSION["CnxID"] ;
+
+	// lecture du compte élève
+	if ( $IDeleve ) {
+		$Query  = "select distinctrow user_id._IDcentre from campus_classe, user_id ";
+		$Query .= "where user_id._ID = '$IDeleve' AND user_id._IDgrp = '1' ";
+		$Query .= "AND user_id._IDclass = campus_classe._IDclass";
+
+		$result = mysql_query($Query, $mysql_link);
+		$row    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+		$IDcentre = $row[0];
+		}
+?>
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($ABSENT_LIST)); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+
+	<form id="formulaire" action="index.php" method="post">
+	<?php
+		print("
+			<p class=\"hidden\"><input type=\"hidden\" name=\"item\"     value=\"$item\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"cmde\"     value=\"$cmde\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"IDeleve\"  value=\"$IDeleve\" /></p>
+			");
+	?>
+
+	<table class="width100">
+	  <tr>
+		<td style="width:50%;" class="align-right">
+			<?php print($msg->read($ABSENT_CHOOSECENTER)); ?>
+		</td>
+		<td style="width:50%;">
+			<label for="IDcentre">
+			<select id="IDcentre" name="IDcentre" onchange="document.forms.formulaire.submit()">
+			<?php
+				// lecture des centres constitutifs
+				$query  = "select _IDcentre, _ident from config_centre ";
+				$query .= "where _visible = 'O' AND _lang = '".$_SESSION["lang"]."' ";
+				$query .= "order by _IDcentre";
+
+				$result = mysql_query($query, $mysql_link);
+				$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+				while ( $row ) {			
+					printf("<option value=\"$row[0]\" %s>$row[1]</option>", ($IDcentre == $row[0]) ? "selected=\"selected\"" : "");
+
+					$row = remove_magic_quotes(mysql_fetch_row($result));
+					}				
+			?>
+			</select> <img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/home.gif" title="" alt="" />
+			</label>
+		</td>
+	  </tr>
+	  </table>
+	</form>
+
+	<hr style="width:80%;" />
+
+	<?php
+		print("
+		   <form id=\"selection\" action=\"index.php\" method=\"post\">
+			<p class=\"hidden\"><input type=\"hidden\" name=\"item\"     value=\"$item\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"cmde\"     value=\"$cmde\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"IDcentre\" value=\"$IDcentre\" /></p>
+
+			<table class=\"width100\">
+			  <tr style=\"background-color:#C0C0C0;\">
+	                <td class=\"align-left\" style=\"width:70%;\">
+				". $msg->read($ABSENT_NAME) ."
+				<label for=\"name\">
+			  	<select id=\"name\" name=\"name\" onchange=\"document.forms.selection.submit()\">
+			");
+
+		// accès par ordre alphabétique
+            $alpha = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
+		printf("<option value=\"\" %s>". $msg->read($ABSENT_ALL) ."</option>", ($name == "") ? "selected=\"selected\"" : "");
+		for ($i = 0; $i < 26; $i++)
+			printf("<option value=\"".$alpha[$i]."\" %s>".$alpha[$i]."</option>", ($alpha[$i] == $name) ? "selected=\"selected\"" : "");
+
+		print("
+			  	</select>
+			  	</label>
+				|
+			  	<label for=\"year\">
+			  	<select id=\"year\" name=\"year\" onchange=\"document.forms.selection.submit()\">");
+
+		// affichage des années
+		$query  = "select min(_date), max(_date) from absent_items";
+
+		$return = mysql_query($query, $mysql_link);
+		$row    = ( $return ) ? mysql_fetch_row($return) : 0 ;
+
+		$min    = ( $row[0] ) ? substr($row[0], 0, 4) : date("Y") ;
+		$max    = ( $row[1] ) ? substr($row[1], 0, 4) : date("Y") ;
+
+		for ($i = $min; $i <= $max; $i++)
+			printf("<option value=\"$i\" %s>$i</option>", ($year == $i) ? "selected=\"selected\"" : "");
+
+		print("
+			  	</select>
+			  	</label>
+				|
+				<label for=\"IDmotif\">
+	  			<select id=\"IDmotif\" name=\"IDmotif\"  onchange=\"document.forms.selection.submit()\">");
+
+			// liste des motifs de retard
+			$query  = "select _IDdata, _texte from absent_data ";
+			$query .= "where _visible = 'O' AND _lang = '".$_SESSION["lang"]."' ";
+			$query .= "order by _texte";
+
+			$result = mysql_query($query, $mysql_link);
+			$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+			print("<option value=\"0\">". stripHTMLTags($msg->read($ABSENT_MOTIF)) ."</option>");
+
+			while ( $row ) {		
+				printf("<option value=\"$row[0]\" %s>$row[1]</option>", ($IDmotif == $row[0]) ? "selected=\"selected\"" : "");
+
+				$row = remove_magic_quotes(mysql_fetch_row($result));
+				}
+
+		print("
+			  	</select>
+			  	</label>
+				|
+				<label for=\"abs_idmat\">
+	  			<select id=\"abs_idmat\" name=\"abs_idmat\" onchange=\"document.forms.selection.submit()\">");
+
+			$query  = "select _IDmat, _titre from campus_data ";
+			$query .= "where _visible = 'O' AND _lang = '".$_SESSION["lang"]."' ";
+			$query .= "order by _titre";
+
+			print("<option value=\"0\">". stripHTMLTags($msg->read($ABSENT_MATTER)) ."</option>");
+
+			$return = mysql_query($query, $mysql_link);
+			$row    = ( $return ) ? remove_magic_quotes(mysql_fetch_row($return)) : 0 ;
+
+			while ( $row ) {
+				printf("<option value=\"$row[0]\" %s>$row[1]</option>", ($abs_idmat == $row[0]) ? "selected=\"selected\"" : "");
+
+				$row = remove_magic_quotes(mysql_fetch_row($return));
+				}
+
+		print("
+			  	</select>
+			  	</label>
+	                </td>
+
+	                <td class=\"align-center\" style=\"width:15%;\">
+			  	<label for=\"IDclass\">
+			  	<select id=\"IDclass\" name=\"IDclass\" onchange=\"document.forms.selection.submit()\">
+			");
+
+		// affichage des classes
+		$Query  = "select _IDclass, _ident from campus_classe ";
+		$Query .= "where _IDcentre = '$IDcentre' ";
+		$Query .= "AND _visible = 'O' ";
+		$Query .= "order by _ident";
+
+		$result = mysql_query($Query, $mysql_link);
+		$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+		print("<option value=\"0\">". $msg->read($ABSENT_CHOOSECLASS) ."</option>");
+
+		while ( $row ) {			
+			printf("<option value=\"$row[0]\" %s>$row[1]</option>", ($IDclass == $row[0]) ? "selected=\"selected\"" : "");
+
+			$row = remove_magic_quotes(mysql_fetch_row($result));
+			}	// endwhile classe
+
+		print("
+			  	</select>
+			  	</label>
+	                </td>
+
+	                <td class=\"align-center\" style=\"width:15%;\">
+				<strong>". $msg->read($ABSENT_HALFDAY) ."</strong>
+	                </td>
+			  </tr>
+			");
+
+		// affichage des absences
+		$query  = "select distinctrow ";
+		$query .= "user_id._ID, user_id._name, user_id._fname, ";
+		$query .= "campus_classe._ident ";
+		$query .= "from user_id, absent_items, campus_classe ";
+		$query .= "where (absent_items._start >= '$year-01-01 00:00:00' AND absent_items._end <= '$year-12-31 23:59:59') " ;
+		$query .= "AND user_id._ID = absent_items._IDabs ";
+		$query .= "AND absent_items._IDctn ";
+		$query .= ( $IDmotif ) ? "AND absent_items._IDdata = '$IDmotif' " : "" ;
+		$query .= ( $name ) ? "AND user_id._name like '$name%' " : "" ;
+		$query .= ( getAccess() == 2 )
+			? ($IDclass ? "AND user_id._IDclass = '$IDclass' " : "")
+			: "AND user_id._IDclass = '".$_SESSION["CnxClass"]."' " ;
+		$query .= "AND user_id._IDclass = campus_classe._IDclass ";
+		$query .= "AND campus_classe._IDcentre = '$IDcentre' ";
+		$query .= ( $IDeleve ) ? "AND user_id._ID = '$IDeleve' " : "" ;
+		$query .= "order by user_id._name, user_id._fname asc";
+
+		$result = mysql_query($query, $mysql_link);
+		$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+		$i = 0;
+		while ( $row ) {
+			$bgcolor = ( $i % 2 ) ? "item" : "menu" ;
+
+			// recherche des absences / élèves
+			$query  = "select ";
+			$query .= "absent_items._IDabs, absent_items._start, absent_items._IDmod, absent_items._isok, absent_items._IDctn, absent_data._texte ";
+			$query .= "from user_id, absent_items, absent_data, campus_classe ";
+			$query .= "where (absent_items._start >= '$year-01-01 00:00:00' AND absent_items._end <= '$year-12-31 23:59:59') " ;
+			$query .= "AND user_id._ID = '$row[0]' ";
+			$query .= "AND user_id._ID = absent_items._IDabs ";
+			$query .= "AND absent_items._IDctn ";
+			$query .= ( $IDclass) ? "AND user_id._IDclass = '$IDclass' " : "" ;
+			$query .= "AND absent_data._IDdata = absent_items._IDdata ";
+			$query .= "AND absent_data._lang = '".$_SESSION["lang"]."' ";
+			$query .= "AND user_id._IDclass = campus_classe._IDclass ";
+			$query .= "AND campus_classe._IDcentre = '$IDcentre' ";
+			$query .= "order by absent_items._start desc";
+
+			$return = mysql_query($query, $mysql_link);
+			$myrow  = ( $return ) ? remove_magic_quotes(mysql_fetch_row($return)) : 0 ;
+			$nbrow  = ( $return ) ? mysql_affected_rows($mysql_link) : 0 ;
+
+			$mytext = "";
+
+			while ( $myrow ) {
+				// autorisation de rentrer en cours
+				$valid   = ( $myrow[3] == "0000-00-00 00:00:00" )
+					? "<img src=\"".$_SESSION["CfgPuce"]."\" title=\"\" alt=\"*\" />"
+					: "<img src=\"".$_SESSION["ROOTDIR"]."/images/certificate.png\" title=\"". $msg->read($ABSENT_ISOK, Array(date2longfmt($myrow[3]), getUserName($myrow[2], false))) ."\" alt=\"". $msg->read($ABSENT_ISOK, Array(date2longfmt($myrow[3]), getUserName($myrow[2], false))) ."\" />" ;
+
+				// recherche du cours
+				$query   = "select campus_data._titre from campus_data, ctn_items ";
+				$query  .= "where ctn_items._IDitem = '$myrow[4]' AND campus_data._IDmat = ctn_items._IDmat AND campus_data._lang = '".$_SESSION["lang"]."' ";
+				$query  .= ( $abs_idmat ) ? "AND campus_data._IDmat = '$abs_idmat' " : "" ;
+				$query  .= "limit 1";
+
+				$myret   = mysql_query($query, $mysql_link);
+				$mysql   = ( $myret ) ? remove_magic_quotes(mysql_fetch_row($myret)) : 0 ;
+				$course  = ( $mysql ) ? "($mysql[0])" : "" ;
+
+				$mytext .= ( $abs_idmat == 0 OR $course != "" )
+					? "<br/>$valid <strong>$myrow[5]</strong>, " . date2longfmt($myrow[1]) . " $course"
+					: "" ;
+
+				$myrow   = remove_magic_quotes(mysql_fetch_row($return));
+				}
+
+			if ( $abs_idmat == 0 OR $mytext != "" ) {
+				print("
+					<tr class=\"$bgcolor\">
+			                <td>
+						<a href=\"".myurlencode("index.php?item=38&cmde=account&ID=$row[2]")."\">$row[1] $row[2]</a>
+						$mytext
+					    </td>
+			                <td class=\"align-center\">$row[3]</td>
+			                <td class=\"align-center\">$nbrow</td>
+					</tr>");
+
+				$i++;
+				}
+
+			$row = remove_magic_quotes(mysql_fetch_row($result));
+			}
+
+		print("
+	              </table>
+	            </form>
+			");
+	?>
+
+	<hr />
+
+         <table class="width100">
+           <tr>
+              <td style="width:10%;" class="valign-middle align-center">
+              	<?php print("<a href=\"".myurlencode("index.php?item=$item&cmde=show&IDeleve=$IDeleve")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/cancel.gif\" title=\"\" alt=\"".$msg->read($ABSENT_INPUTCANCEL)."\" />"); ?></a>
+              </td>
+              <td class="valign-middle">
+              	<?php print($msg->read($ABSENT_GOBACK)); ?>
+              </td>
+           </tr>
+         </table>
+
+</div>

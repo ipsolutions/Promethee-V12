@@ -1,0 +1,1385 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2008-2009 by Dominique Laporte(C-E-D@wanadoo.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : admin_import.htm
+ *		projet   : la page de gestion des imports dans la base de données
+ *
+ *		version  : 1.0
+ *		auteur   : laporte
+ *		creation : 10/09/08
+ *		modif    : 
+ */
+
+
+$onglet = (	@$_POST["onglet"] )		// le n° de l'onglet
+	? (int) $_POST["onglet"]
+	: (int) @$_GET["onglet"] ;
+
+$submit = @$_POST["valid_x"];			// bouton de validation
+
+//$max_time = min(get_cfg_var("max_execution_time"), get_cfg_var("max_input_time"));
+
+//---------------------------------------------------------------------------
+function get_center($centre, $lang, $nbrec = 0)
+{
+// $centre, nom du centre
+// $lang, langue utilisée
+// $nbrec, n° enregistrement
+
+	require $_SESSION["ROOTDIR"]."/globals.php";
+
+	// lecture code centre
+	$query  = "select _IDcentre from config_centre ";
+	$query .= "where _ident = '$centre' AND _lang = '$lang' ";
+	$query .= "limit 1";
+
+	$return = mysql_query($query, $mysql_link);
+	$myrow  = ( $return ) ? mysql_fetch_row($return) : 0 ;
+
+	// si le centre n'existe pas on le crée
+	if ( $myrow[0] )
+		$idcentre = $myrow[0];
+	else
+		if ( $centre != "" ) {
+			$sql  = "insert into config_centre ";
+			$sql .= "values('".sql_getunique("config_centre")."', '$centre', '', '', '', '', '', 'O', '$lang')";
+
+			$idcentre = ( mysql_query($sql, $mysql_link) ) ? mysql_insert_id() : 0 ;
+			}
+		else
+			$idcentre = 0;
+
+	// on trace l'erreur
+	if ( !$idcentre )
+		mysql_query("insert into admin_log values ('', '0', 'SQL error: ($nbrec) ".addslashes($query)."')", $mysql_link);
+
+	return $idcentre;
+}
+//---------------------------------------------------------------------------
+function get_group($group, $idcat, $lang, $nbrec = 0)
+{
+// $group, nom du groupe
+// $idcat, catégorie du groupe
+// $lang, langue utilisée
+// $nbrec, n° enregistrement
+
+	require $_SESSION["ROOTDIR"]."/globals.php";
+
+	// lecture code classe
+	$query  = "select _IDgrp from user_group ";
+	$query .= "where _ident = '$group' AND _lang = '$lang' ";
+	$query .= "limit 1";
+
+	$return = mysql_query($query, $mysql_link);
+	$myrow  = ( $return ) ? mysql_fetch_row($return) : 0 ;
+
+	// si la classe n'existe pas on la crée
+	if ( $myrow[0] )
+		$idgroup = $myrow[0];
+	else
+		if ( $group != "" ) {
+			$sql  = "insert into user_group ";
+			$sql .= "values('".sql_getunique("user_group")."', '$group', '0000-00-00 00:00:00', '1024', '$idcat', 'O', '$lang')";
+
+			$idgroup = ( mysql_query($sql, $mysql_link) ) ? mysql_insert_id() : 0 ;
+			}
+		else
+			$idgroup = 0;
+
+	// on trace l'erreur
+	if ( !$idgroup )
+		mysql_query("insert into admin_log values ('', '0', 'SQL error: ($nbrec) ".addslashes($query)."')", $mysql_link);
+
+	return $idgroup;
+}
+//---------------------------------------------------------------------------
+function get_campus_class($class, $idcentre, $nbrec = 0)
+{
+// $class, nom de la classe
+// $idcentre, Id du centre
+// $nbrec, n° enregistrement
+
+	require $_SESSION["ROOTDIR"]."/globals.php";
+
+	// erreur
+	if ( !$idcentre )
+		return 0;
+
+	// lecture code classe
+	$query  = "select _IDclass from campus_classe ";
+	$query .= "where _ident = '$class' AND _IDcentre = '$idcentre' ";
+	$query .= "limit 1";
+
+	$return = mysql_query($query, $mysql_link);
+	$myrow  = ( $return ) ? mysql_fetch_row($return) : 0 ;
+
+	// si la classe n'existe pas on la crée
+	if ( $myrow[0] )
+		$idclass = $myrow[0];
+	else
+		if ( $class != "" ) {
+			$query   = "insert into campus_classe ";
+			$query  .= "values('', '0', '0', '255', '$idcentre', '$class', '', '0', '0', 'N', 'O', '', 'O')";
+
+			$idclass = ( mysql_query($query, $mysql_link) ) ? mysql_insert_id() : 0 ;
+			}
+		else
+			$idclass = 0;
+
+	// on trace l'erreur
+	if ( !$idclass )
+		mysql_query("insert into admin_log values ('', '0', 'SQL error: ($nbrec) ".addslashes($query)."')", $mysql_link);
+
+	return $idclass;
+}
+//---------------------------------------------------------------------------
+function get_stage_secteur($secteur, $lang)
+{
+// $secteur, intitulé du secteur
+// $lang, langue utilisée
+
+	require $_SESSION["ROOTDIR"]."/globals.php";
+
+	// erreur
+	if ( !strlen($secteur) )
+		return 0;
+
+	// lecture code secteur
+	$query  = "select _IDsecteur from stage_secteur ";
+	$query .= "where _ident = '$secteur' AND _lang = '$lang' ";
+	$query .= "limit 1";
+
+	$return = mysql_query($query, $mysql_link);
+	$myrow  = ( $return ) ? mysql_fetch_row($return) : 0 ;
+
+	// si le secteur n'existe pas on le crée
+	if ( $myrow[0] )
+		$idsecteur = $myrow[0];
+	else {
+		// lecture code secteur
+		$query  = "select _IDsecteur from stage_secteur ";
+		$query .= "where _lang = '$lang' ";
+
+		$return = mysql_query($query, $mysql_link);
+		$nbrow  = ( $return ) ? mysql_numrows($return) : 0 ;
+
+		$query  = "insert into stage_secteur ";
+		$query .= "values('', '$nbrow', '$secteur', 'N', 'O', '$lang')";
+
+		$idsecteur = ( mysql_query($query, $mysql_link) ) ? mysql_insert_id() : 0 ;
+		}
+
+
+	return $idsecteur;
+}
+//---------------------------------------------------------------------------
+function exist_student($name, $fname, $IDclass)
+{
+// $name, nom de l'élève
+// $fname, prénom de l'élève
+// $idclass, ID de la classe
+
+	require $_SESSION["ROOTDIR"]."/globals.php";
+
+	// lecture élève
+	$query   = "select _ID from user_id ";
+	$query  .= "where _name = '$name' AND _fname = '$fname' AND _IDclass = '$IDclass' ";
+	$query  .= "limit 1";
+
+	$return  = mysql_query($query, $mysql_link);
+	$myrow   = ( $return ) ? mysql_fetch_row($return) : 0 ;
+
+	return ( $myrow ) ? $myrow[0] : 0 ;
+}
+//---------------------------------------------------------------------------
+function exist_parent($ideleve, $record)
+{
+// $ideleve, ID de l'élève
+// $record, n° du champ
+
+	require $_SESSION["ROOTDIR"]."/globals.php";
+
+	// lecture utilisateur
+	$query   = "select _IDtutor from user_tutors ";
+	$query  .= "where _ID = '$ideleve' ";
+	$query  .= "order by _index asc";
+
+	$return  = mysql_query($query, $mysql_link);
+	$myrow   = ( @mysql_data_seek($return, $record - 1) ) ? mysql_fetch_row($return) : 0 ;
+
+	return ( $myrow ) ? $myrow[0] : 0 ;
+}
+//---------------------------------------------------------------------------
+function exist_user($name, $fname)
+{
+// $name, nom de l'utilisateur
+// $fname, prénom de l'utilisateur
+
+	require $_SESSION["ROOTDIR"]."/globals.php";
+
+	// lecture utilisateur
+	$query   = "select _ID from user_id ";
+	$query  .= "where _name = '$name' AND _fname = '$fname' ";
+	$query  .= "limit 1";
+
+	$return  = mysql_query($query, $mysql_link);
+	$myrow   = ( $return ) ? mysql_fetch_row($return) : 0 ;
+
+	return ( $myrow ) ? $myrow[0] : 0 ;
+}
+//---------------------------------------------------------------------------
+function exist_company($name, $cp)
+{
+// $name, nom de la société
+// $cp, code postal
+
+	require $_SESSION["ROOTDIR"]."/globals.php";
+
+	// lecture de la société
+	$query   = "select _IDlieu from stage_lieu ";
+	$query  .= "where _societe = '$name' AND _cp = '$cp' ";
+	$query  .= "limit 1";
+
+	$return  = mysql_query($query, $mysql_link);
+	$myrow   = ( $return ) ? mysql_fetch_row($return) : 0 ;
+
+	return ( $myrow ) ? $myrow[0] : 0 ;
+}
+//---------------------------------------------------------------------------
+function exist_pfolio_formation($ident, $lang)
+{
+// $ident, ident formation
+// $lang, code langue
+
+	require $_SESSION["ROOTDIR"]."/globals.php";
+
+	// lecture de la société
+	$query   = "select _IDform from pfolio_formation ";
+	$query  .= "where _ident = '$ident' AND _lang = '$lang' ";
+	$query  .= "limit 1";
+
+	$return  = mysql_query($query, $mysql_link);
+	$myrow   = ( $return ) ? mysql_fetch_row($return) : 0 ;
+
+	return ( $myrow ) ? $myrow[0] : 0 ;
+}
+//---------------------------------------------------------------------------
+function exist_pfolio_uv($ident, $lang)
+{
+// $ident, ident UV
+// $lang, code langue
+
+	require $_SESSION["ROOTDIR"]."/globals.php";
+
+	// lecture de la société
+	$query   = "select _IDuv from pfolio_uv ";
+	$query  .= "where _ident = '$ident' AND _lang = '$lang' ";
+	$query  .= "limit 1";
+
+	$return  = mysql_query($query, $mysql_link);
+	$myrow   = ( $return ) ? mysql_fetch_row($return) : 0 ;
+
+	return ( $myrow ) ? $myrow[0] : 0 ;
+}
+//---------------------------------------------------------------------------
+function exist_pfolio($iduv, $order)
+{
+// $iduv, ID de l'UV
+// $order, n° de l'item
+
+	require $_SESSION["ROOTDIR"]."/globals.php";
+
+	// lecture de la société
+	$query   = "select _IDskill from pfolio ";
+	$query  .= "where _IDuv = '$iduv' AND _order = '$order' ";
+	$query  .= "limit 1";
+
+	$return  = mysql_query($query, $mysql_link);
+	$myrow   = ( $return ) ? mysql_fetch_row($return) : 0 ;
+
+	return ( $myrow ) ? $myrow[0] : 0 ;
+}
+//---------------------------------------------------------------------------
+function exist_pfolio_data($idskill, $order)
+{
+// $idskill, ID de la commpétence
+// $order, n° de l'item
+
+	require $_SESSION["ROOTDIR"]."/globals.php";
+
+	// lecture de la société
+	$query   = "select _IDdata from pfolio_data ";
+	$query  .= "where _IDskill = '$idskill' AND _order = '$order' ";
+	$query  .= "limit 1";
+
+	$return  = mysql_query($query, $mysql_link);
+	$myrow   = ( $return ) ? mysql_fetch_row($return) : 0 ;
+
+	return ( $myrow ) ? $myrow[0] : 0 ;
+}
+//---------------------------------------------------------------------------
+function import_student_xls($file)
+{
+// $file, fichier source
+
+	require $_SESSION["ROOTDIR"]."/globals.php";
+	require_once $_SESSION["ROOTDIR"]."/lib/lib_import_xls.php";
+
+	$data = new Spreadsheet_Excel_Reader();
+	$data->setOutputEncoding('CP1251');
+	$data->read($file);
+
+	// initialisation
+	$count = 0;
+
+	// on commence à l'indice 2 à cause de l'en-tête dans la feuille de calcul
+	for ($i = 2; $i <= $data->sheets[0]['numRows'] AND strlen(trim(@$data->sheets[0]['cells'][$i][1])); $i++) {
+		$IDcentre = get_center(
+					trim(addslashes(@$data->sheets[0]['cells'][$i][1])),
+//					trim(addslashes(@$data->sheets[0]['cells'][$i][17])) );
+					trim(addslashes(@$_SESSION["lang"])),
+					$i);
+		$IDclass  = get_campus_class(
+					trim(addslashes(@$data->sheets[0]['cells'][$i][2])),
+					$IDcentre,
+					$i);
+		$IDgroup  = get_group(
+					trim(addslashes(@$data->sheets[0]['cells'][$i][3])),
+					1,
+//					trim(addslashes(@$data->sheets[0]['cells'][$i][17])) );
+					trim(addslashes(@$_SESSION["lang"])),
+					$i);
+		$login    = trim(addslashes(@$data->sheets[0]['cells'][$i][18]));
+		$passwd   = trim(addslashes(@$data->sheets[0]['cells'][$i][19]));
+
+		// si pas de classe => enregistrement non valide
+		if ( $IDclass ) {
+			$name  = trim(addslashes(@$data->sheets[0]['cells'][$i][4]));			// nom
+			$fname = trim(addslashes(@$data->sheets[0]['cells'][$i][5]));			// prénom
+
+			$exist = exist_student($name, $fname, $IDclass);
+
+			// s'il existe un enregistrement => mise à jour
+			if ( $exist ) {
+				$query  = "update user_id set ";
+				$query .= "_numen = '". trim(addslashes(@$data->sheets[0]['cells'][$i][6])) ."', ";		// numen
+				$query .= "_sexe = '". trim(addslashes(@$data->sheets[0]['cells'][$i][7])) ."', ";		// sexe
+				$query .= "_born = '". trim(addslashes(@$data->sheets[0]['cells'][$i][8])) ."', ";		// né le
+				$query .= "_adr1 = '". trim(addslashes(@$data->sheets[0]['cells'][$i][9])) ."', ";		// adresse 1
+				$query .= "_adr2 = '". trim(addslashes(@$data->sheets[0]['cells'][$i][10])) ."', ";		// adresse 2
+				$query .= "_cp = '". trim(addslashes(@$data->sheets[0]['cells'][$i][11])) ."', ";		// CP
+				$query .= "_city = '". trim(addslashes(@$data->sheets[0]['cells'][$i][12])) ."', ";		// ville
+				$query .= "_tel = '". trim(addslashes(@$data->sheets[0]['cells'][$i][13])) ."', ";		// tel
+				$query .= "_email = '". trim(addslashes(@$data->sheets[0]['cells'][$i][14])) ."', ";	// email
+				$query .= "_regime = '". trim(addslashes(@$data->sheets[0]['cells'][$i][15])) ."', ";	// régime
+				$query .= "_bourse = '". trim(addslashes(@$data->sheets[0]['cells'][$i][16])) ."', ";	// bourse
+				$query .= "_lang = '". trim(addslashes(@$data->sheets[0]['cells'][$i][17])) ."' ";		// langue
+				$query .= "where _ID = '$exist' ";
+				$query .= "limit 1";
+				}
+			else {
+				$login  = ( $login == "" ) ? SessionID() : $login ;
+
+				$query  = "insert into user_id values(";
+				$query .= "'', ";
+				$query .= "'$IDgroup', ";
+				$query .= "'$IDcentre', ";
+				$query .= "'$IDclass', ";
+				$query .= "'". trim(addslashes(@$data->sheets[0]['cells'][$i][6])) ."', ";	// numen
+				$query .= "'".date("Y-m-d H:i:s")."', ";
+				$query .= "'', ";
+				$query .= "'', ";
+				$query .= "'0', ";
+				$query .= "'$login', ";
+				$query .= "'$passwd', ";
+				$query .= "'$name', ";
+				$query .= "'$fname', ";
+				$query .= ( trim(addslashes(@$data->sheets[0]['cells'][$i][7])) )
+					? "'". trim(addslashes(@$data->sheets[0]['cells'][$i][7])) ."', "		// sexe
+					: "A" ;
+				$query .= "'', ";
+				$query .= "'', ";
+				$query .= "'". trim(addslashes(@$data->sheets[0]['cells'][$i][14])) ."', ";	// email
+				$query .= "'', ";
+				$query .= "'". trim(addslashes(@$data->sheets[0]['cells'][$i][13])) ."', ";	// tel
+				$query .= "'', ";
+				$query .= "'". trim(addslashes(@$data->sheets[0]['cells'][$i][8])) ."', ";	// né le...
+				$query .= "'". trim(addslashes(@$data->sheets[0]['cells'][$i][9])) ."', ";	// adresse 1
+				$query .= "'". trim(addslashes(@$data->sheets[0]['cells'][$i][10])) ."', ";	// adresse 2
+				$query .= "'". trim(addslashes(@$data->sheets[0]['cells'][$i][11])) ."', ";	// CP
+				$query .= "'". trim(addslashes(@$data->sheets[0]['cells'][$i][12])) ."', ";	// ville
+				$query .= "'', ";
+				$query .= "'0', ";
+				$query .= "'0', ";
+				$query .= "'0', ";
+				$query .= "'0', ";
+				$query .= "'0', ";
+				$query .= "'N', ";
+				$query .= "'N', ";
+				$query .= "'". trim(addslashes(@$data->sheets[0]['cells'][$i][15])) ."', ";	// régime
+				$query .= "'". trim(addslashes(@$data->sheets[0]['cells'][$i][16])) ."', ";	// bourse
+				$query .= "'N', ";
+				$query .= "'O', ";
+				$query .= "'', ";
+				$query .= "'0', ";
+				$query .= "'', ";
+				$query .= "'". trim(addslashes(@$data->sheets[0]['cells'][$i][17])) ."', ";	// langue
+				$query .= "'0', '0'";
+				$query .= ")";
+				}
+
+			if ( mysql_query($query, $mysql_link) ) {
+				$count++;
+
+				$my_id    = ( $exist ) ? $exist : mysql_insert_id() ;
+
+				//---- 1er tuteur
+				$idparent = exist_parent($exist, 1);
+
+				$IDgroup  = get_group(
+					trim(addslashes(@$data->sheets[0]['cells'][$i][20])),
+					3,
+					trim(addslashes(@$data->sheets[0]['cells'][$i][17])),
+					$i);
+
+				// mise à jour des comptes parents
+				if ( $idparent ) {
+					$adr1   = trim(addslashes(@$data->sheets[0]['cells'][$i][24]));					// adresse 1
+					$adr2   = trim(addslashes(@$data->sheets[0]['cells'][$i][25]));					// adresse 2
+					$cp     = trim(addslashes(@$data->sheets[0]['cells'][$i][26]));					// CP
+					$ville  = trim(addslashes(@$data->sheets[0]['cells'][$i][27]));					// ville
+
+					$query  = "update user_id set ";
+					$query .= "_name = '". trim(addslashes(@$data->sheets[0]['cells'][$i][21])) ."', ";		// nom
+					$query .= "_fname = '". trim(addslashes(@$data->sheets[0]['cells'][$i][22])) ."', ";	// prénom
+					$query .= "_sexe = '". trim(addslashes(@$data->sheets[0]['cells'][$i][23])) ."', ";		// sexe
+
+					if ( $adr1 != "" OR $adr2 != "" OR $cp != "" OR $ville != "" ) {
+						$query .= "_adr1 = '$adr1', ";
+						$query .= "_adr2 = '$adr2', ";
+						$query .= "_cp = '$cp', ";
+						$query .= "_city = '$ville', ";
+						}
+
+					$query .= "_work = '". trim(addslashes(@$data->sheets[0]['cells'][$i][28])) ."', ";		// tel travail
+					$query .= "_tel = '". trim(addslashes(@$data->sheets[0]['cells'][$i][29])) ."', ";		// tel fixe
+					$query .= "_mobile = '". trim(addslashes(@$data->sheets[0]['cells'][$i][30])) ."', ";	// tel mobile
+					$query .= "_email = '". trim(addslashes(@$data->sheets[0]['cells'][$i][31])) ."', ";	// email
+					$query .= "_lang = '". trim(addslashes(@$data->sheets[0]['cells'][$i][32])) ."'";		// langue
+					$query .= "where _ID = '$idparent' ";
+					$query .= "limit 1";
+
+					if ( strlen(trim(addslashes(@$data->sheets[0]['cells'][$i][21]))) )
+						if ( !mysql_query($query, $mysql_link) )
+							mysql_query("insert into admin_log values ('', '0', 'SQL error: ".addslashes($query)."')", $mysql_link);
+					}
+				else {
+					$adr1   = trim(addslashes(@$data->sheets[0]['cells'][$i][24]));			// adresse 1
+					$adr2   = trim(addslashes(@$data->sheets[0]['cells'][$i][25]));			// adresse 2
+					$cp     = trim(addslashes(@$data->sheets[0]['cells'][$i][26]));			// CP
+					$ville  = trim(addslashes(@$data->sheets[0]['cells'][$i][27]));			// ville
+
+					$query  = "insert into user_id values(";
+					$query .= "'', ";
+					$query .= "'$IDgroup', ";
+					$query .= "'$IDcentre', ";
+					$query .= "'0', ";
+					$query .= "'', ";											// numen
+					$query .= "'".date("Y-m-d H:i:s")."', ";
+					$query .= "'', ";
+					$query .= "'', ";
+					$query .= "'0', ";
+					$query .= "'".SessionID()."', ";
+					$query .= "'".SessionID()."', ";
+					$query .= "'". trim(addslashes(@$data->sheets[0]['cells'][$i][21])) ."', ";	// nom
+					$query .= "'". trim(addslashes(@$data->sheets[0]['cells'][$i][22])) ."', ";	// prénom
+					$query .= "'". trim(addslashes(@$data->sheets[0]['cells'][$i][23])) ."', ";	// sexe
+					$query .= "'', ";
+					$query .= "'', ";
+					$query .= "'". trim(addslashes(@$data->sheets[0]['cells'][$i][31])) ."', ";	// email
+					$query .= "'". trim(addslashes(@$data->sheets[0]['cells'][$i][28])) ."', ";	// tel travail
+					$query .= "'". trim(addslashes(@$data->sheets[0]['cells'][$i][29])) ."', ";	// tel fixe
+					$query .= "'". trim(addslashes(@$data->sheets[0]['cells'][$i][30])) ."', ";	// tel mobile
+					$query .= "'', ";											// né le...
+
+					if ( $adr1 == "" AND $adr2 == "" AND $cp == "" AND $ville == "" ) {
+						$query .= "'". trim(addslashes(@$data->sheets[0]['cells'][$i][9])) ."', ";
+						$query .= "'". trim(addslashes(@$data->sheets[0]['cells'][$i][10])) ."', ";
+						$query .= "'". trim(addslashes(@$data->sheets[0]['cells'][$i][11])) ."', ";
+						$query .= "'". trim(addslashes(@$data->sheets[0]['cells'][$i][12])) ."', ";
+						}
+					else
+						$query .= "'$adr1', '$adr2', '$cp', '$ville', ";
+
+					$query .= "'', ";
+					$query .= "'0', ";
+					$query .= "'0', ";
+					$query .= "'0', ";
+					$query .= "'0', ";
+					$query .= "'0', ";
+					$query .= "'N', ";
+					$query .= "'N', ";
+					$query .= "'E', ";
+					$query .= "'N', ";
+					$query .= "'N', ";
+					$query .= "'O', ";
+					$query .= "'', ";
+					$query .= "'0', ";
+					$query .= "'', ";
+					$query .= "'". trim(addslashes(@$data->sheets[0]['cells'][$i][32])) ."', ";	// langue
+					$query .= "'0', '0'";
+					$query .= ")";
+
+					if ( strlen(trim(addslashes(@$data->sheets[0]['cells'][$i][21]))) )
+						if ( mysql_query($query, $mysql_link) )
+							mysql_query("insert into user_tutors values('', '$my_id', '".mysql_insert_id()."')", $mysql_link);
+						else
+							mysql_query("insert into admin_log values ('', '0', 'SQL error: ".addslashes($query)."')", $mysql_link);
+					}
+
+				//---- 2ème tuteur
+				$idparent = exist_parent($exist, 2);
+
+				// mise à jour des comptes parents
+				if ( $idparent ) {
+					$adr1   = trim(addslashes(@$data->sheets[0]['cells'][$i][36]));					// adresse 1
+					$adr2   = trim(addslashes(@$data->sheets[0]['cells'][$i][37]));					// adresse 2
+					$cp     = trim(addslashes(@$data->sheets[0]['cells'][$i][38]));					// CP
+					$ville  = trim(addslashes(@$data->sheets[0]['cells'][$i][39]));					// ville
+
+					$query  = "update user_id set ";
+					$query .= "_name = '". trim(addslashes(@$data->sheets[0]['cells'][$i][33])) ."', ";		// nom
+					$query .= "_fname = '". trim(addslashes(@$data->sheets[0]['cells'][$i][34])) ."', ";	// prénom
+					$query .= "_sexe = '". trim(addslashes(@$data->sheets[0]['cells'][$i][35])) ."', ";		// sexe
+
+					if ( $adr1 != "" OR $adr2 != "" OR $cp != "" OR $ville != "" ) {
+						$query .= "_adr1 = '$adr1', ";
+						$query .= "_adr2 = '$adr2', ";
+						$query .= "_cp = '$cp', ";
+						$query .= "_city = '$ville', ";
+						}
+
+					$query .= "_work = '". trim(addslashes(@$data->sheets[0]['cells'][$i][40])) ."', ";		// tel travail
+					$query .= "_tel = '". trim(addslashes(@$data->sheets[0]['cells'][$i][41])) ."', ";		// tel fixe
+					$query .= "_mobile = '". trim(addslashes(@$data->sheets[0]['cells'][$i][42])) ."', ";	// tel mobile
+					$query .= "_email = '". trim(addslashes(@$data->sheets[0]['cells'][$i][43])) ."', ";	// email
+					$query .= "_lang = '". trim(addslashes(@$data->sheets[0]['cells'][$i][44])) ."'";		// langue
+					$query .= "where _ID = '$idparent' ";
+					$query .= "limit 1";
+
+					if ( strlen(trim(addslashes(@$data->sheets[0]['cells'][$i][33]))) )
+						if ( !mysql_query($query, $mysql_link) )
+							mysql_query("insert into admin_log values ('', '0', 'SQL error: ".addslashes($query)."')", $mysql_link);
+					}
+				else {
+					$adr1   = trim(addslashes(@$data->sheets[0]['cells'][$i][36]));			// adresse 1
+					$adr2   = trim(addslashes(@$data->sheets[0]['cells'][$i][37]));			// adresse 2
+					$cp     = trim(addslashes(@$data->sheets[0]['cells'][$i][38]));			// CP
+					$ville  = trim(addslashes(@$data->sheets[0]['cells'][$i][39]));			// ville
+
+					$query  = "insert into user_id values(";
+					$query .= "'', ";
+					$query .= "'$IDgroup', ";
+					$query .= "'$IDcentre', ";
+					$query .= "'0', ";
+					$query .= "'', ";											// numen
+					$query .= "'".date("Y-m-d H:i:s")."', ";
+					$query .= "'', ";
+					$query .= "'', ";
+					$query .= "'0', ";
+					$query .= "'".SessionID()."', ";
+					$query .= "'".SessionID()."', ";
+					$query .= "'". trim(addslashes(@$data->sheets[0]['cells'][$i][33])) ."', ";	// nom
+					$query .= "'". trim(addslashes(@$data->sheets[0]['cells'][$i][34])) ."', ";	// prénom
+					$query .= "'". trim(addslashes(@$data->sheets[0]['cells'][$i][35])) ."', ";	// sexe
+					$query .= "'', ";
+					$query .= "'', ";
+					$query .= "'". trim(addslashes(@$data->sheets[0]['cells'][$i][43])) ."', ";	// email
+					$query .= "'". trim(addslashes(@$data->sheets[0]['cells'][$i][40])) ."', ";	// tel travail
+					$query .= "'". trim(addslashes(@$data->sheets[0]['cells'][$i][41])) ."', ";	// tel fixe
+					$query .= "'". trim(addslashes(@$data->sheets[0]['cells'][$i][42])) ."', ";	// tel mobile
+					$query .= "'', ";											// né le...
+
+					if ( $adr1 == "" AND $adr2 == "" AND $cp == "" AND $ville == "" ) {
+						$query .= "'". trim(addslashes(@$data->sheets[0]['cells'][$i][9])) ."', ";
+						$query .= "'". trim(addslashes(@$data->sheets[0]['cells'][$i][10])) ."', ";
+						$query .= "'". trim(addslashes(@$data->sheets[0]['cells'][$i][11])) ."', ";
+						$query .= "'". trim(addslashes(@$data->sheets[0]['cells'][$i][12])) ."', ";
+						}
+					else
+						$query .= "'$adr1', '$adr2', '$cp', '$ville', ";
+
+					$query .= "'', ";
+					$query .= "'0', ";
+					$query .= "'0', ";
+					$query .= "'0', ";
+					$query .= "'0', ";
+					$query .= "'0', ";
+					$query .= "'N', ";
+					$query .= "'N', ";
+					$query .= "'E', ";
+					$query .= "'N', ";
+					$query .= "'N', ";
+					$query .= "'O', ";
+					$query .= "'', ";
+					$query .= "'0', ";
+					$query .= "'', ";
+					$query .= "'". trim(addslashes(@$data->sheets[0]['cells'][$i][44])) ."', ";	// langue
+					$query .= "'0', '0'";
+					$query .= ")";
+
+					if ( strlen(trim(addslashes(@$data->sheets[0]['cells'][$i][33]))) )
+						if ( mysql_query($query, $mysql_link) )
+							mysql_query("insert into user_tutors values('', '$my_id', '".mysql_insert_id()."')", $mysql_link);
+						else
+							mysql_query("insert into admin_log values ('', '0', 'SQL error: ".addslashes($query)."')", $mysql_link);
+					}
+				}	//	endif mysql_query
+			else
+				mysql_query("insert into admin_log values ('', '0', 'SQL error: ".addslashes($query)."')", $mysql_link);
+			}	// endif IDclass
+		else
+			mysql_query("insert into admin_log values ('', '0', 'invalid class code: ".trim(addslashes(@$data->sheets[0]['cells'][$i][2]))."($IDclass) @ line $i')", $mysql_link);
+		}	// endfor
+
+	return $count;
+}
+//---------------------------------------------------------------------------
+function import_user_xls($file)
+{
+// $file, fichier source
+
+	require $_SESSION["ROOTDIR"]."/globals.php";
+	require_once $_SESSION["ROOTDIR"]."/lib/lib_import_xls.php";
+
+	$data = new Spreadsheet_Excel_Reader();
+	$data->setOutputEncoding('CP1251');
+	$data->read($file);
+
+	// initialisation
+	$count = 0;
+
+	// on commence à l'indice 2 à cause de l'en-tête dans la feuille de calcul
+	for ($i = 2; $i <= $data->sheets[1]['numRows'] AND strlen(trim(@$data->sheets[1]['cells'][$i][1])); $i++) {
+		$IDcentre = get_center(
+					trim(addslashes(@$data->sheets[1]['cells'][$i][1])),
+					trim(addslashes(@$data->sheets[1]['cells'][$i][18])) );
+		$IDgroup  = get_group(
+					trim(addslashes(@$data->sheets[1]['cells'][$i][5])),
+					trim(addslashes(@$data->sheets[1]['cells'][$i][6])),
+					trim(addslashes(@$data->sheets[1]['cells'][$i][18])) );
+		$login    = trim(addslashes(@$data->sheets[1]['cells'][$i][19]));
+
+		// si pas de login => enregistrement non valide
+		if ( strlen($login) ) {
+			$name  = trim(addslashes(@$data->sheets[1]['cells'][$i][2]));			// nom
+			$fname = trim(addslashes(@$data->sheets[1]['cells'][$i][3]));			// prénom
+
+			$exist = exist_user($name, $fname);
+
+			// s'il existe un enregistrement => mise à jour
+			if ( $exist ) {
+				$query  = "update user_id set ";
+				$query .= "_ident = '$login', ";
+				$query .= "_adm = '". trim(@$data->sheets[1]['cells'][$i][7]) ."', ";					// droits
+				$query .= "_passwd = '". trim(addslashes(@$data->sheets[1]['cells'][$i][20])) ."', ";		// mdp
+				$query .= "_sexe = '". trim(addslashes(@$data->sheets[1]['cells'][$i][4])) ."', ";			// sexe
+				$query .= "_email = '". trim(addslashes(@$data->sheets[1]['cells'][$i][13])) ."', ";		// email
+				$query .= "_tel = '". trim(addslashes(@$data->sheets[1]['cells'][$i][16])) ."', ";			// tel
+				$query .= "_mobile = '". trim(addslashes(@$data->sheets[1]['cells'][$i][17])) ."', ";		// mobile
+				$query .= "_born = '". trim(addslashes(@$data->sheets[1]['cells'][$i][8])) ."', ";			// né le
+				$query .= "_adr1 = '". trim(addslashes(@$data->sheets[1]['cells'][$i][9])) ."', ";			// adresse 1
+				$query .= "_adr2 = '". trim(addslashes(@$data->sheets[1]['cells'][$i][10])) ."', ";			// adresse 2
+				$query .= "_cp = '". trim(addslashes(@$data->sheets[1]['cells'][$i][11])) ."', ";			// CP
+				$query .= "_city = '". trim(addslashes(@$data->sheets[1]['cells'][$i][12])) ."', ";			// ville
+				$query .= "_lang = '". trim(addslashes(@$data->sheets[1]['cells'][$i][18])) ."', ";			// langue
+				$query .= "_title = '". trim(addslashes(@$data->sheets[1]['cells'][$i][14])) ."', ";		// titre
+				$query .= "_fonction = '". trim(addslashes(@$data->sheets[1]['cells'][$i][15])) ."' ";		// fonction
+				$query .= "where _ID = '$exist' ";
+				$query .= "limit 1";
+				}
+			else {
+				$query  = "insert into user_id values(";
+				$query .= "'', ";
+				$query .= "'$IDgroup', ";
+				$query .= "'$IDcentre', ";
+				$query .= "'0', ";
+				$query .= "'', ";
+				$query .= "'".date("Y-m-d H:i:s")."', ";
+				$query .= "'', ";
+				$query .= "'', ";
+				$query .= "'". trim(@$data->sheets[1]['cells'][$i][7]) ."', ";			// droits
+				$query .= "'$login', ";
+				$query .= "'". trim(addslashes(@$data->sheets[1]['cells'][$i][20])) ."', ";	// mdp
+				$query .= "'". trim(addslashes(@$data->sheets[1]['cells'][$i][2])) ."', ";	// nom
+				$query .= "'". trim(addslashes(@$data->sheets[1]['cells'][$i][3])) ."', ";	// prénom
+				$query .= "'". trim(addslashes(@$data->sheets[1]['cells'][$i][4])) ."', ";	// sexe
+				$query .= "'". trim(addslashes(@$data->sheets[1]['cells'][$i][14])) ."', ";	// titre
+				$query .= "'". trim(addslashes(@$data->sheets[1]['cells'][$i][15])) ."', ";	// fonction
+				$query .= "'". trim(addslashes(@$data->sheets[1]['cells'][$i][13])) ."', ";	// email
+				$query .= "'', ";
+				$query .= "'". trim(addslashes(@$data->sheets[1]['cells'][$i][16])) ."', ";	// tel
+				$query .= "'". trim(addslashes(@$data->sheets[1]['cells'][$i][17])) ."', ";	// mobile
+				$query .= "'". trim(addslashes(@$data->sheets[1]['cells'][$i][8])) ."', ";	// né le
+				$query .= "'". trim(addslashes(@$data->sheets[1]['cells'][$i][9])) ."', ";	// adresse 1
+				$query .= "'". trim(addslashes(@$data->sheets[1]['cells'][$i][10])) ."', ";	// adresse 2
+				$query .= "'". trim(addslashes(@$data->sheets[1]['cells'][$i][11])) ."', ";	// CP
+				$query .= "'". trim(addslashes(@$data->sheets[1]['cells'][$i][12])) ."', ";	// ville
+				$query .= "'', ";
+				$query .= "'0', ";
+				$query .= "'0', ";
+				$query .= "'0', ";
+				$query .= "'0', ";
+				$query .= "'0', ";
+				$query .= "'N', ";
+				$query .= "'N', ";
+				$query .= "'E', ";
+				$query .= "'N', ";
+				$query .= "'N', ";
+				$query .= "'O', ";
+				$query .= "'', ";
+				$query .= "'0', ";
+				$query .= "'', ";
+				$query .= "'". trim(addslashes(@$data->sheets[1]['cells'][$i][18])) ."', ";	// langue
+				$query .= "'0', ";
+				$query .= "'0' ";
+				$query .= ")";
+				}
+
+			if ( mysql_query($query, $mysql_link) )
+				$count++;
+			else
+				mysql_query("insert into admin_log values ('', '0', 'SQL error: ".addslashes($query)."')", $mysql_link);
+			}	// endif login
+		else
+			mysql_query("insert into admin_log values ('', '0', 'invalid login @ line $i'", $mysql_link);
+		}
+
+	return $count;
+}
+//---------------------------------------------------------------------------
+function import_stage_xls($file)
+{
+// $file, fichier source
+
+	require $_SESSION["ROOTDIR"]."/globals.php";
+	require_once $_SESSION["ROOTDIR"]."/lib/lib_import_xls.php";
+
+	$data = new Spreadsheet_Excel_Reader();
+	$data->setOutputEncoding('CP1251');
+	$data->read($file);
+
+	// initialisation
+	$count = 0;
+
+	// on commence à l'indice 2 à cause de l'en-tête dans la feuille de calcul
+	for ($i = 2; $i <= $data->sheets[2]['numRows'] AND strlen(trim(@$data->sheets[1]['cells'][$i][1])); $i++) {
+		$IDsecteur = get_stage_secteur(
+					trim(addslashes(@$data->sheets[2]['cells'][$i][1])),
+					trim(addslashes(@$data->sheets[2]['cells'][$i][19])) );
+		$name      = trim(addslashes(@$data->sheets[2]['cells'][$i][2]));			// nom
+		$cp        = trim(addslashes(@$data->sheets[2]['cells'][$i][7]));			// cp
+
+		// si pas de raison sociale ni cp  => enregistrement non valide
+		if ( strlen($name) AND strlen($cp) ) {
+			$exist = exist_company($name, $cp);
+
+			// s'il existe un enregistrement => mise à jour
+			if ( $exist ) {
+				$query  = "update stage_lieu set ";
+				$query .= "_societe = '". trim(addslashes(@$data->sheets[2]['cells'][$i][3])) ."', ";		// statut
+				$query .= "_activite = '". trim(addslashes(@$data->sheets[2]['cells'][$i][4])) ."', ";		// activité
+				$query .= "_text = '". trim(addslashes(@$data->sheets[2]['cells'][$i][5])) ."', ";			// description
+				$query .= "_adresse = '". trim(addslashes(@$data->sheets[2]['cells'][$i][6])) ."', ";		// adresse
+				$query .= "_ville = '". trim(addslashes(@$data->sheets[2]['cells'][$i][8])) ."', ";			// ville
+				$query .= "_tel = '". trim(addslashes(@$data->sheets[2]['cells'][$i][9])) ."', ";			// tel
+				$query .= "_fax = '". trim(addslashes(@$data->sheets[2]['cells'][$i][10])) ."', ";			// fax
+				$query .= "_email = '". trim(addslashes(@$data->sheets[2]['cells'][$i][11])) ."', ";		// email
+				$query .= "_web = '". trim(addslashes(@$data->sheets[2]['cells'][$i][12])) ."', ";			// web
+				$query .= "_directeur = '". trim(addslashes(@$data->sheets[2]['cells'][$i][13])) ."', ";		// directeur
+				$query .= "_resp = '". trim(addslashes(@$data->sheets[2]['cells'][$i][14])) ."' ";			// responsable
+				$query .= "_mineur = '". trim(addslashes(@$data->sheets[2]['cells'][$i][15])) ."' ";		// mineur
+				$query .= "_fille = '". trim(addslashes(@$data->sheets[2]['cells'][$i][16])) ."' ";			// force
+				$query .= "_loge = '". trim(addslashes(@$data->sheets[2]['cells'][$i][17])) ."' ";			// logé
+				$query .= "_nourri = '". trim(addslashes(@$data->sheets[2]['cells'][$i][18])) ."' ";		// nourri
+				$query .= "where _ID = '$exist' ";
+				$query .= "limit 1";
+				}
+			else {
+				$query  = "insert into stage_lieu values(";
+				$query .= "'', ";
+				$query .= "'".date("Y-m-d H:i:s")."', ";
+				$query .= "'$IDsecteur', ";
+				$query .= "'$name', ";
+				$query .= "'". trim(addslashes(@$data->sheets[2]['cells'][$i][3])) ."', ";	// statut
+				$query .= "'". trim(addslashes(@$data->sheets[2]['cells'][$i][4])) ."', ";	// activité
+				$query .= "'". trim(addslashes(@$data->sheets[2]['cells'][$i][5])) ."', ";	// description
+				$query .= "'". trim(addslashes(@$data->sheets[2]['cells'][$i][6])) ."', ";	// adresse
+				$query .= "'$cp', ";
+				$query .= "'". trim(addslashes(@$data->sheets[2]['cells'][$i][8])) ."', ";	// ville
+				$query .= "'". trim(addslashes(@$data->sheets[2]['cells'][$i][9])) ."', ";	// tel
+				$query .= "'". trim(addslashes(@$data->sheets[2]['cells'][$i][10])) ."', ";	// fax
+				$query .= "'". trim(addslashes(@$data->sheets[2]['cells'][$i][11])) ."', ";	// email
+				$query .= "'". trim(addslashes(@$data->sheets[2]['cells'][$i][12])) ."', ";	// web
+				$query .= "'". trim(addslashes(@$data->sheets[2]['cells'][$i][13])) ."', ";	// directeur
+				$query .= "'". trim(addslashes(@$data->sheets[2]['cells'][$i][14])) ."', ";	// responsable
+				$query .= "'0', ";
+				$query .= "'', ";
+				$query .= "'". trim(addslashes(@$data->sheets[2]['cells'][$i][15])) ."', ";	// mineur
+				$query .= "'". trim(addslashes(@$data->sheets[2]['cells'][$i][16])) ."', ";	// force
+				$query .= "'". trim(addslashes(@$data->sheets[2]['cells'][$i][17])) ."', ";	// logé
+				$query .= "'', ";
+				$query .= "'". trim(addslashes(@$data->sheets[2]['cells'][$i][18])) ."', ";	// nourri
+				$query .= "'', ";
+				$query .= "'', ";
+				$query .= "'0', ";
+				$query .= "'0', ";
+				$query .= "'0', ";
+				$query .= "'0', ";
+				$query .= "'0', ";
+				$query .= "'', ";
+				$query .= "'N', ";
+				$query .= "'N', ";
+				$query .= "'N', ";
+				$query .= "'N', ";
+				$query .= "'N', ";
+				$query .= "'N', ";
+				$query .= "'N', ";
+				$query .= "'N', ";
+				$query .= "'N', ";
+				$query .= "'O'";
+				$query .= ")";
+				}
+
+			if ( mysql_query($query, $mysql_link) )
+				$count++;
+			else
+				mysql_query("insert into admin_log values ('', '0', 'SQL error: ".addslashes($query)."')", $mysql_link);
+			}
+		else
+			mysql_query("insert into admin_log values ('', '0', 'invalid name ($name) or zipcode ($cp) @ line $i'", $mysql_link);
+		}
+
+	return $count;
+}
+//---------------------------------------------------------------------------
+function import_pfolio_xls($file, $filename, $IDgroup)
+{
+// $file, fichier source
+// $filename, nom de la feuille de calcul
+// $IDgroup, groupe de la matière
+
+	require $_SESSION["ROOTDIR"]."/globals.php";
+	require_once $_SESSION["ROOTDIR"]."/lib/lib_import_xls.php";
+
+	$data = new Spreadsheet_Excel_Reader();
+//	$data->setOutputEncoding('CP1251');
+	$data->setOutputEncoding('UTF8');
+	$data->read($file);
+
+	// initialisation
+	$count  = 0;
+	@list($ident, $text) = preg_split("/[()]/", $filename);
+
+	$IDform = exist_pfolio_formation(trim(addslashes($ident)), $_SESSION["lang"]);
+
+	// s'il existe un enregistrement => mise à jour
+	if ( $IDform ) {
+		$query  = "update pfolio_formation set ";
+		$query .= "_texte = '". trim(addslashes($text)) ."' ";			// description
+		$query .= "where _IDform = '$IDform' AND _lang = '".$_SESSION["lang"]."' ";
+		$query .= "limit 1";
+		}
+	else {
+		$query  = "insert into pfolio_formation values(";
+		$query .= "'', ";
+		$query .= "'". trim(addslashes($ident)) ."', ";					// ident
+		$query .= "'". trim(addslashes($text)) ."', ";					// description
+		$query .= "'".$_SESSION["lang"]."'"; 
+		$query .= ")";
+		}
+
+	if ( mysql_query($query, $mysql_link) )
+		$IDform = ( $IDform ) ? $IDform : mysql_insert_id() ;
+	else
+		mysql_query("insert into admin_log values ('', '0', 'SQL error: ".addslashes($query)."')", $mysql_link);
+
+	// parcours des onglets
+	for($sheet = 0; $sheet < count($data->sheets); $sheet++) {
+
+		$ident = $data->boundsheets[$sheet]['name'];
+		$IDuv  = exist_pfolio_uv(trim(addslashes($ident)), $_SESSION["lang"]);
+
+		mysql_query("insert into admin_log values ('', '0', 'ok: ".addslashes($ident)."')", $mysql_link);
+
+		// s'il existe un enregistrement => mise à jour
+		if ( $IDuv ) {
+			$query  = "update pfolio_uv set ";
+			$query .= "_IDmat = '$IDgroup', ";
+			$query .= "_texte = '". trim(addslashes(@$data->sheets[$sheet]['cells'][1][2])) ."' ";	// description
+			$query .= "where _IDuv = '$IDuv' AND _lang = '".$_SESSION["lang"]."' ";
+			$query .= "limit 1";
+			}
+		else {
+			$query  = "insert into pfolio_uv values(";
+			$query .= "'', ";
+			$query .= "'$IDform', ";
+			$query .= "'$IDgroup', ";
+			$query .= "'0', ";
+			$query .= "'0', ";
+			$query .= "'255', ";
+			$query .= "'". trim(addslashes($ident)) ."', ";								// ident
+			$query .= "'". trim(addslashes(@$data->sheets[$sheet]['cells'][1][2])) ."', ";		// description
+			$query .= "'', ";
+			$query .= "'1', ";
+			$query .= "'N', ";
+			$query .= "'N', ";
+			$query .= "'N', ";
+			$query .= "'80', ";
+			$query .= "'".$_SESSION["lang"]."'"; 
+			$query .= ")";
+			}
+
+		if ( mysql_query($query, $mysql_link) )
+			$IDuv = ( $IDuv ) ? $IDuv : mysql_insert_id() ;
+		else
+			mysql_query("insert into admin_log values ('', '0', 'SQL error: ".addslashes($query)."')", $mysql_link);
+
+		// on commence à l'indice 2 à cause de l'en-tête dans la feuille de calcul
+		for ($i = 2; $i <= $data->sheets[$sheet]['numRows'] AND strlen(@$data->sheets[$sheet]['cells'][$i][1]); $i++) {
+
+			@list($major, $minor) = @explode(".", @$data->sheets[$sheet]['cells'][$i][1]);
+
+			mysql_query("insert into admin_log values ('', '0', 'item: $major.$minor')", $mysql_link);
+
+			// domaine
+			if ( $major ) {
+				$IDskill = exist_pfolio($IDuv, $major);
+
+				// s'il existe un enregistrement => mise à jour
+				if ( $IDskill ) {
+					$query  = "update pfolio set ";
+					$query .= "_ident = '". trim(addslashes(@$data->sheets[$sheet]['cells'][$i][2])) ."' ";	// ident
+					$query .= "where _IDskill = '$IDskill' ";
+					$query .= "limit 1";
+					}
+				else {
+					$query  = "insert into pfolio values(";
+					$query .= "'', ";
+					$query .= "'$IDuv', ";
+					$query .= "'$major', ";												// n° ordre
+					$query .= "'". trim(addslashes(@$data->sheets[$sheet]['cells'][$i][2])) ."', ";		// ident
+					$query .= "'50', ";
+					$query .= "'O'";
+					$query .= ")";
+					}
+
+				if ( mysql_query($query, $mysql_link) )
+					$IDskill = ( $IDskill ) ? $IDskill : mysql_insert_id() ;
+				else
+					mysql_query("insert into admin_log values ('', '0', 'SQL error: ".addslashes($query)."')", $mysql_link);
+				}
+
+			// compétences
+			if ( $minor ) {
+				$IDdata = exist_pfolio_data($IDskill, $minor);
+
+				// s'il existe un enregistrement => mise à jour
+				if ( $IDdata ) {
+					$query  = "update pfolio_data set ";
+					$query .= "_texte = '". trim(addslashes(@$data->sheets[$sheet]['cells'][$i][2])) ."' ";	// description
+					$query .= "where _IDdata = '$IDdata' ";
+					$query .= "limit 1";
+					}
+				else {
+					$query  = "insert into pfolio_data values(";
+					$query .= "'', ";
+					$query .= "'$IDskill', ";
+					$query .= "'$minor', ";												// n° ordre
+					$query .= "'". trim(addslashes(@$data->sheets[$sheet]['cells'][$i][2])) ."', ";		// description
+					$query .= "'N', ";
+					$query .= "'O'";
+					$query .= ")";
+					}
+
+				if ( mysql_query($query, $mysql_link) )
+					$count++;
+				else
+					mysql_query("insert into admin_log values ('', '0', 'SQL error: ".addslashes($query)."')", $mysql_link);
+				}
+			}	// endfor lignes
+		}	// endfor onglet
+
+	return $count;
+}
+//---------------------------------------------------------------------------
+function import_student_xml($file, $IDgroup)
+{
+// $file, fichier source
+// $IDgroup, groupe des utilisateurs
+
+	require $_SESSION["ROOTDIR"]."/globals.php";
+	require_once $_SESSION["ROOTDIR"]."/lib/lib_import_xls.php";
+
+	$XMLDoc = new DOMDocument();							// objet document
+	$XMLDoc->load($file);
+
+	// Test la Validite du fichier XML
+	if ( $XMLDoc->documentElement->nodeName != "BEE_ELEVES" )		// vérifier la racine
+		return 0;
+
+	// récupération noeud <DONNEES><ELEVES>
+//	$eleves = $XMLDoc->getElementsByTagName("DONNEES")->item(0)->getElementsByTagName("ELEVES");
+
+	if ( $eleves->length == 0 ) 
+		return 0;
+
+	// initialisation
+	$count  = 0;
+
+/*
+	// récupération noeud ELEVE
+	$eleve_list = $eleves->item(0)->getElementsByTagName("ELEVE");
+
+	if ( $eleve_list->length > 0 ) {
+		// Remplir la table des élèves avec les élèves trouvés dans le fichier XML
+		for ($i = 0; $i < $eleve_list->length; $i++) {
+			// Récupération de chaque élève
+			$motif_sortie = $eleve_list->item($i)->getElementsByTagName("CODE_MOTIF_SORTIE")->item(0)->nodeValue;
+
+			// Récupération motif de sortie, si non vide l'élève n'est plus dans l'établissement
+			if ( isset($motif_sortie) && !empty($motif_sortie) )
+				continue;		 // si non vide je passe au suivant
+				
+			// sinon importer l'élève
+			$IDstudent = $eleve_list->item($i)->getAttribute("ELEVE_ID");
+			$name      = $eleve_list->item($i)->getElementsByTagName("NOM")->item(0)->nodeValue;
+			$fname     = $eleve_list->item($i)->getElementsByTagName("PRENOM")->item(0)->nodeValue;
+			$dob       = $eleve_list->item($i)->getElementsByTagName("DATE_NAISS")->item(0)->nodeValue;	// format (jj/mm/aaaa)
+			$sexe      = $eleve_list->item($i)->getElementsByTagName("CODE_SEXE")->item(0)->nodeValue;	// 1 : Homme, 2 : Femme
+//			$Nom = mb_convert_encoding($Nom, "ISO-8859-1","UTF-8");	// par sécurité pour conserver les accents dans la base de données
+
+			// Ajout de l'élève dans la base				
+			} // endfor eleves
+		} // endif eleve
+
+	// récupération noeud <DONNEES><STRUCTURES>
+	$structures = $XMLDoc->getElementsByTagName("DONNEES")->item(0)->getElementsByTagName("STRUCTURES");
+
+	if ( $structures->length > 0 ) {
+		// récupération noeud STRUCTURES_ELEVE
+		$structures_eleve_list = $structures->item(0)->getElementsByTagName("STRUCTURES_ELEVE");
+		
+		// pour chaque élève
+		for ($i = 0; $i < $structures_eleve_list->length; $i++) {
+			$Eleve_Id = $structures_eleve_list->item($i)->getAttribute("ELEVE_ID");
+
+			// cet élève est-il dans la base ?
+			$OrdreSQL = sprintf("SELECT Nom FROM eleves WHERE Eleve_Id='%s'", $Eleve_Id);
+			$Result   = mysql_query($OrdreSQL, $connBaseDD);
+			$nb       = mysql_num_rows($Result);					// nbre d'élèves avec cet id
+
+			if ( !isset($nb) || $nb != 1 )
+				continue;									// il ne doit y avoir qu'un seul élève avec cet id
+
+			// Récupération de chaque structure (groupe ou classe) concernant l'élève
+			$structure_list = $structures_eleve_list->item($i)->getElementsByTagName("STRUCTURE");
+	
+			// pour chaque groupe ou classe
+			for ($j = 0; $j < $structure_list->length; $j++) {
+				$code_struct = $structure_list->item($j)->getElementsByTagName("CODE_STRUCTURE")->item(0)->nodeValue;		// code de la structure
+				$division    = $structure_list->item($j)->getElementsByTagName("TYPE_STRUCTURE")->item(0)->nodeValue;		// division ou groupe
+				$divgrp      = (bool)($division === 'D');					// 1 si c'est une division, 0 si c'est un groupe
+
+				// je recherche la structure dans la base (groupe ou division)				
+				$OrdreSQL = sprintf("SELECT IDdiv FROM divisions WHERE Code='%s' AND DivG=%d", $code_struct, $divgrp);
+				$Result   = mysql_query($OrdreSQL, $connBaseDD);
+				$nb       = mysql_num_rows($Result);				// nbre de classes ou groupes avec ce code
+
+				if ( !isset($nb) || $nb != 1 )
+					continue;								// il ne doit y avoir qu'une seule division ou groupe avec ce code
+
+				// maj de la base
+				}
+			} // endfor élève	 
+		} // endif structure
+*/
+
+	return $count;
+}
+//---------------------------------------------------------------------------
+?>
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($ADMIN_IMPORT)); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+
+	<p style="margin-top:0px; margin-bottom:10px; text-align:justify;">
+	<?php print($msg->read($ADMIN_WARNING)); ?>
+	</p>
+
+	<?php
+		// vérification des autorisations
+		admSessionAccess();
+
+		// l'utilisateur a validé
+		if ( $submit ) {
+			// la mise à jour de la DB peut prendre du temps => on supprime le tps max d'exécution des requêtes
+			// attention : safe_mode doit être désactivé
+			$safe_mode  = ini_get("safe_mode");
+			$time_limit = ini_get("max_execution_time");
+
+			if ( $safe_mode != "1" )
+				set_time_limit(0);
+
+			$table  = @$_POST["table"];
+			$format = @$_POST["format"];
+			$group  = @$_POST["IDgroup"];
+			$file   = @$_FILES["UploadPJ"]["tmp_name"];
+
+			for ($j = 0; $j < count($file); $j++)
+				if ( @$file[$j] ) {
+					switch ( $onglet ) {
+						case 0 :	// login
+							$sql = import_user_xls($file[$j]);
+							break;
+
+						case 1 :	// élèves
+							$sql = ( $format == "xls" )
+								? import_student_xls($file[$j])
+								: import_student_xml($file[$j]) ;
+							break;
+
+						case 2 :	// stages
+							$sql = import_stage_xls($file[$j]);
+							break;
+
+						default :	// portfolio
+							$sql = import_pfolio_xls($file[$j], @$_FILES["UploadPJ"]["name"][$j], $group);
+							break;
+						}
+
+					if ( $sql < 0 )
+						print("<p style=\"color: #ff0000;\">". $msg->read($ADMIN_ERROPEN) ."</p>");
+					else {
+						$Query  = "insert into admin_import ";
+						$Query .= "values('', '".$_SESSION["CnxID"]."', '".$_SESSION["CnxIP"]."', '$table', '".@$group."', '".date("Y-m-d H:i:s")."', '$sql', '$format')";
+
+						if ( mysql_query($Query, $mysql_link) )
+							mysql_query("update admin_log set _IDimport = '".mysql_insert_id()."' where _IDimport = '0'", $mysql_link);
+						}
+					}
+
+			// réinitialisation du tps max d'exécution des requêtes
+			if ( $safe_mode != "1" )
+				set_time_limit($time_limit);
+			}	// endif submit
+
+		// initialisation
+		switch ( $onglet ) {
+			case 0 :	// login
+				$format = Array('xls');
+				$table  = "user_id";
+				break;
+
+			case 1 :	// élèves
+				$format = Array('xls', 'xml');
+				$table  = "user_student";
+				break;
+
+			case 2 :	// stages
+				$format = Array('xls');
+				$table  = "stage_lieu";
+				break;
+
+			default :	// portfolio
+				$format = Array('xls');
+				$table  = "pfolio";
+				break;
+			}
+	?>
+
+	<form id="formulaire" action="index.php" method="post" enctype="multipart/form-data">
+	<?php
+		print("
+			<p class=\"hidden\"><input type=\"hidden\" name=\"item\"    value=\"$item\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"cmde\"    value=\"$cmde\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"table\"   value=\"$table\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"onglet\"  value=\"$onglet\" /></p>");
+	?>
+
+	<?php
+		$label = "";
+		$list  = explode(",", $msg->read($ADMIN_IMPORTMENU));
+
+		if ( count($list) )
+			$label .= ( $onglet == 0 )
+				? "<strong>$list[0]</strong>"
+				: "<a href=\"".myurlencode("index.php?item=$item&cmde=$cmde&onglet=0")."\">$list[0]</a>" ;
+
+		for ($i = 1; $i < count($list); $i++)
+			$label .= ( $onglet == $i )
+				? "|<strong>$list[$i]</strong>"
+				: "|<a href=\"".myurlencode("index.php?item=$item&cmde=$cmde&onglet=$i")."\">$list[$i]</a>" ;
+
+		print("
+			<fieldset style=\"border:#cccccc solid 1px;\">
+			<legend>$label</legend>");
+
+			print("
+		            <table class=\"width100\">
+		              <tr class=\"align-center\" style=\"background-color:#c0c0c0;\">
+		                <td style=\"width:60%;\">". $msg->read($ADMIN_FILE) ."</td>
+		                <td style=\"width:20%;\">". $msg->read($ADMIN_FORMAT) ."</td>
+		                <td style=\"width:20%;\">". $msg->read($ADMIN_GROUP) ."</td>
+		              </tr>
+
+		              <tr>
+			          <td>
+					<input type=\"hidden\" name=\"MAX_FILE_SIZE\" value=\"$FILESIZE\" />
+					<input type=\"file\" name=\"UploadPJ[]\" style=\"font-size:9px; margin-bottom:5px;\" />
+			          </td>
+			          <td class=\"align-center\">");
+
+					print("
+					  	<label for=\"IDfmt\">
+					  	<select id=\"IDfmt\" name=\"format\">");
+
+					for ($i = 0; $i < count($format); $i++)
+						print("<option value=\"$format[$i]\">$format[$i]</option>");
+
+					print("
+					  	</select>
+					  	</label>");
+
+			print("
+			          </td>
+			          <td class=\"align-center\">");
+
+					if ( $onglet == 3 ) {
+						print("
+						  	<label for=\"IDgroup\">
+						  	<select id=\"IDgroup\" name=\"IDgroup\">");
+
+							// affichage des matières
+							$query  = "select _IDmat, _titre from campus_data ";
+							$query .= "where _visible = 'O' AND _lang = '".$_SESSION["lang"]."' ";
+							$query .= "order by _titre";
+
+							$return = mysql_query($query, $mysql_link);
+							$myrow  = ( $return ) ? remove_magic_quotes(mysql_fetch_row($return)) : 0 ;
+
+							while ( $myrow ) {			
+								print("<option value=\"$myrow[0]\">$myrow[1]</option>");
+
+								$myrow = remove_magic_quotes(mysql_fetch_row($return));
+								}	// endwhile groupe
+
+						print("
+						  	</select>
+						  	</label>");
+						}
+
+			print("
+			          </td>
+		              </tr>
+		            </table>");
+	?>
+
+		<hr/>
+
+		<div>
+			[ <?php print($msg->read($ADMIN_LOG)); ?> ]
+			<span style="cursor: pointer;" onclick="$('log')._display.toggle(); return false;"><img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/updown.png" title="+" alt="+" /></span>
+		</div>
+
+		<div id="log" style="display:block;">
+		<?php
+			// lecture des logs d'import
+			$query  = "select _ID, _IP, _date, _record, _ext, _IDgroup, _IDimport from admin_import ";
+			$query .= "where _table = '$table' ";
+			$query .= "order by _IDimport desc ";
+			$query .= "limit 10";
+
+			$return = mysql_query($query, $mysql_link);
+			$myrow  = ( $return ) ? mysql_fetch_row($return) : 0 ;
+
+			$j      = 0;
+			$text   = "";
+
+			while ( $myrow ) {
+				$bgcolor = ( $j++ % 2 ) ? "item" : "menu" ;
+
+				$msg->isPlural = (bool) ( $myrow[3] > 1 );
+
+				if ( $onglet == 3 ) {
+					// affichage des matières
+					$query  = "select _titre from campus_data ";
+					$query .= "where _IDmat = '$myrow[5]' AND _lang = '".$_SESSION["lang"]."' ";
+					$query .= "limit 1";
+					}
+				else {
+					// lecture du groupe
+					$query  = "select _ident from user_group ";
+					$query .= "where _IDgrp = '$myrow[5]' AND _lang = '".$_SESSION["lang"]."' ";
+					$query .= "limit 1";
+					}
+
+				$result = mysql_query($query, $mysql_link);
+				$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+				$text  .= "<div class=\"$bgcolor\">";
+
+				$text  .= "<a href=\"".$_SESSION["ROOTDIR"]."/admin_csv.php?sid=".$_SESSION["sessID"]."&amp;id=$myrow[6]\" onclick=\"window.open(this.href, '_blank'); return false;\">";
+				$text  .= "<img src=\"".$_SESSION["ROOTDIR"]."/images/post-in.gif\" title=\"". $msg->read($ADMIN_CSV) ."\" alt=\"". $msg->read($ADMIN_CSV) ."\" />";
+				$text  .= "</a> ";
+
+				$text  .= $msg->read($ADMIN_LASTIMPORT, Array(date2longfmt($myrow[2]), getUserName($myrow[0]), _getHostName($myrow[1]), $row[0], strval($myrow[3]), $myrow[4]));
+
+				$text  .= "</div>";
+
+				$myrow  = mysql_fetch_row($return);
+				}
+
+	            print("$text");
+		?>
+		</div>
+
+		</fieldset>
+
+            <table class="width100">
+              <tr class="valign-bottom">
+			<td style="width:10%;">
+				<?php print("<input type=\"image\" src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/post.gif\" name=\"valid\" alt=\"".$msg->read($ADMIN_INPUTNEW)."\" />"); ?>
+			</td>
+			<td><?php print($msg->read($ADMIN_RUN)); ?></td>
+              </tr>
+            </table>
+
+	</form>
+
+</div>

@@ -1,0 +1,704 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2007 by Dominique Laporte(C-E-D@wanadoo.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : stage_new.htm
+ *		projet   : dépôt des offres des entreprises
+ *
+ *		version  : 1.0
+ *		auteur   : laporte
+ *		creation : 2/08/07
+ *		modif    : 
+ */
+
+
+$IDoffre    = ( @$_POST["IDoffre"] )				// ID de l'offre
+	? (int) $_POST["IDoffre"]
+	: (int) @$_GET["IDoffre"] ;
+
+$IDsector   = (int) @$_POST["IDsector"];				// type du secteur d'activité
+$activity   = addslashes(trim(@$_POST["activity"]));		// activité principale
+$name       = addslashes(trim(@$_POST["name"]));		// raison sociale
+$address    = addslashes(trim(@$_POST["address"]));		// adresse
+$zip        = addslashes(trim(@$_POST["zip"]));			// code postal
+$city       = addslashes(trim(@$_POST["city"]));		// ville
+$tel        = addslashes(trim(@$_POST["tel"]));			// téléphone
+$fax        = addslashes(trim(@$_POST["fax"]));			// fax
+$email      = addslashes(trim(@$_POST["email"]));		// mél
+$web        = addslashes(trim(@$_POST["web"]));			// site web
+$profil     = addslashes(trim(@$_POST["profil"]));		// description entreprise
+
+$IDcontrat  = (int) @$_POST["IDcontrat"];				// type de contrat
+$IDposte    = (int) @$_POST["IDposte"];				// type de poste
+$exp        = (int) @$_POST["exp"];					// années d'expériences
+$IDregion   = (int) @$_POST["IDregion"];				// code région
+$IDdegree   = (int) @$_POST["IDdegree"];				// type de dipôme exigé
+$IDlangtype = (int) @$_POST["IDlangtype"];			// langue exigée
+$IDlanglvl  = (int) @$_POST["IDlanglvl"];				// maîtrise de la langue exigée
+$titre      = addslashes(trim(@$_POST["titre"]));		// intitulé du poste
+$texte      = addslashes(trim(@$_POST["texte"]));		// description du poste
+$dispo      = addslashes(trim(@$_POST["dispo"]));		// dates disponibilités
+$lieu       = addslashes(trim(@$_POST["lieu"]));		// lieu de travail
+$money      = addslashes(trim(@$_POST["money"]));		// salaire
+
+$submit     = @$_POST["valid_x"];					// bouton de validation
+?>
+
+
+<?php
+	// lecture des droits de la base de données des stages
+	$query  = "select _IDmod, _IDgrpwr, _rss from stage_data ";
+	$query .= "where _mod = 'pro' ";
+	$query .= "limit 1";
+
+	$result = mysql_query($query, $mysql_link);
+	$row    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+	// vérification des autorisations
+	verifySessionAccess($row[0], $row[1]);
+
+	$is_rss  = $row[2];
+
+	// initialisation
+	$status  = "-";
+	$errtext = "";
+
+	// l'utilisateur a validé
+	if ( $submit ) {
+		// vérification de la saisie
+		$errtext = ( strpos($email, ".") == "" OR strpos($email, "@") == "" )
+			? $msg->read($STAGE_BADEMAIL)
+			: "" ;
+
+		$errtext = ( $zip == "" OR $city == "" )
+			? $msg->read($STAGE_BADADDRESS)
+			: $errtext ;
+
+		$errtext = ( $name == "" )
+			? $msg->read($STAGE_BADCOMPNAME)
+			: $errtext ;
+
+		// enregistrement modifications (si pas d'erreur)
+		if ( $errtext != "" )
+			$status = "<img src=\"".$_SESSION["ROOTDIR"]."/images/bad.gif\" title=\"\" alt=\"\" /> <span style=\"color:#ff0000;\">$errtext</span>";
+		else {
+			$date   = date("Y:m:d H:i:s");
+			$ip     = $_SESSION["CnxIP"];
+			$id     = $_SESSION["CnxID"];
+
+			$zip    = ( strlen($zip) < 5 ) ? "0$zip" : $zip ;
+			$web    = ( $web != "" AND strstr($web, "http://") == "" AND strstr($web, "https://") == "" ) ? "http://" . $web : $web ;
+
+			// mise à jour compte entreprise (coordonnées)
+			$query  = "select _IDsociete from cv_user ";
+			$query .= "where _IDuser = '".$_SESSION["CnxID"]."' ";
+			$query .= "limit 1";
+
+			$return = mysql_query($query, $mysql_link);
+			$row    = ( $return  ) ? mysql_fetch_row($return) : 0 ;
+
+			if ( mysql_affected_rows($mysql_link) ) {
+				$IDsociete = $row[0];
+
+				$query   = "update stage_lieu ";
+				$query  .= "set _secteur = '$IDsector', _activite = '$activity', _societe = '$name', _adresse = '$address', _cp = '$zip', _ville = '$city', _tel = '$tel', _fax = '$fax', _email = '$email', _web = '$web', _text = '$profil' ";
+				$query  .= "where _IDlieu = '$IDsociete' ";
+				$query  .= "limit 1";
+
+				$return  = mysql_query($query, $mysql_link);
+				}
+			else {
+				$list    = explode(",", $msg->read($STAGE_SEX));
+				$genre   = ( $_SESSION["CnxName"] == "H" ) ? $list[0] : $list[1] ; 
+
+				$query   = "insert into stage_lieu ";
+				$query  .= "values('', '$date', ";
+				$query  .= "'$IDsector', '$name', '', '$activity', '$profil', ";
+				$query  .= "'$address', '$zip', '$city', '$tel', '$fax', '$email', '$web', ";
+				$query  .= "'', '$genre ".$_SESSION["CnxName"]."', '', '', ";
+				$query  .= "'', '', '', '', '', '', '', ";
+				$query  .= "'', '', '', '', '', ";
+				$query  .= "'', '', '', '', ";
+				$query  .= "'', '', '', '', '', '', ";
+				$query  .= "'O')";
+
+				$return    = mysql_query($query, $mysql_link);
+				$IDsociete = ( $return ) ? mysql_insert_id() : 0 ;
+
+				if ( $return ) {
+					$query  = "insert into cv_user ";
+					$query .= "values('$IDsociete', '".$_SESSION["CnxID"]."')";
+
+					$return = mysql_query($query, $mysql_link);
+					}
+				}
+
+			// mise à jour de l'offre
+			if ( $return ) {
+				$mylang = $_SESSION["lang"];
+				$visu   = ( @$_POST["visible"] ) ? "O" : "N" ;
+
+				if ( $IDoffre ) {
+					$query  = "update cv_offre ";
+					$query .= "set _date = '$date', _ip = '$ip', _titre = '$titre', _texte = '$texte', _dispo = '$dispo', _salaire = '$money', _IDposte = '$IDposte', _IDlevel = '$exp', _IDcontrat = '$IDcontrat', ";
+					$query .= "_IDregion = '$IDregion', _lieu = '$lieu', _IDdegree = '$IDdegree', _IDlangtype = '$IDlangtype', _IDlanglvl = '$IDlanglvl', _visible = '$visu' ";
+					$query .= "where _IDoffre = '$IDoffre' AND _IDuser = '$id' ";
+					$query .= "limit 1";
+					}
+				else {
+					$query  = "insert into cv_offre ";
+					$query .= "values('', '$id', '$ip', '$date', '$IDsociete', '$titre', '$texte', '$dispo', '$money', '$IDposte', '$exp', '$IDcontrat', '$IDregion', '$lieu', '$IDdegree', '$IDlangtype', '$IDlanglvl', '0', 'N', '$mylang')";
+					}
+
+				$return = mysql_query($query, $mysql_link);
+
+				// alimentation flux rss
+				if ( $is_rss == "O" AND $visu == "O" AND $return ) {
+					$sujet  = addslashes($msg->read($STAGE_OFFERNUMBER, Array(strval($IDoffre), $date)));
+					$texte  = $titre." ".$texte." ".$dispo." ".$lieu." ".$money;
+
+					$query  = "insert into rss_items ";
+					$query .= "values('', '0', '$sujet', '', '$texte', '".addslashes(getUserName($_SESSION["CnxID"], false))."', '".addslashes($msg->read($STAGE_INPUTOFFER))."', '".date("Y-m-d H:i:s", time())."', '".$_SESSION["lang"]."')";
+
+					mysql_query($query, $mysql_link);
+					}
+				}
+
+			$status  = $return
+				? "<img src=\"".$_SESSION["ROOTDIR"]."/images/ok.gif\" title=\"\" alt=\"\" />"
+				: "<img src=\"".$_SESSION["ROOTDIR"]."/images/bad.gif\" title=\"\" alt=\"\" />" ;
+			$status .= " " . $msg->read($STAGE_UPDATE) ;
+			}
+		}
+
+	// initialisation
+	if ( $errtext == "" ) {
+		// coordonnées
+		$query    = "select _secteur, _activite, _adresse, _cp, _ville, _tel, _fax, _email, _web, _text, _societe ";
+		$query   .= "from stage_lieu, cv_user ";
+		$query   .= "where _IDlieu = _IDsociete ";
+		$query   .= "AND _IDuser = '".$_SESSION["CnxID"]."' ";
+		$query   .= "limit 1";
+
+		$result   = mysql_query($query, $mysql_link);
+		$row      = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+		$IDsector = $row[0];				// type de secteur d'activité
+		$activity = $row[1];				// activité principale
+		$address  = $row[2];				// adresse
+		$zip      = $row[3];				// code postal
+		$city     = $row[4];				// ville
+		$tel      = $row[5];				// téléphone
+		$fax      = $row[6];				// fax
+		$email    = $row[7];				// mél
+		$web      = $row[8];				// site web
+		$profil   = $row[9];				// description entreprise
+		$name     = $row[10];				// raison sociale
+
+		// poste recherché
+		$query    = "select _IDcontrat, _IDposte, _IDregion, _texte, _dispo, _titre, _salaire, _lieu, _IDlevel, _IDdegree, _IDlangtype, _IDlanglvl, _visible ";
+		$query   .= "from cv_offre ";
+		$query   .= "where _IDoffre = '$IDoffre' ";
+		$query   .= "limit 1";
+
+		$result   = mysql_query($query, $mysql_link);
+		$row      = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+		$IDcontrat  = $row[0];				// type de contrat
+		$IDposte    = $row[1];				// type de poste
+		$IDregion   = $row[2];				// code région
+		$texte      = $row[3];				// description poste
+		$dispo      = $row[4];				// date dispo
+		$titre      = $row[5];				// poste exact
+		$money      = $row[6];				// salaire
+		$lieu       = $row[7];				// lieu de travail
+		$exp        = $row[8];				// expérience
+		$IDdegree   = $row[9];				// diplôme exigée
+		$IDlangtype = $row[10];				// langue exigée
+		$IDlanglvl  = $row[11];				// niveau de maîtrise de la langue exigée
+		}
+?>
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($STAGE_INPUTOFFER)); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+
+	<form id="formulaire" action="" method="post">
+
+      <table class="width100">
+        <tr>
+          <td class="align-left"><?php print($msg->read($STAGE_STATUS, $status)); ?></td>
+          <td class="align-right">
+		<?php
+			if ( $IDoffre ) {
+				$check = ( @$row[12]== "O" ) ? "checked=\"checked\"" : "" ;
+
+				print("
+					". $msg->read($STAGE_PUBLISHOFFER) ."
+					<label for=\"visible\"><input type=\"checkbox\" id=\"visible\" name=\"visible\" value=\"1\" $check /></label>
+					");
+				}
+		?>
+          </td>
+        </tr>
+      </table>
+
+	<p style="margin-bottom:0px; background-color:#cecece;">
+		<?php print($msg->read($STAGE_COORDINATES)); ?>
+		<span style="cursor: pointer;" onclick="$('block1')._display.toggle(); return false;"><img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/updown.png" title="" alt="" /></span>
+	</p>
+
+	<div id="block1" style="display:<?php print($IDoffre ? "none" : "block"); ?>;">
+        <table class="width100">
+          <tr>
+            <td style="width:30%;" class="align-right"><?php print($msg->read($STAGE_SECTOR)); ?></td>
+            <td>
+			<label for="IDsector">
+			<select id="IDsector" name="IDsector">
+			<?php
+				// affichage des secteurs d'activité
+				$query  = "select _IDblock, _ident from stage_secteur ";
+				$query .= "where _visible = 'O' AND _lang = '".$_SESSION["lang"]."' ";
+				$query .= "order by _ident";
+
+				$result = mysql_query($query, $mysql_link);
+				$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+				while ( $row ) {			
+					if ( $IDsector == $row[0] )
+						print("<option selected=\"selected\" value=\"$row[0]\">$row[1]</option>");
+					else
+						print("<option value=\"$row[0]\">$row[1]</option>");
+
+					$row = remove_magic_quotes(mysql_fetch_row($result));
+					}				
+			?>
+			</select>
+			</label>
+		</td>
+          </tr>
+
+          <tr>
+            <td style="width:30%;" class="align-right"><?php print($msg->read($STAGE_ACTIVITY)); ?></td>
+            <td>
+			<?php
+				print("<label for=\"activity\"><input type=\"text\" id=\"activity\" name=\"activity\" size=\"40\" value=\"$activity\" /></label>");
+			?>
+		</td>
+          </tr>
+
+          <tr>
+            <td style="width:30%;" class="align-right"><?php print($msg->read($STAGE_COMPNAME)); ?></td>
+            <td>
+			<?php
+				print("<label for=\"name\"><input type=\"text\" id=\"name\" name=\"name\" size=\"40\" value=\"$name\" /></label>");
+		            print("<span style=\"color:#ff0000;\"> ". $msg->read($STAGE_MANDATORY) ."</span>");
+			?>
+		</td>
+          </tr>
+
+          <tr>
+            <td class="align-right"><?php print($msg->read($STAGE_ADDRESS)); ?></td>
+            <td>
+			<?php
+				print("<label for=\"address\"><textarea id=\"address\" name=\"address\" rows=\"2\" cols=\"40\">$address</textarea></label>");
+			?>
+		</td>
+          </tr>
+
+          <tr>
+            <td class="align-right"><?php print($msg->read($STAGE_ZIP)); ?></td>
+            <td>
+			<?php
+				print("<label for=\"zip\"><input type=\"text\" id=\"zip\" name=\"zip\" size=\"6\" value=\"$zip\" /></label>");
+				print(" - ". $msg->read($STAGE_CITY) ." ");
+				print("<label for=\"city\"><input type=\"text\" id=\"city\" name=\"city\" size=\"30\" value=\"$city\" /></label>");
+		            print("<span style=\"color:#ff0000;\"> ". $msg->read($STAGE_MANDATORY) ."</span>");
+			?>
+		</td>
+          </tr>
+
+          <tr>
+            <td class="align-right"><?php print($msg->read($STAGE_TEL)); ?></td>
+            <td>
+			<?php
+				print("<label for=\"tel\"><input type=\"text\" id=\"tel\" name=\"tel\" size=\"20\" value=\"$tel\" /></label>");
+			?>
+		</td>
+          </tr>
+
+          <tr>
+            <td class="align-right"><?php print($msg->read($STAGE_FAX)); ?></td>
+            <td>
+			<?php
+				print("<label for=\"fax\"><input type=\"text\" id=\"fax\" name=\"fax\" size=\"20\" value=\"$fax\" /></label>");
+			?>
+		</td>
+          </tr>
+
+          <tr>
+            <td class="align-right"><?php print($msg->read($STAGE_EMAIL)); ?></td>
+            <td>
+			<?php
+				print("<label for=\"email\"><input type=\"text\" id=\"email\" name=\"email\" size=\"40\" value=\"$email\" /></label>");
+		            print("<span style=\"color:#ff0000;\"> ". $msg->read($STAGE_MANDATORY) ."</span>");
+			?>
+		</td>
+          </tr>
+
+          <tr>
+            <td style="width:30%;" class="align-right"><?php print($msg->read($STAGE_WEBSITE)); ?></td>
+            <td>
+			<?php
+				print("<label for=\"web\"><input type=\"text\" id=\"web\" name=\"web\" size=\"40\" value=\"$web\" /></label>");
+			?>
+		</td>
+          </tr>
+
+          <tr>
+            <td></td>
+            <td>
+	            <?php print($msg->read($STAGE_DESCOMPANY)); ?>
+			<?php
+				print("<a href=\"#\" onclick=\"popWin('".$_SESSION["ROOTDIR"]."/spip_typo.php?lang=".$_SESSION["lang"]."', '450', '350'); return false;\">
+				<img src=\"".$_SESSION["ROOTDIR"]."/images/spip/aide.gif\" title=\"".$msg->read($STAGE_HELP)."\" alt=\"".$msg->read($STAGE_HELP)."\" /></a><br />");
+
+				print("<label for=\"profil\"><textarea id=\"profil\" name=\"profil\" rows=\"3\" cols=\"50\">$profil</textarea></label>");
+			?>
+		</td>
+          </tr>
+        </table>
+	</div>
+
+	<p style="margin-bottom:0px; background-color:#cecece;">
+		<?php print($msg->read($STAGE_POSITION)); ?>
+		<label for="IDoffre">
+		<select id="IDoffre" name="IDoffre" onchange="document.forms.formulaire.submit()" style="font-size: 9px;">
+		<?php
+			// affichage des offres
+			$query  = "select _IDoffre, _date from cv_offre ";
+			$query .= "where _IDuser = '".$_SESSION["CnxID"]."' ";
+			$query .= "order by _IDoffre";
+
+			$result = mysql_query($query, $mysql_link);
+			$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+			print("<option value=\"0\">". $msg->read($STAGE_NEWOFFER) ."</option>");
+
+			while ( $row ) {	
+				if ( $IDoffre == $row[0] )
+					print("<option selected=\"selected\" value=\"$row[0]\">". $msg->read($STAGE_OFFERNUMBER, Array(strval($row[0]), $row[1])) ."</option>");
+				else
+					print("<option value=\"$row[0]\">". $msg->read($STAGE_OFFERNUMBER, Array(strval($row[0]), $row[1])) ."</option>");
+
+				$row = remove_magic_quotes(mysql_fetch_row($result));
+				}				
+		?>
+		</select>
+		</label>
+	</p>
+
+        <table class="width100">
+          <tr>
+            <td style="width:30%;" class="align-right">
+			<?php print($msg->read($STAGE_CONTRACT)); ?>
+		</td>
+            <td>
+			<label for="IDcontrat">
+			<select id="IDcontrat" name="IDcontrat">
+			<?php
+				// lecture des contrats
+				$query  = "select _IDcontrat, _ident from cv_contrat ";
+				$query .= "where _lang = '".$_SESSION["lang"]."' ";
+				$query .= "order by _ident";
+
+				$result = mysql_query($query, $mysql_link);
+				$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+				while ( $row ) {			
+					if ( $IDcontrat == $row[0] )
+						print("<option selected=\"selected\" value=\"$row[0]\">$row[1]</option>");
+					else
+						print("<option value=\"$row[0]\">$row[1]</option>");
+
+					$row = remove_magic_quotes(mysql_fetch_row($result));
+					}				
+			?>
+			</select>
+			</label>
+		</td>
+          </tr>
+
+          <tr>
+            <td class="align-right"><?php print($msg->read($STAGE_AVAILIBILITY)); ?></td>
+            <td>
+			<?php
+				print("<label for=\"dispo\"><input type=\"text\" id=\"dispo\" name=\"dispo\" size=\"40\" value=\"$dispo\" /></label>");
+			?>
+		</td>
+          </tr>
+
+          <tr>
+            <td class="align-right"><?php print($msg->read($STAGE_JOB)); ?></td>
+            <td>
+			<label for="IDposte">
+			<select id="IDposte" name="IDposte">
+			<?php
+				// lecture des postes
+				$query  = "select _IDposte, _ident from cv_poste ";
+				$query .= "where _lang = '".$_SESSION["lang"]."' ";
+				$query .= "order by _IDposte";
+
+				$result = mysql_query($query, $mysql_link);
+				$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+				while ( $row ) {			
+					if ( $IDposte == $row[0] )
+						print("<option selected=\"selected\" value=\"$row[0]\">$row[1]</option>");
+					else
+						print("<option value=\"$row[0]\">$row[1]</option>");
+
+					$row = remove_magic_quotes(mysql_fetch_row($result));
+					}
+			?>
+			</select>
+			</label>
+		</td>
+          </tr>
+
+          <tr>
+            <td class="align-right"><?php print($msg->read($STAGE_PROFILE)); ?></td>
+            <td>
+			<?php
+				print("<label for=\"titre\"><input type=\"text\" id=\"titre\" name=\"titre\" size=\"40\" value=\"$titre\" /></label>");
+			?>
+		</td>
+          </tr>
+
+          <tr>
+            <td class="align-right"><?php print($msg->read($STAGE_EXPERIENCE)); ?></td>
+            <td>
+			<label for="exp">
+			<select id="exp" name="exp">
+			<?php
+				// lecture de l'expérience
+				$query  = "select _IDlevel, _ident from cv_level ";
+				$query .= "where _lang = '".$_SESSION["lang"]."' ";
+				$query .= "order by _IDlevel";
+
+				$result = mysql_query($query, $mysql_link);
+				$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+				print("<option value=\"0\">". $msg->read($STAGE_NIL) ."</option>");
+
+				while ( $row ) {
+					if ( $exp == $row[0] )
+						print("<option selected=\"selected\" value=\"$row[0]\">$row[1]</option>");
+					else
+						print("<option value=\"$row[0]\">$row[1]</option>");
+
+					$row = remove_magic_quotes(mysql_fetch_row($result));
+					}				
+			?>
+			</select>
+			</label>
+		</td>
+          </tr>
+
+          <tr>
+            <td></td>
+            <td>
+	            <?php print($msg->read($STAGE_TEXT)); ?>
+			<?php
+				print("<a href=\"#\" onclick=\"popWin('".$_SESSION["ROOTDIR"]."/spip_typo.php?lang=".$_SESSION["lang"]."', '450', '350'); return false;\">
+				<img src=\"".$_SESSION["ROOTDIR"]."/images/spip/aide.gif\" title=\"".$msg->read($STAGE_HELP)."\" alt=\"".$msg->read($STAGE_HELP)."\" /></a><br />");
+
+				print("<label for=\"texte\"><textarea id=\"texte\" name=\"texte\" rows=\"7\" cols=\"50\">$texte</textarea></label>");
+			?>
+		</td>
+          </tr>
+
+          <tr>
+            <td class="align-right"><?php print($msg->read($STAGE_DIPLOMA)); ?></td>
+            <td>
+			<label for="IDdegree">
+			<select id="IDdegree" name="IDdegree">
+			<?php
+				// lecture des diplômes
+				$query  = "select _IDdegree, _ident from cv_degree ";
+				$query .= "where _lang = '".$_SESSION["lang"]."' ";
+				$query .= "order by _IDdegree";
+
+				$result = mysql_query($query, $mysql_link);
+				$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+				print("<option value=\"0\">". $msg->read($STAGE_NIL) ."</option>");
+
+				while ( $row ) {			
+					if ( $IDdegree == $row[0] )
+						print("<option selected=\"selected\" value=\"$row[0]\">$row[1]</option>");
+					else
+						print("<option value=\"$row[0]\">$row[1]</option>");
+
+					$row = remove_magic_quotes(mysql_fetch_row($result));
+					}
+			?>
+			</select>
+			</label>
+		</td>
+          </tr>
+
+          <tr>
+            <td class="align-right"><?php print($msg->read($STAGE_LANG)); ?></td>
+            <td>
+			<label for="IDlangtype">
+			<select id="IDlangtype" name="IDlangtype">
+			<?php
+				// lecture des langues
+				$query  = "select _IDtype, _ident from cv_langtype ";
+				$query .= "where _lang = '".$_SESSION["lang"]."' ";
+				$query .= "order by _IDtype";
+
+				$result = mysql_query($query, $mysql_link);
+				$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+				print("<option value=\"0\">". $msg->read($STAGE_NIL) ."</option>");
+
+				while ( $row ) {			
+					if ( $IDlangtype == $row[0] )
+						print("<option selected=\"selected\" value=\"$row[0]\">$row[1]</option>");
+					else
+						print("<option value=\"$row[0]\">$row[1]</option>");
+
+					$row = remove_magic_quotes(mysql_fetch_row($result));
+					}
+			?>
+			</select>
+			</label>
+
+	            <?php print($msg->read($STAGE_LEVEL)); ?>
+
+			<label for="IDlanglvl">
+			<select id="IDlanglvl" name="IDlanglvl">
+			<?php
+				// lecture de la maîtrise de la langue
+				$query  = "select _IDlevel, _ident from cv_langlevel ";
+				$query .= "where _lang = '".$_SESSION["lang"]."' ";
+				$query .= "order by _IDlevel";
+
+				$result = mysql_query($query, $mysql_link);
+				$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+				print("<option value=\"0\">". $msg->read($STAGE_NIL) ."</option>");
+
+				while ( $row ) {			
+					if ( $IDlanglvl == $row[0] )
+						print("<option selected=\"selected\" value=\"$row[0]\">$row[1]</option>");
+					else
+						print("<option value=\"$row[0]\">$row[1]</option>");
+
+					$row = remove_magic_quotes(mysql_fetch_row($result));
+					}
+			?>
+			</select>
+			</label>
+		</td>
+          </tr>
+
+          <tr>
+            <td class="align-right"><?php print($msg->read($STAGE_REGION)); ?></td>
+            <td>
+			<label for="IDregion">
+			<select id="IDregion" name="IDregion">
+			<?php
+				// lecture des régions
+				$query  = "select _IDregion, _ident from cv_region ";
+				$query .= "where _lang = '".$_SESSION["lang"]."' ";
+				$query .= "order by _IDregion";
+
+				$result = mysql_query($query, $mysql_link);
+				$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+				print("<option value=\"0\">". $msg->read($STAGE_NIL) ."</option>");
+
+				while ( $row ) {			
+					if ( $IDregion == $row[0] )
+						print("<option selected=\"selected\" value=\"$row[0]\">$row[1]</option>");
+					else
+						print("<option value=\"$row[0]\">$row[1]</option>");
+
+					$row = remove_magic_quotes(mysql_fetch_row($result));
+					}				
+			?>
+			</select>
+			</label>
+		</td>
+          </tr>
+
+          <tr>
+            <td class="align-right"><?php print($msg->read($STAGE_LOCATION)); ?></td>
+            <td>
+			<?php
+				print("<label for=\"lieu\"><input type=\"text\" id=\"lieu\" name=\"lieu\" size=\"40\" value=\"$lieu\" /></label>");
+			?>
+		</td>
+          </tr>
+
+          <tr>
+            <td class="align-right"><?php print($msg->read($STAGE_SALARY)); ?></td>
+            <td>
+			<?php
+				print("<label for=\"money\"><input type=\"text\" id=\"money\" name=\"money\" size=\"40\" value=\"$money\" /></label>");
+			?>
+		</td>
+          </tr>
+        </table>
+
+	<hr />
+
+        <table class="width100">
+          <tr>
+            <td style="width:10%;" class="valign-middle">
+			<?php print("<input type=\"image\" src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/valid.gif\" name=\"valid\" alt=\"".$msg->read($STAGE_INPUTOK)."\" />"); ?>
+		</td>
+            <td class="valign-middle">
+			<?php print($msg->read($STAGE_VALIDATE)); ?>
+		</td>
+          </tr>
+
+          <tr>
+            <td class="valign-middle">
+			<?php print("<a href=\"index.php?item=$item&amp;cmde=pro\"><img src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/cancel.gif\" title=\"\" alt=\"".$msg->read($STAGE_INPUTCANCEL)."\" /></a>"); ?>
+		</td>
+            <td class="valign-middle">
+			<?php print($msg->read($STAGE_QUIT)); ?>
+		</td>
+          </tr>
+        </table>
+        
+      </form>
+      
+</div>

@@ -1,0 +1,255 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2004-2008 by Dominique Laporte(C-E-D@wanadoo.fr)
+   Copyright (c) 2006 by FG (persofg@gmail.com)
+   Copyright (c) 2006 by Nordine Zetoutou (nordine.zetoutou@educagri.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : weblog_gestion.htm
+ *		projet   : la page de gestion des weblogs
+ *
+ *		version  : 1.0
+ *		auteur   : laporte
+ *		creation : 29/09/04
+ *		modif    : 16/06/05 par FG
+ *                     migration -> PHP5
+ * 		           17/07/06 - par Nordine Zetoutou
+ * 	                 migration des balises HTML en XHTML 1.0 strict
+ */
+
+
+$IDmod   = ( strlen(@$_POST["IDmod"]) )			// ID du modérateur (propriétaire)
+	? (int) @$_POST["IDmod"]
+	: (int) $_SESSION["CnxID"] ;
+$cbrd    = @$_POST["cbrd"];
+$cbwr    = @$_POST["cbwr"];
+$texte   = @ $_POST["texte"];
+$comment = ( @$_POST["comment"] ) ? "O" : "N" ;
+$private = ( @$_POST["private"] ) ? "O" : "N" ;
+$ispj    = ( @$_POST["ispj"] ) ? "O" : "N" ;
+
+$submit  = @$_POST["valid_x"];			// bouton de validation
+?>
+
+
+<?php
+	// vérification des autorisations
+//	admSessionAccess();
+
+	// l'utilisateur a validé la saisie
+	if ( $submit ) {
+		$status = $msg->read($WEBLOG_MODIFICATION) ." ";
+
+		// droits des rédacteurs et des lecteurs
+		$grpwr = $grprd = 0;
+		for ($i = 0; $i < count($cbwr); $i++)
+			$grpwr += ( @$cbwr[$i] ) ? $cbwr[$i] : 0 ;
+		for ($i = 0; $i < count($cbrd); $i++)
+			$grprd += ( @$cbrd[$i] ) ? $cbrd[$i] : 0 ;
+
+		// modification du weblog
+		$Query  = "UPDATE weblog ";
+		$Query .= "SET _IDgrpwr = '$grpwr', _IDgrprd= '$grprd', _text = '$texte', _comment = '$comment', _private = '$private', _PJ = '$ispj' ";
+            $Query .= "where _ID = '$IDmod' ";
+            $Query .= "limit 1";
+
+		if ( !mysql_query($Query, $mysql_link) ) {
+			$status .= "<img src=\"".$_SESSION["ROOTDIR"]."/images/bad.gif\" title=\"\" alt=\"\" />";
+			sql_error($mysql_link);
+			}
+		else
+			$status .= "<img src=\"".$_SESSION["ROOTDIR"]."/images/ok.gif\" title=\"\" alt=\"\" />";
+		}
+	// initialisation
+	else
+		$status = "-";
+
+	// recherche du weblog
+	$Query   = "select _ID, _IDgrpwr, _IDgrprd, _text, _comment, _private, _PJ, _IDgroup from weblog ";
+	$Query  .= "where _ID = '$IDmod' " ;
+	$Query  .= "limit 1";
+
+	$result  = mysql_query($Query, $mysql_link);
+	$row     = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+	// initialisation
+	$IDmod   = $row[0];
+	$grpwr   = $row[1];
+	$grprd   = $row[2];
+	$texte   = $row[3];
+	$comment = $row[4];
+	$private = $row[5];
+	$ispj    = $row[6];
+
+	if ( $row[7] ) {
+		// e-groupe ou e-campus
+		$query  = ( $row[7] > 0 )
+			? "select _ident from egroup_data where _IDdata = '$row[7]' limit 1"
+			: "select _titre from campus_data where _IDmat = abs($row[7]) AND _lang = '".$_SESSION["lang"]."' limit 1" ;
+
+		$result = mysql_query($query, $mysql_link);
+		$myrow  = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+		$ident  = $myrow[0];
+		}
+	else
+		$ident  = getUserName($row[0], false); 
+?>
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($WEBLOG_MANAGEMENT, $ident)); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+
+	<p><?php print($msg->read($WEBLOG_STATUS) . " $status"); ?></p>
+
+	<form id="formulaire" action="index.php" method="post">
+	<?php
+		print("
+			<p class=\"hidden\"><input type=\"hidden\" name=\"item\"    value=\"$item\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"cmde\"    value=\"$cmde\" /></p>
+			");
+	?>
+
+	<div style="border:#cccccc solid 1px; padding:4px;">
+
+		  <table class="width100">
+		    <tr style="background-color:#eeeeee;">
+		      <td style="width:33%;"><?php print($msg->read($WEBLOG_MODO)); ?></td>
+		      <td style="width:33%;"><?php print($msg->read($WEBLOG_WRITER)); ?></td>
+		      <td style="width:33%;"><?php print($msg->read($WEBLOG_READER)); ?></td>
+		    </tr>
+	    
+		    <tr>
+		      <td class="valign-top">
+				<label for="IDmod">
+				<select id="IDmod" name="IDmod" onchange="document.forms.formulaire.submit()">
+				<?php
+					// recherche des modérateurs
+					$Query  = "select distinctrow weblog._ID from weblog, user_id ";
+					$Query .= "where weblog._ID = user_id._ID " ;
+					$Query .= ( $_SESSION["CnxAdm"] == 255 ) ? "" : "AND weblog._ID = '$IDmod' " ;
+					$Query .= "order by user_id._name, user_id._fname";
+
+					$result = mysql_query($Query, $mysql_link);
+					$row    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+					while ( $row ) {
+						$select = ( $IDmod == $row[0] ) ? "selected=\"selected\"" : "" ;
+
+						print("<option $select value=\"$row[0]\">". getUserName($row[0], false) ."</option>");
+
+						$row = mysql_fetch_row($result);
+						}
+				?>
+				</select>
+				</label>
+		      </td>
+		      <td class="valign-top">
+	      		<?php
+					// recherche des groupes
+					$query  = "select _IDgrp, _ident from user_group ";
+					$query .= "where _visible = 'O' AND _lang = '".$_SESSION["lang"]."' ";
+					$query .= "order by _IDgrp asc";
+
+					$result = mysql_query($query, $mysql_link);
+					$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+					while ( $row ) {
+						$check = ( $grpwr & pow(2, $row[0] - 1) ) ? "checked=\"checked\"" : "" ;
+
+	             			print("<label for=\"cbwr_$row[0]\"><input type=\"checkbox\" id=\"cbwr_$row[0]\" name=\"cbwr[]\" value=\"". pow(2, $row[0] - 1) ."\" $check /> $row[1]</label><br/>");
+
+						$row   = remove_magic_quotes(mysql_fetch_row($result));
+						}
+             		?>
+		      </td>
+		      <td class="valign-top">
+	      		<?php
+					// recherche des groupes
+					mysql_data_seek($result, 0);
+					$row = remove_magic_quotes(mysql_fetch_row($result));
+
+					while ( $row ) {
+						$check = ( $grprd & pow(2, $row[0] - 1) ) ? "checked=\"checked\"" : "" ;
+
+	             			print("<label for=\"cbrd_$row[0]\"><input type=\"checkbox\" id=\"cbrd_$row[0]\" name=\"cbrd[]\" value=\"". pow(2, $row[0] - 1) ."\" $check /> $row[1]</label><br/>");
+
+						$row   = remove_magic_quotes(mysql_fetch_row($result));
+						}
+	             	?>
+		      </td>
+		    </tr>
+
+		    <tr>
+		      <td style="height:15px;" colspan="3"></td>
+		    </tr>
+
+		    <tr style="background-color:#eeeeee;">
+		      <td>
+	              	<?php print($msg->read($WEBLOG_PERMS)); ?>
+		      </td>
+		      <td colspan="2">
+	              	<?php print($msg->read($WEBLOG_DESCRIPTION)); ?>
+		      </td>
+		    </tr>
+
+		    <tr>
+		      <td class="valign-top">
+	           		<label for="private"><input type="checkbox" id="private" name="private" <?php print(($private == "O") ? "checked=\"checked\"" : ""); ?> value="O" /><?php print($msg->read($WEBLOG_PRIVATE)); ?></label><br/>
+				<label for="ispj"><input type="checkbox" id="ispj" name="ispj" <?php print(($ispj == "O") ? "checked=\"checked\"" : ""); ?> value="O" /><?php print($msg->read($WEBLOG_ATTACHMENT)); ?></label><br/>
+				<label for="comment"><input type="checkbox" id="comment" name="comment" <?php print(($comment == "O") ? "checked=\"checked\"" : ""); ?> value="O" /><?php print($msg->read($WEBLOG_COMMENTS)); ?></label>
+	           	</td>
+		      <td colspan="2">
+	                <label for="texte"><textarea rows="4" id="texte" name="texte" cols="40"><?php print("$texte"); ?></textarea></label>
+		      </td>
+		    </tr>
+		  </table>
+
+	</div>
+
+	<hr style="width:80%;" />
+
+         <table class="width100">
+           <tr>
+              <td style="width:10%;" class="valign-middle align-center">
+              	<?php print("<input type=\"image\" src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/valid.gif\" name=\"valid\" alt=\"".$msg->read($WEBLOG_INPUTOK)."\" />"); ?>
+              </td>
+              <td class="valign-middle">
+              	<?php print($msg->read($WEBLOG_UPDTBLOG)); ?>
+              </td>
+           </tr>
+           <tr>
+              <td class="valign-middle align-center">
+              	<?php print("<a href=\"index.php?item=$item\"><img src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/cancel.gif\" title=\"\" alt=\"".$msg->read($WEBLOG_INPUTCANCEL)."\" />"); ?></a>
+              </td>
+              <td class="valign-middle">
+	              	<?php print($msg->read($WEBLOG_BACK2BLOG)); ?>
+              </td>
+           </tr>
+         </table>
+
+	</form>
+
+</div>

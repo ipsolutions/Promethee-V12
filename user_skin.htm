@@ -1,0 +1,310 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2007-2009 by Dominique Laporte(C-E-D@wanadoo.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : user_skin.htm
+ *		projet   : personnalisation de l'interface des utilisateurs
+ *
+ *		version  : 1.0
+ *		auteur   : laporte
+ *		creation : 20/01/07
+ *		modif    : 
+ */
+
+
+$menu   = addslashes(trim(@$_POST["menu"]));
+$puce   = addslashes(trim(@$_POST["puce"]));
+$fond   = addslashes(trim(@$_POST["fond"]));
+$header = addslashes(trim(@$_POST["header"]));
+$cb     = @$_POST["cb"];
+
+$submit = ( @$_POST["valid_x"] )		// bouton de validation
+	? "Valider"
+	: @$_POST["submit"] ;
+?>
+
+
+<?php
+	// l'utilisateur a validé
+	if ( $submit == "Valider" ) {
+		// les services
+		$service = " ";
+		@sort($cb);
+		for ( $i = 0; $i < count($cb); $i++ )
+			$service .= ( @$cb[$i] ) ? "$cb[$i] " : "" ;
+
+		// mise à jour de la config
+		$Query   = "insert into user_config ";
+		$Query  .= "values('".$_SESSION["CnxID"]."', '1', '$menu', '$puce', '$fond', '$header', '$service')";
+
+		if ( !mysql_query($Query, $mysql_link) ) {
+			$Query   = "update user_config ";
+			$Query  .= "set _menu = '$menu', _puce = '$puce', _fond = '$fond', _header = '$header', _service = '$service' ";
+			$Query  .= "where _IDconf = '".$_SESSION["CnxID"]."' ";
+			$Query  .= "limit 1";
+
+			mysql_query($Query, $mysql_link);
+			}
+		}
+	else
+		if ( $submit == $msg->read($USER_DEFAULTVALUES) ) {
+			$Query   = "select _puce, _fond, _header ";
+			$Query  .= "from config ";
+			$Query  .= "where _IDconf = '".$_SESSION["CnxID"]."' ";
+			$Query  .= "limit 1";
+
+			$result  = mysql_query($Query, $mysql_link);
+			$row     = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+			if ( $row ) {
+				$Query   = "update user_config ";
+				$Query  .= "set _puce = '$row[0]', _fond = '$row[1]', _header = '$row[2]' ";
+				$Query  .= "where _IDconf = '".$_SESSION["CnxID"]."' ";
+				$Query  .= "limit 1";
+
+				mysql_query($Query, $mysql_link);
+				}
+			}
+
+	// mise à jour de la config
+	$Query   = "select _menu, _puce, _fond, _header, _service from user_config ";
+	$Query  .= "where _IDconf = '".$_SESSION["CnxID"]."' ";
+	$Query  .= "limit 1";
+
+	$result  = mysql_query($Query, $mysql_link);
+	$row     = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+	$menu    = $row[0];
+	$puce    = $row[1];
+	$fond    = $row[2];
+	$header  = $row[3];
+	$service = $row[4];
+?>
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($USER_SKIN)); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+
+	<form id="config" action="index.php" method="post">
+	<?php
+		print("
+			<p class=\"hidden\"><input type=\"hidden\" name=\"item\"   value=\"$item\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"cmde\"   value=\"$cmde\" /></p>
+			");
+	?>
+
+        <table class="width100">
+          <tr>
+            <td class="align-center" colspan="2">
+			<?php print($msg->read($USER_SKINTEXT)); ?>
+		</td>
+          </tr>
+
+          <tr>
+            <td class="align-center" colspan="2"><hr style="width:80%;" /></td>
+          </tr>
+
+          <tr style="display: none">
+            <td style="width:40%;" class="align-right"><?php print($msg->read($USER_MENU)); ?></td>
+            <td>
+			<label for="menu">
+			<select id="menu" name="menu">
+			<?php
+				$menutype = explode(",", $msg->read($USER_COLUMNS));
+						
+				for ($i = 0; $i < count($menutype); $i++)
+					if ( $menu == $i )
+						print("<option selected=\"selected\" value=\"$i\">$menutype[$i]</option>");
+					else
+						print("<option value=\"$i\">$menutype[$i]</option>");
+			?>
+			</select>
+			</label>
+		</td>
+          </tr>
+
+          <tr style="display: none">
+            <td class="align-right"><?php print($msg->read($USER_PUCE)); ?></td>
+            <td>
+			<label for="puce">
+			<select id="puce" name="puce">
+			<?php
+				// recherche des images
+				$myDir = @opendir($_SESSION["ROOTDIR"]."/css/themes/puce");
+
+				// lecture du répertoire
+				while ( $entry = readdir($myDir) ) {
+					switch ( extension($entry) ) {
+						case "png" :
+						case "jpg" :
+						case "gif" :
+							if ( $puce == $entry )
+								print("<option selected=\"selected\" value=\"$entry\">$entry</option>");
+							else
+								print("<option value=\"$entry\">$entry</option>");
+							break;
+
+						default :
+							break;
+						}
+			              }
+
+				closedir($myDir);
+			?>
+			</select>
+			</label>
+		</td>
+          </tr>
+
+          <tr style="display: none">
+            <td class="align-right"><?php print($msg->read($USER_BGROUND)); ?></td>
+            <td>
+			<label for="fond">
+			<select id="fond" name="fond">
+			<?php
+				// recherche des images
+				$myDir = @opendir($_SESSION["ROOTDIR"]."/css/themes/fond");
+
+				// lecture du répertoire
+				while ( $entry = readdir($myDir) ) {
+					switch ( extension($entry) ) {
+						case "png" :
+						case "jpg" :
+						case "gif" :
+							if ( $fond == $entry )
+								print("<option selected=\"selected\" value=\"$entry\">$entry</option>");
+							else
+								print("<option value=\"$entry\">$entry</option>");
+							break;
+
+						default :
+							break;
+						}
+			              }
+
+				closedir($myDir);
+			?>
+			</select>
+			</label>
+		</td>
+          </tr>
+
+          <tr style="display: none">
+            <td class="align-right"><?php print($msg->read($USER_MYTITLE)); ?></td>
+            <td>
+			<label for="header">
+			<select id="header" name="header">
+			<?php
+				// recherche des images
+				$myDir = @opendir($_SESSION["ROOTDIR"]."/css/themes/header");
+
+				// lecture du répertoire
+				while ( $entry = readdir($myDir) ) {
+					switch ( extension($entry) ) {
+						case "png" :
+						case "jpg" :
+						case "gif" :
+							if ( $header == $entry )
+								print("<option selected=\"selected\" value=\"$entry\">$entry</option>");
+							else
+								print("<option value=\"$entry\">$entry</option>");
+							break;
+
+						default :
+							break;
+						}
+			              }
+
+				closedir($myDir);
+			?>
+			</select>
+			</label>
+		</td>
+          </tr>
+
+          <tr style="display: none">
+            <td class="align-right"><?php print($msg->read($USER_RESTORE)); ?></td>
+            <td>
+			<?php print("<input type=\"submit\" name=\"submit\" value=\"".$msg->read($USER_DEFAULTVALUES)."\" style=\"font-size:9px;\" />"); ?>
+		</td>
+          </tr>
+
+          <tr>
+            <td class="align-center" colspan="2"><hr style="width:80%;" /></td>
+          </tr>
+
+	<?php
+		//---- les raccourcis ----
+		$Query  = "select _IDsubmenu, _ident from config_submenu ";
+		$Query .= "where _visible = 'O' ";
+		$Query .= "AND _type = '2' AND _lang = '".$_SESSION["lang"]."' ";
+		$Query .= "AND (_IDgrprd & pow(2, ".$_SESSION["CnxGrp"]." - 1)) ";
+		$Query .= "order by _ident";
+
+		$result = mysql_query($Query, $mysql_link);
+		$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+		while ( $row ) {
+			$check = ( in_array($row[0], explode(" ", $service)) ) ? "checked=\"checked\"" : "" ;
+
+			print("
+				<tr>
+					<td class=\"align-right\" width=\"50%\">$row[1]</td>
+					<td><label for=\"cb_$row[0]\"><input type=\"checkbox\" id=\"cb_$row[0]\" name=\"cb[]\" value=\"$row[0]\" $check /></label></td>
+				</tr>");
+
+			$row   = remove_magic_quotes(mysql_fetch_row($result));
+			}
+		?>
+
+          <tr>
+            <td class="align-center" colspan="2"><hr style="width:80%;" /></td>
+          </tr>
+        </table>
+
+        <table class="width100">
+          <tr>
+             <td style="width:10%;" class="valign-middle align-right">
+			<?php print("<input type=\"image\" src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/valid.gif\" name=\"valid\" alt=\"".$msg->read($USER_INPUTOK)."\" />"); ?>
+             </td>
+             <td class="valign-middle">
+			<?php print($msg->read($USER_CONFIRM)); ?>
+             </td>
+          </tr>
+	       
+          <tr>
+             <td class="valign-middle align-right">
+			<a href="index.php"><?php print("<img src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/cancel.gif\" title=\"\" alt=\"".$msg->read($USER_INPUTCANCEL)."\" />"); ?></a>
+             </td>
+             <td class="valign-middle">
+			<?php print($msg->read($USER_GOBACK)); ?>
+             </td>
+          </tr>
+        </table>
+
+      </form>
+
+</div>

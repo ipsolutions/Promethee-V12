@@ -1,0 +1,380 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2002-2007 by Dominique Laporte(C-E-D@wanadoo.fr)
+   Copyright (c) 2006 by Nordine Zetoutou (nordine.zetoutou@educagri.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : vote.htm
+ *		projet   : la page de dépouillement des sondages
+ *
+ *		version  : 1.2
+ *		auteur   : laporte
+ *		creation : 31/10/02
+ *		modif    : 12/12/02 - par D. Laporte
+ *		           affichage des sondages selon le groupe d'appartenance
+ *		           14/06/03 - par D. Laporte
+ *		           sondages multi critères
+ * 		           17/07/06 - par Nordine Zetoutou
+ * 	                 migration des balises HTML en XHTML 1.0 strict
+ */
+
+
+$IDdata   = ( @$_POST["IDdata"] )		// ID de la matière (0 : général)
+	? (int) $_POST["IDdata"]
+	: (int) (@$_GET["IDdata"] ? $_GET["IDdata"] : @$IDdata) ;
+$IDpoll  = ( @$_POST["IDpoll"] )		// ID du sondage
+	? (int) $_POST["IDpoll"]
+	: (int) (@$_GET["IDpoll"] ? $_GET["IDpoll"] : @$IDpoll) ;
+$page_cmd = ( @$_POST["page_cmd"] )		// n° du flash info
+	? $_POST["page_cmd"]
+	: @$_GET["page_cmd"] ;
+$cb       = @$_POST["cb"];			// sondage choix multiple
+$rb       = @$_POST["rb"];			// sondage choix unique
+$submit   = @$_POST["submit"];		// bouton de vote
+?>
+
+
+<?php
+	// nombre de valeurs
+	$query  = "select _IDmod, _IDpoll from sondage_data ";
+	$query .= "where _IDdata = '$IDdata' AND _lang = '".$_SESSION["lang"]."' ";
+	$query .= ( $IDpoll ) ? "AND _IDpoll = '$IDpoll'" : "order by _IDpoll desc limit 1" ;
+
+	$result = mysql_query($query, $mysql_link);
+	$who    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+	$IDpoll = $who[1];
+	$link   = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $who[0] ) 
+     		? "<a href=\"index.php?item=99&amp;IDpoll=$IDpoll&amp;IDdata=$IDdata&amp;cmde=gestion\"><img src=\"".$_SESSION["ROOTDIR"]."/images/tools.gif\" title=\"".$msg->read($VOTE_CONFIG)."\" alt=\"\" /></a>"
+		: "" ;
+	$texte  = ( @$_SESSION["CampusName"] ) ? "::".$_SESSION["CampusName"] : "" ;
+?>
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($VOTE_POLLRESULT, $texte)); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+
+	<?php
+		// fermeture/ouverture d'un sondage
+		switch ( $page_cmd ) {
+			case "close" :
+			case "open" :
+				$Query   = "update sondage_data ";
+				$Query  .= ( $page_cmd == "close" ) ? "set _visible = 'N' " : "set _visible = 'O' ";
+				$Query  .= "where _IDpoll = '$IDpoll' ";
+				$Query  .= ( $_SESSION["CnxAdm"] == 255 ) ? "" : "AND _IDmod = '".$_SESSION["CnxID"]."'";
+
+				mysql_query($Query, $mysql_link);
+				break;
+
+			default :
+				break;
+			}
+
+	    	// on teste si l'utilisateur a déjà voté
+	    	// attention au rafraichissement de la page
+		$result = mysql_query("select _ID from sondage_vote where _IDpoll = '$IDpoll' AND _ID = '".$_SESSION["CnxID"]."'", $mysql_link);
+			
+		// NB : un anonyme peut voter plusieurs fois
+		$Avote  = mysql_affected_rows($mysql_link) AND $_SESSION["CnxSex"] != "A";
+
+	    	// l'utilisateur à voté
+	    	if ( $submit == $msg->read($VOTE_VOTE) AND !$Avote ) {
+	    		$res  = 0;
+	    		$IDq  = 0;
+			$date = date("Y-m-d H:i:s", time());
+
+			// sondage multiple
+			if ( count($cb) ) {
+				for ($i = 0; $i < count($cb); $i++)
+					if ( @$cb[$i] ) {
+						$res  = mysql_query("update sondage_items set _r = _r + 1 where _IDpoll = '$IDpoll' AND _IDq = '$cb[$i]'", $mysql_link);
+						$IDq += pow(2, $i);
+						}
+				}
+			// sondage choix unique
+			else
+				if ( @$rb ) {
+					$res = mysql_query("update sondage_items set _r = _r + 1 where _IDpoll = '$IDpoll' AND _IDq = '$rb'", $mysql_link);
+					$IDq = $rb;
+					}
+						
+			if ( $res )
+				$Avote = mysql_query("insert into sondage_vote values('$IDpoll', '".$_SESSION["CnxID"]."', '".$_SESSION["CnxIP"]."', '$date', '$IDq')", $mysql_link);
+	   		}
+
+		// nombre de votants
+		$result = mysql_query("select _ID from sondage_vote where _IDpoll = '$IDpoll'", $mysql_link);
+		$nbtot  = ( $result ) ? mysql_num_rows($result) : 0 ;
+
+		// nombre de valeurs
+		$result = mysql_query("select sum(_r) from sondage_items where _IDpoll = '$IDpoll'", $mysql_link);
+		$nbval  = ( $result ) ? mysql_fetch_row($result) : 0 ;
+	?>
+
+      <table class="width100">
+        <tr>
+          <td style="width:25%;" class="align-right"><?php print($msg->read($VOTE_NBPOLL)); ?></td>
+          <td style="width:75%;">
+		<?php print("<a href=\"#\" onclick=\"popWin('".$_SESSION["ROOTDIR"]."/user_list.php?sid=".$_SESSION["sessID"]."&amp;IDpoll=$IDpoll&amp;cmde=vote&amp;lang=".$_SESSION["lang"]."', '450', '200'); return false;\">$nbtot</a>"); ?>
+          </td>
+        </tr>
+      </table>
+
+      &nbsp;
+
+      <table class="width100">
+        <tr>
+
+          <td style="width:50%;">
+		      <table>
+		      <?php
+				// recherche des groupes
+				$query  = "select _IDgrp, _ident from user_group ";
+				$query .= "where _visible = 'O' AND _lang = '".$_SESSION["lang"]."' ";
+				$query .= "order by _IDgrp asc";
+
+				$result = mysql_query($query, $mysql_link);
+
+				if ( $result ) 
+					while ( ($row = remove_magic_quotes(mysql_fetch_row($result))) ){
+
+						$query  = "select user_id._ID from user_id, sondage_vote ";
+						$query .= "where user_id._ID = sondage_vote._ID AND user_id._IDgrp = '$row[0]' AND sondage_vote._IDpoll = '$IDpoll'";
+
+						$return = mysql_query($query, $mysql_link);
+						$qui    = ( $return) ? mysql_numrows($return) : 0 ;
+
+						$msg->isPlural = (bool) ( $qui > 1 );
+
+						print("
+							<tr>
+								<td style=\"background-color:#C0C0C0;\" class=\"align-right\"><strong>$row[1] :</strong></td>
+		   	       				<td>".$msg->read($VOTE_TOTPOLL, strval($qui))." <img src=\"".$_SESSION["ROOTDIR"]."/images/smiley/$row[0].gif\" alt=\"\" title=\"\" /></td>
+		   	       			</tr>
+							");
+						}
+		      ?>
+		      </table>
+          </td>
+          
+	<?php
+		// lecture du sondage
+		$Query  = "select _title, _single, _visible, _IDgrpwr from sondage_data ";
+		$Query .= "where _IDpoll = '$IDpoll' ";
+		$Query .= ( $_SESSION["CnxAdm"] == 255 ) ? "" : "AND (_IDgrprd & ".pow(2, $_SESSION["CnxGrp"] - 1).") ";
+
+		$result = mysql_query($Query, $mysql_link);
+		$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+		// si l'utilisateur n'a pas voté ET qu'il y est autorisé ET que le sondage n'est pas fermé
+		// on lui propose de voter pour le sondage affiché
+       	if ( !$Avote AND ($row[3] & pow(2, $_SESSION["CnxGrp"] - 1)) AND $row[2] == "O" ) {
+       		$single = $row[1];
+
+       		print("
+		          <td>
+				<form id=\"formulaire\" action=\"index.php\" method=\"post\">
+					<p class=\"hidden\"><input type=\"hidden\" name=\"item\"       value=\"99\" /></p>
+					<p class=\"hidden\"><input type=\"hidden\" name=\"IDpoll\"     value=\"$IDpoll\" /></p>
+					<p class=\"hidden\"><input type=\"hidden\" name=\"IDdata\"     value=\"$IDdata\" /></p>
+
+				<div style=\"width:154px; border:#cccccc solid 1px; padding:2px; background-color:#eeeeee; text-align:center;\">
+					<span class=\"x-small\">$row[0]</span>
+				</div>
+				");
+
+			print("
+				<div style=\"width:150px; border:#cccccc solid 1px; padding:4px;\">
+				");
+
+			// affichage des questions du sondage
+			$result = mysql_query("select _IDq, _q from sondage_items where _IDpoll = '$IDpoll' order by _IDq asc", $mysql_link);
+			$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;			
+
+			while ( $row ) {
+				if ( $single== "O" )
+		      		print("
+						<label for=\"vote_rb_$row[0]\">
+						<input type=\"radio\" id=\"vote_rb_$row[0]\" name=\"rb\" value=\"$row[0]\" />
+						<span class=\"x-small\">$row[1]</span>
+						</label><br/>
+						");
+				else
+		      		print("
+		      			<label for=\"vote_rb_$row[0]\">
+						<input type=\"checkbox\" id=\"vote_rb_$row[0]\" name=\"cb[]\" value=\"$row[0]\" />
+						<span class=\"x-small\">$row[1]</span>
+						</label><br/>
+						");
+
+				$row = remove_magic_quotes(mysql_fetch_row($result));
+				}
+
+			print("
+					<hr style=\"width:80%;\" />
+
+					<div class=\"center\">
+					<input type=\"submit\" value=\"".$msg->read($VOTE_VOTE)."\" name=\"submit\" />
+					</div>
+				</div>
+
+		      	</form>
+		          </td>
+				");
+			}
+		?>
+		
+        </tr>
+      </table>
+
+	<br/>
+
+<?php
+	$result = mysql_query("select _title from sondage_data where _IDpoll = '$IDpoll'", $mysql_link);
+	$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+?>
+
+     <table class="width100 boxcontent">
+        <tr>
+          <td class="align-right" style="background-color:#eeeeee;width:25%"><strong><?php print($msg->read($VOTE_POLLING)); ?></strong></td>
+          <td  style="background-color:#eeeeee;width:75%"><?php print("$row[0]"); ?></td>
+        </tr>
+      </table>
+      
+     <table class="width100 boxcontent">
+        <tr>
+          <td style="width:100%;">
+          
+            <table class="width100">
+		<?php
+			// formattage des données pour remplacer la fonction bcdiv
+			function bcdiv2($nb_visite, $nb_visiteur, $nb_decimal)
+			{
+				$resultat = 0;
+
+				if ( $nb_visiteur ) {
+					$resultat = $nb_visite / $nb_visiteur;
+					$resultat = number_format($resultat, $nb_decimal, ',', '.');
+					}
+ 
+				return $resultat;
+			}
+
+		    	// recherche des questions
+			$result  = mysql_query("select _q, _r, _IDq from sondage_items where _IDpoll = '$IDpoll' order by _IDq asc", $mysql_link);
+			$row     = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+			$average = 0;
+
+			// calcul des occurences et pourcentages
+			$i   = 0;
+			$max = 0;
+			while ( $row ) {
+				$st[0][$i] = $row[0];
+				$st[1][$i] = $row[1];
+				$st[2][$i] = ( $nbval[0] ) ? bcdiv2(100 * $row[1], $nbval[0], 2) : 0 ;
+
+				$max       = ( $max < $row[1] ) ? $row[1] : $max ;
+	           		$average  += $row[1] * $row[2];
+
+				$row = remove_magic_quotes(mysql_fetch_row($result));
+				$i++;
+	           		}
+
+			// affichage des questions
+			for ($i = 0; $i < count($st[0]); $i++) {
+				$bar = ( $nbval[0] ) ? (int) ((100 * $st[1][$i]) / $max) : 0 ;
+
+				print("
+					<tr>
+						<td style=\"width:25%;\">". $st[0][$i] ."</td>
+						<td style=\"width:55%;\"><img src=\"".$_SESSION["ROOTDIR"]."/images/stats/red.png\" width=\"$bar%\" height=\"6\" alt=\"\" title=\"\"/></td>
+	           				<td style=\"width:20%;\">". $st[1][$i] ."/$nbval[0] (". $st[2][$i] ."%)</td>
+           				</tr>
+           				");
+	           		}
+              ?>
+            </table>
+            
+          </td>
+        </tr>
+      </table>
+
+    <?php
+		// la moyenne des votes
+		if ( $nbval[0] ) {
+    			$avis   = $average / $nbval[0];
+
+			$result = mysql_query("select _q from sondage_items where _IDpoll = '$IDpoll' AND _IDq >= '$avis'", $mysql_link);
+			$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+			print("
+				<p style=\"margin-top: 10px; margin-bottom: 10px;\">
+				<img src=\"".$_SESSION["ROOTDIR"]."/images/donneravis.gif\" title=\"\" alt=\"\"  />
+				".$msg->read($VOTE_MEAN, strval($row[0]))."
+				</p>");
+			}
+
+		// affichage de la liste des sondages
+		$Query  = "select _IDpoll, _date, _title, _IDmod, _visible from sondage_data ";
+		$Query .= "where _IDdata = '$IDdata' AND _lang = '".$_SESSION["lang"]."' ";
+		$Query .= ( $_SESSION["CnxAdm"] == 255 ) ? "" : "AND (_IDgrprd & ".pow(2, $_SESSION["CnxGrp"] - 1).") ";
+		$Query .= "order by _IDpoll desc";
+
+		$result = mysql_query($Query, $mysql_link);
+		$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+		if ( mysql_numrows($result) ) {
+			print("<p style=\"margin-top: 10px; margin-bottom: 0px;\">".$msg->read($VOTE_SHOWPOLL)."</p>");
+			
+			while ( $row ) {
+				$date = strtok($row[1], " ");
+
+				$res  = mysql_query("select _ID from sondage_vote where _IDpoll = '$row[0]'", $mysql_link);
+				$vote = ( $res ) ? mysql_num_rows($res) : 0 ;
+
+				$msg->isPlural = (bool) ( $vote > 1 );
+
+		         	$close = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $row[3] )
+		         		? ($row[4] == "O"
+						? "<a href=\"index.php?item=$item&amp;IDpoll=$row[0]&amp;IDdata=$IDdata&amp;page_cmd=close\"><img src=\"".$_SESSION["ROOTDIR"]."/images/unlocked.gif\" title=\"".$msg->read($VOTE_CLOSEPOLL)."\" alt=\"".$msg->read($VOTE_CLOSEPOLL)."\" /></a>"
+						: "<a href=\"index.php?item=$item&amp;IDpoll=$row[0]&amp;IDdata=$IDdata&amp;page_cmd=open\"><img src=\"".$_SESSION["ROOTDIR"]."/images/locked.gif\" title=\"".$msg->read($VOTE_OPENPOLL)."\" alt=\"".$msg->read($VOTE_OPENPOLL)."\" /></a>")
+		         		: "" ;
+
+				print("
+					<p style=\"margin-top:0px; margin-bottom:0px; margin-left:20px;\">
+					<img src=\"".$_SESSION["CfgPuce"]."\" title=\"\" alt=\"\" /> 
+					<a href=\"index.php?item=$item&amp;IDpoll=$row[0]&amp;IDdata=$IDdata\">$date</a> : 
+					$close $row[2] <em>(".$msg->read($VOTE_TOTPOLL, strval($vote)).")</em>
+					</p>
+					");
+
+				$row = remove_magic_quotes(mysql_fetch_row($result));
+				}
+			}
+    ?>
+
+</div>

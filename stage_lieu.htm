@@ -1,0 +1,1244 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2003-2007 by Dominique Laporte(C-E-D@wanadoo.fr)
+   Copyright (c) 2006 by FG (persofg@gmail.com)
+   Copyright (c) 2006 by Nordine Zetoutou (nordine.zetoutou@educagri.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : stage_lieu.htm
+ *		projet   : la page de saisie des maîtres de stage
+ *
+ *		version  : 1.1
+ *		auteur   : laporte
+ *		creation : 8/02/03
+ *		modif    : 20/06/05 - par FG
+ *                     migration -> PHP5
+ *
+ * 		           17/07/06 - par Nordine Zetoutou
+ * 	                 migration des balises HTML en XHTML 1.0 strict
+ *
+ * 		           21/05/09 - par Régis Levrino
+ * 		           correction bug activité non prise en commpte dans le formulaire
+ * 		           saisie du directeur non rendue obligatoire
+ */
+ 
+
+//  Récupération des données du formulaire relatif aux sociétés de stage, commentaire ajouté par RLO
+$societe   = @$_POST["societe"];
+$statut    = @$_POST["statut"];
+$activite  = @$_POST["activite"];
+$adresse   = @$_POST["adresse"];
+$ville     = @$_POST["ville"];
+$directeur = @$_POST["directeur"];
+$resp      = @$_POST["resp"];
+$periode   = @$_POST["periode"];
+$extra     = @$_POST["extra"];
+$cp        = @$_POST["cp"];
+$tel       = @$_POST["tel"];
+$fax       = @$_POST["fax"];
+$email     = @$_POST["email"];
+$web       = @$_POST["web"];
+$taille    = (int) @$_POST["taille"];
+$mineur    = @$_POST["mineur"];
+$fille     = @$_POST["fille"];
+$loge      = @$_POST["loge"];
+$remark1   = @$_POST["remark1"];
+$nourri    = @$_POST["nourri"];
+$remark2   = @$_POST["remark2"];
+$comment   = @$_POST["comment"];
+$uth       = (int) @$_POST["uth"];
+$st        = (int) @$_POST["stp"];
+$sau       = (int) @$_POST["sau"];
+$sfp       = (int) @$_POST["sfp"];
+$tl        = (int) @$_POST["tl"];
+$tva       = @$_POST["tva"];
+$compta    = @$_POST["compta"];
+$sol       = @$_POST["sol"];
+$actif     = @$_POST["actif"];
+$accueil   = @$_POST["accueil"];
+$anim      = @$_POST["anim"];
+$resto     = @$_POST["resto"];
+$autre     = @$_POST["autre"];
+$negocier  = @$_POST["negocier"];
+$classe    = @$_POST["classe"];
+$upra      = @$_POST["upra"];
+$control   = @$_POST["control"];
+$quality   = @$_POST["quality"];
+$IDrace    = (int) @$_POST["IDrace"];
+$IDpa      = (int) @$_GET["IDpa"];
+$IDatcomp  = (int) @$_GET["IDatcomp"];
+$IDpv      = (int) @$_GET["IDpv"];
+$devenir1  = @$_POST["devenir1"];
+$devenir2  = @$_POST["devenir2"];
+$taille1   = (int) @$_POST["taille1"];
+$taille2   = (int) @$_POST["taille2"];
+$taille3   = (int) @$_POST["taille3"];
+$IDcat1    = (int) @$_POST["IDcat1"];
+$IDcat2    = (int) @$_POST["IDcat2"];
+$IDcat3    = (int) @$_POST["IDcat3"];
+
+$mysector  = @$_POST["mysector"];
+
+$secteur   = ( @$_POST["secteur"] )
+	? (int) $_POST["secteur"]
+	: (int) @$_GET["secteur"] ;
+$IDlieu    = ( @$_POST["IDlieu"] )
+	? (int) $_POST["IDlieu"]
+	: (int) @$_GET["IDlieu"] ;
+$IDmenu    = ( @$_POST["IDmenu"] )
+	? (int) $_POST["IDmenu"]
+	: (int) @$_GET["IDmenu"] ;
+$visible   = ( @$_GET["visible"] )
+	? $_GET["visible"]
+      : "O" ;
+
+$valid    = ( @$_POST["valid"] )
+	? $_POST["valid"]
+	: @$_GET["valid"] ;
+$submit    = ( @$_POST["submit"] )
+	? $_POST["submit"]
+	: @$_GET["submit"] ;
+?>
+
+
+<?php
+	//---- accés protégé ----
+	// seul le modérateur possède le droit d'écriture
+	$Query  = "select _IDmod, _IDgrpwr from stage_data ";
+	$Query .= "where _visible = 'O' AND _mod = '$cmde' ";
+	$Query .= "limit 1";
+
+	$result = mysql_query($Query, $mysql_link);
+	$row    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+	// vérification des autorisations
+	verifySessionAccess($row[0], $row[1]);
+
+	$IDmod  = $row[0];
+
+	$error  = 0;
+	$insert = ( $IDlieu ) ? 0 : 1 ;
+	$nbrec  = "-";
+	$infos  = "";
+
+	// saisie de fiche
+	if ( @$_POST["valid_x"] ) {
+		// filtrage des données
+		$societe   = ucfirst(strtolower(Trim( addslashes($societe) )));
+		$statut    = strtoupper(Trim( addslashes($statut) ));
+		$activite  = ucfirst(strtolower(Trim( addslashes($activite) )));
+		$adresse   = ucfirst(strtolower(Trim( addslashes($adresse) )));
+		$ville     = ucfirst(strtolower(Trim( addslashes($ville) )));
+		$directeur = ucfirst(strtolower(Trim( addslashes($directeur) )));
+		$resp      = ucfirst(strtolower(Trim( addslashes($resp) )));
+		$remark1   = strtolower(Trim( addslashes($remark1) ));
+		$remark2   = strtolower(Trim( addslashes($remark2) ));
+		$comment   = strtolower(Trim( addslashes($comment) ));
+		$periode   = Trim( addslashes($periode) );
+		$extra     = Trim( addslashes($extra) );
+
+		if ( strlen(Trim($cp)) == 4 )
+			$cp = "0" . Trim($cp);
+
+		// vérification de la saisie
+		$error |= ( strlen($societe) )   ? 0 : 1 ;
+		$error |= ( strlen($cp) == 5 )   ? 0 : 2 ;
+		$error |= ( strlen($ville) )     ? 0 : 4 ;
+		// $error |= ( strlen($directeur) ) ? 0 : 8 ; // le directeur n'est pas testée modification par RLO
+
+		// si pas d'erreur on enregistre les données
+		if ( !$error ) {
+			//======== modification ========
+			if ( $IDlieu ) {
+				// impossible de modidier le champ _societe à cause de la clef unique
+				$Query  = "update stage_lieu ";
+				$Query .= "set _statut = '$statut', _secteur = '$secteur', _societe = '$societe', _activite = '$activite', ";
+				$Query .= "_adresse = '$adresse', _cp = '$cp', _ville = '$ville', _tel = '$tel', _fax = '$fax', _email = '$email', _web = '$web', ";
+				$Query .= "_directeur = '$directeur', _resp = '$resp', _taille = '$taille', _periode = '$periode', ";
+				$Query .= "_mineur = '$mineur', _fille = '$fille', _loge = '$loge', _nourri = '$nourri', ";
+				$Query .= "_remark1 = '$remark1', _remark2 = '$remark2', _comment = '$comment', ";
+				$Query .= "_uth = '$uth', _st = '$st', _sau = '$sau', _sfp = '$sfp', _tl = '$tl', ";
+				$Query .= "_extra = '$extra', _tva = '$tva', _compta = '$compta', _sol = '$sol', ";
+				$Query .= "_actif = '$actif', _accueil = '$accueil', _anim = '$anim', _resto = '$resto', ";
+				$Query .= "_autre = '$autre', _negocier = '$negocier', ";
+				$Query .= "_visible = '$visible' ";
+				$Query .= "where _IDlieu = '$IDlieu'";
+
+				if ( !mysql_query($Query, $mysql_link) )
+					sql_error($mysql_link);
+
+				// il est plus simple de supprimer les filières adaptées pour les recréer par la suite
+				if ( !mysql_query("delete from stage_ok where _IDlieu = '$IDlieu'", $mysql_link) )
+					sql_error($mysql_link);
+				}
+			//======== insertion ========
+			else {
+				//---- maître de stage
+				$Query  = "insert into stage_lieu ";
+				$Query .= "values('', '". date("Y-m-d H:i:s", time()) ."', ";
+				$Query .= "'$secteur', '$societe', '$statut', '$activite', '', ";
+				$Query .= "'$adresse', '$cp', '$ville', '$tel', '$fax', '$email', '$web', ";
+				$Query .= "'$directeur', '$resp', '$taille', '$periode', ";
+				$Query .= "'$mineur', '$fille', '$loge', '$remark1', '$nourri', '$remark2', '$comment', ";
+				$Query .= "'$uth', '$st', '$sau', '$sfp', '$tl', ";
+				$Query .= "'$extra', '$tva', '$compta', '$sol', ";
+				$Query .= "'$actif', '$accueil', '$anim', '$resto', '$autre', '$negocier', ";
+				$Query .= "'O')";
+
+				if ( !mysql_query($Query, $mysql_link) )
+					sql_error($mysql_link);
+				else
+					$IDlieu = mysql_insert_id();
+				}
+
+			//---- filières adaptées
+			$result = ( $IDlieu ) ? mysql_query("select _IDclass from campus_classe where _visible = 'O'", $mysql_link) : 0 ;
+			$nb     = ( $result ) ? mysql_affected_rows($mysql_link) : 0 ;
+
+			$j = 0;
+		    	for ($i = 0; $i < $nb; $i++)
+				if ( strlen(@$classe[$i]) ) {
+					$Query  = "insert into stage_ok ";
+					$Query .= "values('$IDlieu', '$classe[$i]')";
+
+					if ( !mysql_query($Query, $mysql_link) )
+						sql_error($mysql_link);
+					else
+						$tbl[$j++] = $classe[$i];
+					}
+
+			$tbl[$j] = 0;
+			}	// endif error
+
+		// enregistrement des différentes productions
+		if ( $IDlieu ) {
+			// on enregistre la production animale si la race a été déterminée
+			if ( $IDcat1 AND $IDrace ) {
+				$Query  = "insert into prod_pa ";
+				$Query .= "values('', '$IDlieu', '$IDcat1', '$IDrace', '$upra', '$control', '$quality', '$devenir1', '$taille1')";
+
+				if ( !mysql_query($Query, $mysql_link) )
+					sql_error($mysql_link);
+						
+				// réinitialisation pour le menu déroulant
+				$IDcat1 = 0;
+				}
+						
+			if ( $IDcat2 ) {
+				$Query  = "insert into prod_pv ";
+				$Query .= "values('', '$IDlieu', '$IDcat2', '$devenir2', '$taille2')";
+
+				if ( !mysql_query($Query, $mysql_link) )
+					sql_error($mysql_link);
+				}
+
+			if ( $IDcat3 ) {
+				$Query  = "insert into prod_atcomp ";
+				$Query .= "values('', '$IDlieu', '$IDcat3', '$taille3')";
+
+				if ( !mysql_query($Query, $mysql_link) )
+					sql_error($mysql_link);
+				}
+			}
+
+		// si erreur OU échec requête OU ajout d'une production 
+		// on reste sur la fiche courante
+		if ( $error OR !$insert )
+			$submit = "";
+		else
+			// sinon on enchaîne sur la saisie d'une nouvelle fiche
+			$submit = "next";
+		}
+
+	// gestion des secteurs d'activités
+	switch ( $valid ) {
+		case "delsector" :
+			mysql_query("delete from stage_secteur where _IDsecteur = '".@$_GET["idsecteur"]."' limit 1", $mysql_link);
+			break;
+
+		default :
+			if ( $valid == $msg->read($STAGE_ADDCMDE) AND $mysector )
+				mysql_query("insert into stage_secteur values('', '". sql_getunique("stage_secteur") ."', '$mysector', 'N', 'O', '".$_SESSION["lang"]."')", $mysql_link);
+			break;
+		}
+
+	if ( strlen(@$_POST["IDcat1"]) )
+		$submit = "read";
+
+	switch ( $submit ) {
+		case "del" :
+		case "list" :
+			if ( $IDlieu ) {
+				if ( $submit == "del" ) {
+					mysql_query("delete from stage_lieu where _IDlieu = '$IDlieu'", $mysql_link);
+					mysql_query("delete from stage_ok where _IDlieu = '$IDlieu'", $mysql_link);
+				
+					// on enchaîne sur la saisie d'une nouvelle fiche
+					$submit = "next";
+					}
+				else {
+					$value  = ( $visible == "O" ) ? "N" : "O" ;
+					
+					$Query  = "update stage_lieu ";
+					$Query .= "set _visible = '$value' ";
+					$Query .= "where _IDlieu = '$IDlieu' ";
+
+					if ( !mysql_query($Query, $mysql_link) )
+						sql_error($mysql_link);
+
+					// on enchaîne sur la lecture de la fiche
+					$submit = "read";
+					}
+				}
+			// et on enchaîne...
+
+		case "delprod" :
+		case "read" :
+		case "prev" :
+		case "next" :
+			//---- maître de stage
+			// NB : les élèves n'ont pas accès aux maîtres de stage en liste brûlée
+			$Query  = "select * from stage_lieu ";
+			$Query .= ( getAccess() == 2 ) ? "where " : "where _visible = 'O' AND " ;
+			$Query .= "_IDlieu";
+			switch ( $submit ) {
+				case "next" : $Query .= " >  "; break;
+				case "prev" : $Query .= " <  "; break;
+				default     : $Query .= " <= "; break;
+				}
+			$Query .= "'$IDlieu' ";
+			$Query .= "order by _IDlieu ";
+			$Query .= ( $submit == "next" ) ? "asc" : "desc" ;
+
+			if ( ($result = mysql_query($Query, $mysql_link)) ) {
+				$nbrec     = mysql_affected_rows($mysql_link);
+				$row       = remove_magic_quotes(mysql_fetch_row($result));
+
+				$IDlieu    = $row[0];
+				$secteur   = ( $row ) ? $row[2] : $secteur ;
+				$societe   = $row[3];
+				$statut    = $row[4];
+				$activite  = $row[5];
+				$adresse   = $row[7];
+				$cp        = $row[8];
+				$ville     = $row[9];
+				$tel       = $row[10];
+				$fax       = $row[11];
+				$email     = $row[12];
+				$web       = $row[13];
+				$directeur = $row[14];
+				$resp      = $row[15];
+				$taille    = $row[16];
+				$periode   = $row[17];
+				$mineur    = $row[18];
+				$fille     = $row[19];
+				$loge      = $row[20];
+				$remark1   = $row[21];
+				$nourri    = $row[22];
+				$remark2   = $row[23];
+				$comment   = $row[24];
+				$uth       = $row[25];
+				$st        = $row[26];
+				$sau       = $row[27];
+				$sfp       = $row[28];
+				$tl        = $row[29];
+				$extra     = $row[30];
+				$tva       = $row[31];
+				$compta    = $row[32];
+				$sol       = $row[33];
+				$actif     = $row[34];
+				$accueil   = $row[35];
+				$anim      = $row[36];
+				$resto     = $row[37];
+				$autre     = $row[38];
+				$negocier  = $row[39];
+				$visible   = $row[40];
+
+				//---- filière adaptée
+				$Query  = "select _IDclasse from stage_ok ";
+				$Query .= "where _IDlieu = '$IDlieu'";
+
+				$result = mysql_query($Query, $mysql_link);
+				$row    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+				$i = 0;
+
+				while ( $row ) {
+					$tbl[$i++] = $row[0];
+					$row       = mysql_fetch_row($result);
+					}
+
+				$tbl[$i] = 0;
+				}
+			else
+				sql_error($mysql_link);
+
+			// suppression d'une catégorie de production
+			if ( $submit == "delprod" ) {
+				$Query  = "delete from ";
+				$Query .= ( $IDpa )
+					? "prod_pa where _IDpa = '$IDpa'"
+					: (( $IDpv )
+						? "prod_pv where _IDpv = '$IDpv'"
+						: "prod_atcomp where _IDatcomp = '$IDatcomp'"
+						);
+
+				if ( !mysql_query($Query, $mysql_link) )
+					sql_error($mysql_link);
+				}
+			
+			// s'il n'y a pas de fiche on enchaîne sur l'initialisation
+			if ( $nbrec )
+				break;
+
+		default :
+			// initialisation
+			$mineur   = "O";
+			$fille    = "O";
+			$loge     = "N";
+			$nourri   = "N";
+
+			$tva      = "N"; 
+			$compta   = "N"; 
+			$sol      = "N";
+
+			$actif    = "N"; 
+			$accueil  = "N"; 
+			$anim     = "N";
+			$resto    = "N";
+			$autre    = "N";
+			$negocier = "N";
+
+			$infos    = "N";
+			$visible  = "O";
+			break;
+		}
+?>
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($STAGE_FORMFEED)); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+
+	<form id="formulaire" action="index.php"  method="post">
+	<?php
+		print("
+		<input type=\"hidden\" name=\"item\"    value=\"$item\"/>
+		<input type=\"hidden\" name=\"cmde\"    value=\"$cmde\" />
+		<input type=\"hidden\" name=\"IDlieu\"  value=\"$IDlieu\" />
+		<input type=\"hidden\" name=\"secteur\" value=\"$secteur\" />
+		<input type=\"hidden\" name=\"visible\" value=\"$visible\" />
+		");
+	?>
+	
+	<table class="width100">
+	  <tr>
+	    <td colspan="2">
+		<table class="width100">
+		  <tr>
+		    <td  style="width:70%;">
+			<?php
+				//===== détermination du nombre de fiches
+				// NB : les élèves n'ont pas accès aux maîtres de stage en liste brûlée
+				$Query  = "select _IDlieu from stage_lieu ";
+				$Query .= ( getAccess() == 2 ) ? "" : "where _visible = 'O' " ;
+				$Query .= "order by _IDlieu desc";
+
+				$result = mysql_query($Query, $mysql_link);
+				$total  = ( $result ) ? mysql_affected_rows($mysql_link) : 0 ;
+				$row    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+				switch ( $submit ) {
+					case "next" :
+						$nbrec = ( $nbrec AND $nbrec < $total ) ? ($total - $nbrec + 1) : "-" ;
+						break;
+					default :
+						break;
+					}
+
+		    		$pos = ( $nbrec == "-" ) ? $row[0] + 1 : $IDlieu ;
+
+				//===== affichage du statut
+				switch ( $visible ) {
+					case "O" :
+						$req     = $msg->read($STAGE_BLACKLISTON, $societe);
+						$link    = "\"index.php?item=$item&amp;cmde=lieu&amp;IDlieu=$IDlieu&amp;visible=$visible&amp;submit=list\" onclick=\"return confirmLink(this, addslashes('$req'));\"";
+						$status  = ( getAccess() == 2 )
+							? "<a href=$link><img src=\"".$_SESSION["ROOTDIR"]."/images/check-ok.gif\" title=\"\" alt=\"\" /></a>"
+							: "<img src=\"".$_SESSION["ROOTDIR"]."/images/check-ok.gif\" title=\"\" alt=\"\" />" ;
+						$status .= " ($req)";
+						break;
+					case "N" :
+						$req     = $msg->read($STAGE_BLACKLISTOFF, $societe);
+						$link    = "\"index.php?item=$item&amp;cmde=lieu&amp;IDlieu=$IDlieu&amp;visible=$visible&amp;submit=list\" onclick=\"return confirmLink(this, addslashes($req));\"";
+						$status  = ( getAccess() == 2 )
+							? "<a href=$link><img src=\"".$_SESSION["ROOTDIR"]."/images/check.gif\" title=\"\" alt=\"\" /></a>"
+							: "<img src=\"".$_SESSION["ROOTDIR"]."/images/check.gif\" title=\"\" alt=\"\" />" ;
+						$status .= " ($req)";
+						break;
+					default :
+						$status = "-";
+						break;
+					}
+
+				$req    = $msg->read($STAGE_DELFROMLIST);
+				$link   = "\"index.php?item=$item&amp;cmde=lieu&amp;IDlieu=$IDlieu&amp;submit=del\" onclick=\"return confirmLink(this, '$req');\"";
+				$delete = ( ($_SESSION["CnxAdm"] == 255 OR $IDmod == $_SESSION["CnxID"]) AND $nbrec != "-" )
+					? "<a href=$link><img src=\"".$_SESSION["ROOTDIR"]."/images/corb.gif\" title=\"$req\"  alt=\"$req\" /></a>"
+					: "" ;
+							
+				print("
+					". $msg->read($STAGE_NBFILE) ." $nbrec/$total $delete<br/>".
+					$msg->read($STAGE_STATUS)." $status
+					");
+			?>
+		    </td>
+		    <td style="width:30%" class="valign-bottom align-right">
+		    	<?php			    		
+		    		$prev = ( ($nbrec == "-" AND $total) OR $nbrec > 1 )
+		    			? "<a href=\"".myurlencode("index.php?item=$item&cmde=lieu&IDlieu=$pos&submit=prev")."\">". $msg->read($STAGE_PREV) ."</a>"
+		    			: $msg->read($STAGE_PREV) ;
+		    		$next = ( $nbrec != "-" AND $nbrec <= $total )
+		    			? "<a href=\"".myurlencode("index.php?item=$item&cmde=lieu&IDlieu=$pos&submit=next")."\">". $msg->read($STAGE_NEXT) ."</a>"
+		    			: $msg->read($STAGE_NEXT) ;
+
+				print("[$prev]<strong>.</strong>[$next]");
+		    	?>
+		    </td>
+		  </tr>
+		</table>
+    </td>
+  </tr>
+
+  <tr>
+    <td colspan="2"><hr/></td>
+  </tr>
+
+  <tr>
+    <td class="align-right valign-middle"><?php print($msg->read($STAGE_SECTOR)); ?></td>
+    <td>
+
+	<?php
+		if ( $valid == "newsector" )
+			print("
+				<p style=\"margin: 0px;\">
+				<label for=\"mysector\"><input type=\"text\" id=\"mysector\" name=\"mysector\" size=\"20\" /></label>
+				<input type=\"submit\" value=\"". $msg->read($STAGE_ADDCMDE) ."\" name=\"valid\" />
+				</p>
+				");
+		else {
+			// annule l'ajout de secteur
+			print("<p class=\"hidden\"><input type=\"hidden\" name=\"valid\" value=\"-\"/></p>");
+
+			print("<p style=\"margin: 0px;\">");
+			print("<label for=\"mysector\">");
+			print("<select id=\"mysector\" name=\"secteur\" onchange=\"document.forms.secteur.submit()\">");
+
+			// affichage des secteurs d'activité
+			$query  = "select _IDblock, _ident, _infos, _IDsecteur from stage_secteur ";
+			$query .= "where _visible = 'O' AND _lang = '".$_SESSION["lang"]."' ";
+			$query .= "order by _ident";
+
+			$result = mysql_query($query, $mysql_link);
+			$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+			// initalisation
+			if ( !$secteur )
+				$secteur = (int) $row[0];
+
+			while ( $row ) {			
+				if ( $row[0] == $secteur ) {
+					print("<option selected=\"selected\" value=\"$row[0]\">$row[1]</option>");
+
+					$infos     = $row[2];
+					$idsecteur = $row[3];
+					}
+				else
+					print("<option value=\"$row[0]\">$row[1]</option>");
+
+				$row = remove_magic_quotes(mysql_fetch_row($result));
+				}	// endwhile secteurs
+
+		      print("</select>");
+		      print("</label>");
+
+			if ( $_SESSION["CnxAdm"] == 255 )
+				print("
+					<a href=\"index.php?item=$item&amp;cmde=$cmde&amp;valid=newsector\"><img src=\"".$_SESSION["ROOTDIR"]."/images/ajouter.gif\" title=\"". $msg->read($STAGE_NEWSECTOR) ."\" alt=\"". $msg->read($STAGE_NEWSECTOR) ."\" /></a>
+					<a href=\"index.php?item=$item&amp;cmde=$cmde&amp;valid=delsector&amp;idsecteur=$idsecteur\"><img src=\"".$_SESSION["ROOTDIR"]."/images/corb.gif\" title=\"". $msg->read($STAGE_ERASING) ."\" alt=\"". $msg->read($STAGE_ERASING) ."\" /></a>
+					");
+
+			print("</p>");
+			}
+	?>
+    </td>
+  </tr>
+
+
+<?php
+	if ( (bool) ($error & 1) )
+		print("
+		  <tr>
+		    <td class=\"align-left valign-top\" width=\"100%\" colspan=\"2\">
+			<span style=\"color:#FF0000;\">". $msg->read($STAGE_ERRCOMPNAME) ."</span>
+		    </td>
+		  </tr>
+  			");
+?>
+
+  <tr>
+    <td class="align-right valign-top"><?php print($msg->read($STAGE_ACTIVITY)); ?></td>
+    <td><label for="activite"><input id="activite" name="activite" size="40" value="<?php print("$activite"); ?>" /></label></td>
+  </tr>
+  <tr>
+    <td class="align-right valign-top"><?php print($msg->read($STAGE_COMPNAME)); ?></td>
+    <td><label for="societe"><input id="societe" name="societe" size="40" value="<?php print("$societe"); ?>" /> *</label></td>
+  </tr>
+  <tr>
+    <td class="align-right valign-top"><?php print($msg->read($STAGE_COMPLAW)); ?></td>
+    <td><label for="statut"><input id="statut" name="statut" size="20" value="<?php print("$statut"); ?>" /> <?php print($msg->read($STAGE_COMPTYPE)); ?></label></td>
+  </tr>
+  <tr>
+    <td class="align-right valign-top"><?php print($msg->read($STAGE_ADDRESS)); ?></td>
+    <td><label for="adresse"><textarea id="adresse" name="adresse" rows="2" cols="35"><?php print("$adresse"); ?></textarea></label></td>
+  </tr>
+	<?php
+		if ( (bool) ($error & 2) )
+			print("  
+			  <tr>
+			    <td class=\"align-left valign-top\" width=\"100%\" colspan=\"2\">
+				<span style=\"color:#FF0000;\">". $msg->read($STAGE_ERRZIP) ."</span>
+			    </td>
+			  </tr>
+  				");
+	?>
+  <tr>
+    <td class="align-right valign-top"><?php print($msg->read($STAGE_ZIP)); ?></td>
+    <td><label for="cp"><input id="cp" name="cp" size="5" value="<?php print("$cp"); ?>" /> *</label></td>
+  </tr>
+	<?php
+		if ( (bool) ($error & 4) )
+			print("  
+			  <tr>
+			    <td class=\"align-left valign-top\" width=\"100%\" colspan=\"2\">
+				<span style=\"color:#FF0000;\">". $msg->read($STAGE_ERRCITY) ."</span>
+			    </td>
+			  </tr>
+	  			");
+	?>
+  <tr>
+    <td class="align-right valign-top"><?php print($msg->read($STAGE_CITY)); ?></td>
+    <td><label for="ville"><input id="ville" name="ville" size="40" value="<?php print("$ville"); ?>" /> *</label></td>
+  </tr>
+  <tr>
+    <td class="align-right valign-top"><?php print($msg->read($STAGE_TEL)); ?></td>
+    <td><label for="tel"><input id="tel" name="tel" size="20" value="<?php print("$tel"); ?>" /></label></td>
+  </tr>
+  <tr>
+    <td class="align-right valign-top"><?php print($msg->read($STAGE_FAX)); ?></td>
+    <td><label for="fax"><input id="fax" name="fax" size="20" value="<?php print("$fax"); ?>" /></label></td>
+  </tr>
+  <tr>
+    <td class="align-right valign-top"><?php print($msg->read($STAGE_EMAIL)); ?></td>
+    <td><label for="email"><input id="email" name="email" size="40" value="<?php print("$email"); ?>" /></label></td>
+  </tr>
+  <tr>
+    <td class="align-right valign-top"><?php print($msg->read($STAGE_WEBSITE)); ?></td>
+    <td><label for="web"><input id="web" name="web" size="40" value="<?php print("$web"); ?>" /></label></td>
+  </tr>
+	<?php
+		if ( (bool) ($error & 8) )
+			print("  
+			  <tr>
+			    <td class=\"align-left valign-top\" width=\"100%\" colspan=\"2\">
+				<span style=\"color:#FF0000;\">". $msg->read($STAGE_ERRDIRECTOR) ."</span>
+			    </td>
+			  </tr>
+	  			");
+	?>
+  <tr>
+    <td class="align-right valign-top"><?php print($msg->read($STAGE_DIRECTOR)); ?></td>
+    <td><label for="directeur"><input id="directeur" name="directeur" size="40" value="<?php print("$directeur"); ?>" /></label></td>
+  </tr>
+  <tr>
+    <td class="align-right valign-top"><?php print($msg->read($STAGE_MANAGER)); ?></td>
+    <td><label for="resp"><input id="resp" name="resp" size="40" value="<?php print("$resp"); ?>" /></label></td>
+  </tr>
+  <tr>
+    <td class="align-right valign-top"><?php print($msg->read($STAGE_COMPSIZE)); ?></td>
+    <td><label for="taille"><input id="taille" name="taille" size="5" value="<?php print("$taille"); ?>" /> <?php print($msg->read($STAGE_EMPLOYEES)); ?></label></td>
+  </tr>
+  <tr>
+    <td class="align-right valign-top"><?php print($msg->read($STAGE_MAXWORK)); ?></td>
+    <td><label for="periode"><input id="periode" name="periode" size="40" value="<?php print("$periode"); ?>" /></label></td>
+  </tr>
+  <tr>
+    <td class="align-right valign-top"><?php print($msg->read($STAGE_MINOR)); ?></td>
+    <td>
+      <label for="mineur_O"><input type="radio" id="mineur_O" name="mineur" value="O" <?php print(($mineur == "O") ? "checked=\"checked\"" : ""); ?> /><?php print($msg->read($STAGE_YES)); ?></label><br/>
+      <label for="mineur_N"><input type="radio" id="mineur_N" name="mineur" value="N" <?php print(($mineur == "N") ? "checked=\"checked\"" : ""); ?> /><?php print($msg->read($STAGE_NO)); ?></label>
+    </td>
+  </tr>
+  <tr>
+    <td class="align-right valign-top"><?php print($msg->read($STAGE_GIRL)); ?></td>
+    <td>
+      <label for="fille_O"><input type="radio" id="fille_O" name="fille" value="O" <?php print(($fille == "O") ? "checked=\"checked\"" : ""); ?> /><?php print($msg->read($STAGE_YES)); ?></label><br/>
+      <label for="fille_N"><input type="radio" id="fille_N" name="fille" value="N" <?php print(($fille == "N") ? "checked=\"checked\"" : ""); ?> /><?php print($msg->read($STAGE_NO)); ?></label>
+    </td>
+  </tr>
+  <tr>
+    <td class="align-right valign-top"><?php print($msg->read($STAGE_HOSTED)); ?></td>
+    <td>
+      <label for="loge_O"><input type="radio" id="loge_O" name="loge" value="O" <?php print(($loge == "O") ? "checked=\"checked\"" : ""); ?> /><?php print($msg->read($STAGE_YES)); ?></label>
+	<label for="remark1"><input id="remark1" name="remark1" size="35" value="<?php print("$remark1"); ?>" /></label><br/>
+      <label for="loge_N"><input type="radio" id="loge_N" name="loge" value="N" <?php print(($loge == "N") ? "checked=\"checked\"" : ""); ?> /><?php print($msg->read($STAGE_NO)); ?></label>
+    </td>
+  </tr>
+  <tr>
+    <td class="align-right valign-top"><?php print($msg->read($STAGE_CANEAT)); ?></td>
+    <td>
+      <label for="nourri_O"><input type="radio" id="nourri_O" name="nourri" value="O" <?php print(($nourri == "O") ? "checked=\"checked\"" : ""); ?> /><?php print($msg->read($STAGE_YES)); ?></label>
+	<label for="remark2"><input id="remark2" name="remark2" size="35" value="<?php print("$remark2"); ?>" /></label><br/>
+      <label for="nourri_N"><input type="radio" id="nourri_N" name="nourri" value="N" <?php print(($nourri == "N") ? "checked=\"checked\"" : ""); ?> /><?php print($msg->read($STAGE_NO)); ?></label>
+    </td>
+  </tr>
+  <tr>
+    <td class="align-right valign-top"><?php print($msg->read($STAGE_ISOK)); ?></td>
+    <td>
+    <?php
+    	function isMember($tbl, $val)
+    	{
+	    	// function : indique si l'élément $val est présent dans le tableau $tbl
+	    	//      out : 1 si trouvé, 0 sinon
+	    	
+    		$i = 0;
+    		while ( $tbl[$i] )
+    			if ( $tbl[$i++] == $val )
+					return 1;
+					
+			return 0;
+    	}
+    	
+	$result = mysql_query("select _IDclass, _ident from campus_classe where _visible = 'O'", $mysql_link);
+	$row    = ($result) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+    	
+	print("<table class=\"width100\">");
+
+    	$i      = 0;
+    	while ( $row ) {
+		if ( $i % 2 == 0 )
+			print("<tr>");
+
+    		$check = ( isMember(@$tbl, $row[0]) ) ? "checked=\"checked\"" : "" ;
+
+		print("
+			<td style=\"width:50%;\">
+				<label for=\"classe_$i\">
+				<input type=\"checkbox\" id=\"classe_$i\" name=\"classe[". $i++ ."]\" value=\"$row[0]\" $check /> $row[1]
+				</label>
+			</td>
+			");
+
+		if ( $i % 2 == 0 )
+			print("</tr>");
+
+		$row   = remove_magic_quotes(mysql_fetch_row($result));
+		}
+
+	if ( $i % 2 )
+		print("<td></td></tr>");
+
+	print("</table>");
+    ?>
+	 </td>
+  </tr>
+  <tr>
+    <td class="align-right valign-top"><?php print($msg->read($STAGE_COMMENT)); ?></td>
+    <td>
+      <label for="comment"><textarea id="comment" name="comment" rows="2" cols="35"><?php echo @$comment; ?></textarea></label>
+    </td>
+  </tr>
+</table>
+
+<?php
+	//========== pour Exploitations Agricoles uniquement ===========
+
+	if ( $infos == "O" ) {
+		print("
+		<table class=\"width100\">
+  
+		  <tr>
+		    <td colspan=\"2\" style=\"background-color:#C0C0C0;\">". $msg->read($STAGE_MENATWORK) ."</td>
+		  </tr>
+		  <tr>
+		    <td style=\"width:40%;\" class=\"align-right valign-top\">". $msg->read($STAGE_UHT) ."</td>
+		    <td style=\"width:60%;\"><label for=\"uth\"><input id=\"uth\" name=\"uth\" size=\"5\" value=\"$uth\" /></label></td>
+		  </tr>
+		  <tr>
+		    <td colspan=\"2\" style=\"background-color:#C0C0C0;\">". $msg->read($STAGE_MORTGAGE) ."</td>
+		  </tr>
+		  <tr>
+		    <td class=\"align-right valign-top\">". $msg->read($STAGE_SURFACE) ."</td>
+		    <td><label for=\"st\"><input id=\"st\" name=\"st\" size=\"5\" value=\"$st\" /></label></td>
+		  </tr>
+		  <tr>
+		    <td class=\"align-right valign-top\">". $msg->read($STAGE_SAU) ."</td>
+		    <td><label for=\"sau\"><input id=\"sau\" name=\"sau\" size=\"5\" value=\"$sau\" /></label></td>
+		  </tr>
+		  <tr>
+		    <td class=\"align-right valign-top\">". $msg->read($STAGE_SFP) ."</td>
+		    <td><label for=\"sfp\"><input id=\"sfp\" name=\"sfp\" size=\"5\" value=\"$sfp\" /></label></td>
+		  </tr>
+		  <tr>
+		    <td class=\"align-right valign-top\">". $msg->read($STAGE_TL) ."</td>
+		    <td><label for=\"tl\"><input id=\"tl\" name=\"tl\" size=\"5\" value=\"$tl\" /></label></td>
+		  </tr>
+		  <tr>
+		    <td class=\"align-right valign-top\">". $msg->read($STAGE_RESPONSABILITIES) ."</td>
+		    <td><label for=\"extra\"><input id=\"extra\" name=\"extra\" size=\"40\" value=\"$extra\" /></label></td>
+		  </tr>
+	  	");
+
+  	printf("
+  <tr>
+    <td class=\"align-right valign-top\">". $msg->read($STAGE_VAT) ."</td>
+    <td>
+      <label for=\"tva_O\"><input type=\"radio\" id=\"tva_O\" name=\"tva\" value=\"O\" %s />". $msg->read($STAGE_YES) ."</label><br/>
+      <label for=\"tva_N\"><input type=\"radio\" id=\"tva_N\" name=\"tva\" value=\"N\" %s />". $msg->read($STAGE_NO) ."</label>
+    </td>
+  </tr>
+  <tr>
+    <td class=\"align-right valign-top\"> ". $msg->read($STAGE_COMPTA) ."</td>
+    <td>
+      <label for=\"compta_O\"><input type=\"radio\" id=\"compta_O\" name=\"compta\" value=\"O\" %s />". $msg->read($STAGE_YES) ."</label><br/>
+      <label for=\"compta_N\"><input type=\"radio\" id=\"compta_N\" name=\"compta\" value=\"N\" %s />". $msg->read($STAGE_NO) ."</label>
+    </td>
+  </tr>
+  <tr>
+    <td class=\"align-right valign-top\">". $msg->read($STAGE_SA) ."</td>
+    <td>
+      <label for=\"sol_O\"><input type=\"radio\" id=\"sol_O\" name=\"sol\" value=\"O\" %s />". $msg->read($STAGE_YES) ."</label><br/>
+      <label for=\"sol_N\"><input type=\"radio\" id=\"sol_N\" name=\"sol\" value=\"N\" %s />". $msg->read($STAGE_NO) ."</label>
+    </td>
+  </tr>",
+	  	(($tva == "O")    ? "checked=\"checked\"" : ""),
+	  	(($tva == "N")    ? "checked=\"checked\"" : ""),
+	  	(($compta == "O") ? "checked=\"checked\"" : ""),
+	  	(($compta == "N") ? "checked=\"checked\"" : ""),
+	  	(($sol == "O")    ? "checked=\"checked\"" : ""),
+	  	(($sol == "N")    ? "checked=\"checked\"" : "")
+	  	);
+
+  	print("
+  <tr>
+    <td colspan=\"2\" style=\"background-color:#c0c0c0;\">". $msg->read($STAGE_ANIMAL) ."</td>
+  </tr>
+  <tr>
+    <td colspan=\"2\">
+
+      <table class=\"width100\">        
+        <tr>
+	    <td>
+
+	<div style=\"border:#cccccc solid 1px;\">
+
+      <table class=\"width100\">
+        <tr class=\"align-center\" style=\"background-color:#eeeeee;\">
+          <td style=\"width:25%;\">". $msg->read($STAGE_CATEGORY) ."</td>
+          <td style=\"width:25%;\">". $msg->read($STAGE_RACE) ."</td>
+          <td style=\"width:8%;\">". $msg->read($STAGE_FEMALE) ."</td>
+          <td style=\"width:12%\">". $msg->read($STAGE_FUTURE) ."</td>
+          <td style=\"width:10%;\">". $msg->read($STAGE_UPRA) ."</td>
+          <td style=\"width:10%;\">". $msg->read($STAGE_PERF) ."</td>
+          <td style=\"width:10%;\">". $msg->read($STAGE_QUALITY) ."</td>
+        </tr>
+		");
+            	
+		$result = mysql_query("select _IDcat, _IDrace, _upra, _control, _quality, _devenir, _taille, _IDpa from prod_pa where _IDlieu = '$IDlieu'", $mysql_link);
+		$row    = ($result) ? mysql_fetch_row($result) : 0 ;
+
+		while ( $row ) {
+			$res  = mysql_query("select _text from prod_categorie where _IDcat = '$row[0]' AND _lang = '".$_SESSION["lang"]."' limit 1", $mysql_link);
+			$cat  = ($res) ? remove_magic_quotes(mysql_fetch_row($res)) : 0 ;
+
+			$res  = mysql_query("select _race from prod_race where _IDrace = '$row[1]'", $mysql_link);
+			$race = ($res) ? remove_magic_quotes(mysql_fetch_row($res)) : 0 ;
+
+			switch ( $row[5] ) {
+				case "L" : $dev = $msg->read($STAGE_LEISURE);     break;
+				case "C" : $dev = $msg->read($STAGE_COMPETITION); break;
+				case "E" : $dev = $msg->read($STAGE_ELEVAGE);     break;
+				default  : $dev = "";                             break;
+				}
+			
+			$chk[0] = ( $row[2] == "O" ) ? "<img src=\"".$_SESSION["ROOTDIR"]."/images/check.gif\" title=\"\" alt=\"\" />" : "" ;
+			$chk[1] = ( $row[3] == "O" ) ? "<img src=\"".$_SESSION["ROOTDIR"]."/images/check.gif\" title=\"\" alt=\"\" />" : "" ;
+			$chk[2] = ( $row[4] == "O" ) ? "<img src=\"".$_SESSION["ROOTDIR"]."/images/check.gif\" title=\"\" alt=\"\" />" : "" ;
+
+			$req    = str_replace("'", "\'", $msg->read($STAGE_DELPROD, $cat[0]));
+			$link   = "\"index.php?item=$item&amp;IDlieu=$IDlieu&amp;IDpa=$row[7]&amp;submit=delprod\" onclick=\"return confirmLink(this, '$req');\"";
+
+	    		print("
+		        <tr>
+		          <td style=\"width:25%;\" class=\"align-center\"><a href=\"$link\"><img src=\"".$_SESSION["ROOTDIR"]."/images/corb.gif\" title=\"". $msg->read($STAGE_ERASING) ."\" alt=\"". $msg->read($STAGE_ERASING) ."\" /></a> $cat[0]</nbbbb$ td>
+		          <td style=\"width:25%;\" class=\"align-center\">$race[0]</td>
+		          <td style=\"width:8%;\"  class=\"align-center\">$row[6]</td>
+		          <td style=\"width:12%;\" class=\"align-center\">$dev</td>
+		          <td style=\"width:10%;\" class=\"align-center\">$chk[0]</td>
+		          <td style=\"width:10%;\" class=\"align-center\">$chk[1]</td>
+		          <td style=\"width:10%;\" class=\"align-center\">$chk[2]</td>
+		        </tr>
+				");
+				
+			$row = mysql_fetch_row($result);
+			}
+
+	print("
+        <tr>
+          <td style=\"width:25%\" class=\"align-center\">
+            <label for=\"IDcat1\">
+            <select id=\"IDcat1\" name=\"IDcat1\" onchange=\"document.forms.formulaire.submit()\">
+		");
+
+	// choix de la catégorie (si la race n'est pas déterminée)
+	$check = ( $IDcat1 ) ? "" : "selected=\"selected\"" ;
+	print("<option value=\"0\" $check>&nbsp;</option> ");
+            	
+	$result = mysql_query("select _IDcat, _text from prod_categorie where _type = 'A' AND _lang = '".$_SESSION["lang"]."'", $mysql_link);
+	$row    = ($result) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+    	
+   	while ( $row ) {
+   		$check = ( $IDcat1 == $row[0] ) ? "selected=\"selected\"" : "" ;
+
+		print("<option value=\"$row[0]\" $check>$row[1]</option>");
+
+		$row   = remove_magic_quotes(mysql_fetch_row($result));
+		}
+
+	print("
+              </select>
+              </label>
+          </td>
+		");
+
+	// choix de la race en fonction de la catégorie
+	$result = mysql_query("select _IDrace, _race from prod_race where _IDcat = $IDcat1", $mysql_link);
+	$row    = ($result) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+    	
+	// si on trouve => construction du menu
+	if ( $row ) {
+		print("
+	          <td style=\"width:25%;\" class=\"align-center\">
+	            <label for=\"IDrace\">
+      	      <select id=\"IDrace\" name=\"IDrace\">
+	              <option value=\"0\" selected=\"selected\"></option>
+			");
+            	
+		while ( $row ) {
+			print("<option value=\"$row[0]\">$row[1]</option>");
+			$row = remove_magic_quotes(mysql_fetch_row($result));
+			}
+
+		print("
+	              </select>
+	              </label>
+			</td>
+			");
+		}
+	else
+		print("<td style=\"width:25%;\"></td>");
+
+	print("
+          <td style=\"width:8%\" class=\"align-center\"><label for=\"taille1\"><input id=\"taille1\" name=\"taille1\" size=\"6\" /></label></td>
+          <td style=\"width:12%\" class=\"align-center\">
+            <label for=\"devenir1\">
+     	      <select id=\"devenir1\" name=\"devenir1\">
+            	<option value=\"\" selected=\"selected\">&nbsp;</option>
+            	<option value=\"L\">". $msg->read($STAGE_LEISURE) ."</option>
+            	<option value=\"C\">". $msg->read($STAGE_COMPETITION) ."</option> 
+			<option value=\"E\">". $msg->read($STAGE_ELEVAGE) ."</option>
+            </select>
+            </label>
+          </td>
+          <td style=\"width:10%;\" class=\"align-center\"><label for=\"upra\"><input type=\"checkbox\" id=\"upra\" name=\"upra\" value=\"O\" /></label></td>
+          <td style=\"width:10%;\" class=\"align-center\"><label for=\"control\"><input type=\"checkbox\" id=\"control\" name=\"control\" value=\"O\" /></label></td>
+          <td style=\"width:10%;\" class=\"align-center\"><label for=\"quality\"><input type=\"checkbox\" id=\"quality\" name=\"quality\" value=\"O\" /></label></td>
+        </tr>
+      </table>
+
+<table class=\"width100\">
+  <tr>
+    <td style=\"width:90%\" class=\"align-right\">". $msg->read($STAGE_ADDPRODUCT) ."</td>
+    <td style=\"width:10%;\" class=\"align-center\"><input type=\"image\" src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/post.gif\" name=\"submit\" alt=\"".$msg->read($STAGE_INPUTNEW)."\" /></td>
+  </tr>
+</table>
+
+      </div>
+
+    </td>
+  </tr>
+</table>
+
+    </td>
+  </tr>
+  <tr>
+    <td colspan=\"2\" style=\"background-color:#C0C0C0;\">". $msg->read($STAGE_VEGETAL) ."</td>
+  </tr>
+  <tr>
+    <td colspan=\"2\">
+
+	<div style=\"border:#cccccc solid 1px;\">
+
+      <table class=\"width100\">
+        <tr class=\"align-center\" style=\"background-color:#eeeeee;\">
+          <td style=\"width:33%;\">". $msg->read($STAGE_CATEGORY) ."</td>
+          <td style=\"width:33%;\">". $msg->read($STAGE_FUTURE) ."</td>
+          <td style=\"width:33%;\">". $msg->read($STAGE_SURFACE) ."</td>
+        </tr>
+		");
+            	
+		$result = mysql_query("select _IDcat, _devenir, _taille, _IDpv from prod_pv where _IDlieu = '$IDlieu'", $mysql_link);
+		$row    = ($result) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+		while ( $row ) {
+			$res = mysql_query("select _text from prod_categorie where _IDcat = '$row[0]' AND _lang = '".$_SESSION["lang"]."' limit 1", $mysql_link);
+			$cat = ($res) ? remove_magic_quotes(mysql_fetch_row($res)) : 0 ;
+
+			switch ( $row[1] ) {
+				case "A" : $dev = $msg->read($STAGE_AUTO); break;
+				case "V" : $dev = $msg->read($STAGE_SOLD); break;
+				default  : $dev = "";                      break;
+				}
+
+			$req  = addslashes($msg->read($STAGE_DELCAT, $cat[0]));
+			$link = "\"index.php?item=$item&amp;cmde=lieu&amp;IDlieu=$IDlieu&amp;IDpv=$row[3]&amp;submit=delprod\" onclick=\"return confirmLink(this, '$req');\"";
+
+			print("
+		        <tr>
+		          <td class=\"align-center\"><a href=\"$link\"><img src=\"".$_SESSION["ROOTDIR"]."/images/corb.gif\" title=\"". $msg->read($STAGE_ERASING) ."\" alt=\"\" /></a> $cat[0]</td>
+		          <td class=\"align-center\">$dev &nbsp;</td>
+		          <td class=\"align-center\">$row[2] &nbsp;</td>
+		        </tr>
+				");
+				
+			$row = remove_magic_quotes(mysql_fetch_row($result));
+			}
+
+	print("
+        <tr>
+          <td class=\"align-center\">
+              <label for=\"IDcat2\">
+              <select id=\"IDcat2\" name=\"IDcat2\">
+			<option value=\"0\" selected=\"selected\">&nbsp;</option>
+		");
+            	
+		$result = mysql_query("select _IDcat, _text from prod_categorie where _type = 'V' AND _lang = '".$_SESSION["lang"]."'", $mysql_link);
+		$row    = ($result) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+    	
+		while ( $row ) {
+			print("<option value=\"$row[0]\">$row[1]</option>");
+			$row = remove_magic_quotes(mysql_fetch_row($result));
+			}
+
+	print("
+              </select>
+              </label>
+		</td>
+		<td class=\"align-center\">
+              <label for=\"devenir2\">
+              <select id=\"devenir2\" name=\"devenir2\">
+			<option value=\"\" selected=\"selected\">&nbsp;</option>
+			<option value=\"A\">". $msg->read($STAGE_AUTO) ."</option>
+			<option value=\"V\">". $msg->read($STAGE_SOLD) ."</option>
+              </select>
+              </label>
+		</td>
+          <td class=\"align-center\"><label for=\"taille2\"><input id=\"taille2\" name=\"taille2\" size=\"4\" /></label></td>
+        </tr>
+	</table>
+
+	<table class=\"width100\">
+	  <tr>
+	    <td style=\"width:90%;\" class=\"align-right\">". $msg->read($STAGE_ADDPRODUCT) ."</td>
+	    <td style=\"width:10%;\" class=\"align-center\"><input type=\"image\" src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/post.gif\" name=\"submit\" alt=\"".$msg->read($STAGE_INPUTNEW)."\" /></td>
+	  </tr>
+	</table>
+
+      </div>
+
+    </td>
+  </tr>
+  <tr>
+    <td colspan=\"2\" style=\"background-color:#C0C0C0;\">". $msg->read($STAGE_COMPLEMENT) ."</td>
+  </tr>
+  <tr>
+    <td colspan=\"2\">
+
+	<div style=\"border:#cccccc solid 1px;\">
+
+      <table class=\"width100\">
+        <tr class=\"align-center\" style=\"background-color:#eeeeee;\">
+          <td style=\"width:50%;\">". $msg->read($STAGE_CATEGORY) ."</td>
+          <td style=\"width:50%;\">". $msg->read($STAGE_SIZE) ."</td>
+        </tr>
+		");
+            	
+		$result = mysql_query("select _IDcat, _taille, _IDatcomp from prod_atcomp where _IDlieu = '$IDlieu'", $mysql_link);
+		$row    = ($result) ? mysql_fetch_row($result) : 0 ;
+
+		while ( $row ) {
+			$res  = mysql_query("select _text from prod_categorie where _IDcat = '$row[0]' AND _lang = '".$_SESSION["lang"]."' limit 1", $mysql_link);
+			$cat  = ($res) ? remove_magic_quotes(mysql_fetch_row($res)) : 0 ;
+
+			$req  = addslashes($msg->read($STAGE_DELAT, $cat[0]));
+			$link = "\"index.php?item=$item&amp;cmde=lieu&amp;IDlieu=$IDlieu&amp;IDatcomp=$row[2]&amp;submit=delprod\" onclick=\"return confirmLink(this, '$req');\"";
+
+    			print("
+		        <tr>
+		          <td style=\"width:50%;\" class=\"align-center\"><a href=\"$link\"><img src=\"".$_SESSION["ROOTDIR"]."/images/corb.gif\" title=\"". $msg->read($STAGE_ERASING) ."\" alt=\"\" /></a> $cat[0]</td>
+		          <td style=\"width:50%;\" class=\"align-center\">$row[1] &nbsp;</td>
+		        </tr>
+				");
+				
+			$row = mysql_fetch_row($result);
+			}
+
+	print("
+        <tr>
+          <td style=\"width:50%;\" class=\"align-center\">
+              <label for=\"IDcat3\">
+              <select id=\"IDcat3\" name=\"IDcat3\">
+            	<option value=\"0\" selected=\"selected\">&nbsp;</option>
+		");
+            	
+	$result = mysql_query("select _IDcat, _text from prod_categorie where _type = 'C' AND _lang = '".$_SESSION["lang"]."'", $mysql_link);
+	$row    = ($result) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+    	
+	while ( $row ) {
+		print("<option value=\"$row[0]\">$row[1]</option>");
+		$row = remove_magic_quotes(mysql_fetch_row($result));
+		}
+
+	print("
+              </select>
+              </label>
+          </td>
+          <td style=\"width:50%\" class=\"align-center\"><label for=\"taille3\"><input id=\"taille3\" name=\"taille3\" size=\"4\" /></label></td>
+        </tr>
+	</table>
+	
+	<table class=\"width100\">
+	  <tr>
+	    <td style=\"width:90%\" class=\"align-right\">". $msg->read($STAGE_ADD) ."</td>
+	    <td style=\"width:10%;\" class=\"align-center\"><input type=\"image\" src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/post.gif\" name=\"submit\" alt=\"".$msg->read($STAGE_INPUTNEW)."\" /></td>
+	  </tr>
+	</table>
+
+      </div>
+
+    </td>
+  </tr>
+</table>
+		");
+	}
+
+	//========== pour les autres secteurs d'activité ===========
+
+	if ( $infos == "N" ) {
+		print("
+	<table class=\"width100\">
+	  <tr>
+	    <td colspan=\"2\" style=\"background-color:#C0C0C0;\">". $msg->read($STAGE_STUDACTIVITY) ."</td>
+	  </tr>
+	  <tr>
+
+	    <td style=\"width:40%;\" class=\"align-right valign-top\">". $msg->read($STAGE_SERVICES) ."</td>
+	    <td style=\"width:60%\">
+	      <label for=\"actif_O\"><input type=\"radio\" id=\"actif_O\" name=\"actif\" value=\"O\" ". ($actif == "O" ? "checked=\"checked\"" : "") ."/>". $msg->read($STAGE_YES) ."</label><br/>
+	      <label for=\"actif_N\"><input type=\"radio\" id=\"actif_N\" name=\"actif\" value=\"N\" ". ($actif == "N" ? "checked=\"checked\"" : "") ."/>". $msg->read($STAGE_NO) ."</label>
+	    </td>
+	  </tr>
+
+	  <tr>
+	    <td class=\"align-right valign-top\">". $msg->read($STAGE_ACCUEIL) ."</td>
+	    <td>
+	      <label for=\"accueil_O\"><input type=\"radio\" id=\"accueil_O\" name=\"accueil\" value=\"O\" ". ($accueil == "O" ? "checked=\"checked\"" : "") ."/>". $msg->read($STAGE_YES) ."</label><br/>
+	      <label for=\"accueil_N\"><input type=\"radio\" id=\"accueil_N\" name=\"accueil\" value=\"N\" ". ($accueil == "N" ? "checked=\"checked\"" : "") ."/>". $msg->read($STAGE_NO) ."</label>
+	    </td>
+	  </tr>
+
+	  <tr>
+	    <td class=\"align-right valign-top\">". $msg->read($STAGE_ANIMATION) ."</td>
+	    <td>
+	      <label for=\"anim_O\"><input type=\"radio\" id=\"anim_O\" name=\"anim\" value=\"O\" ". ($anim == "O" ? "checked=\"checked\"" : "") ."/>". $msg->read($STAGE_YES) ."</label><br/>
+	      <label for=\"anim_N\"><input type=\"radio\" id=\"anim_N\" name=\"anim\" value=\"N\" ". ($anim == "N" ? "checked=\"checked\"" : "") ."/>". $msg->read($STAGE_NO) ."</label>
+	    </td>
+	  </tr>
+
+	  <tr>
+	    <td class=\"align-right valign-top\">". $msg->read($STAGE_RESTO) ."</td>
+	    <td>
+	      <label for=\"resto_O\"><input type=\"radio\" id=\"resto_O\" name=\"resto\" value=\"O\" ". ($resto == "O" ? "checked=\"checked\"" : "") ."/>". $msg->read($STAGE_YES) ."</label><br/>
+	      <label for=\"resto_N\"><input type=\"radio\" id=\"resto_N\" name=\"resto\" value=\"N\" ". ($resto == "N" ? "checked=\"checked\"" : "") ."/>". $msg->read($STAGE_NO) ."</label>
+	    </td>
+	  </tr>
+
+	  <tr>
+	    <td class=\"align-right valign-top\">". $msg->read($STAGE_OTHER) ."</td>
+	    <td>
+	      <label for=\"autre_O\"><input type=\"radio\" id=\"autre_O\" name=\"autre\" value=\"O\" ". ($autre == "O" ? "checked=\"checked\"" : "") ."/>". $msg->read($STAGE_YES) ."</label><br/>
+	      <label for=\"autre_N\"><input type=\"radio\" id=\"autre_N\" name=\"autre\" value=\"N\" ". ($autre == "N" ? "checked=\"checked\"" : "") ."/>". $msg->read($STAGE_NO) ."</label>
+	    </td>
+	  </tr>
+
+	  <tr>
+	    <td class=\"align-right valign-top\">". $msg->read($STAGE_NEGOCIATE) ."</td>
+	    <td>
+	      <label for=\"negocier_O\"><input type=\"radio\" id=\"negocier_O\" name=\"negocier\" value=\"O\" ". ($negocier == "O" ? "checked=\"checked\"" : "") ."/>". $msg->read($STAGE_YES) ."</label><br/>
+	      <label for=\"negocier_N\"><input type=\"radio\" id=\"negocier_N\" name=\"negocier\" value=\"N\" ". ($negocier == "N" ? "checked=\"checked\"" : "") ."/>". $msg->read($STAGE_NO) ."</label>
+	    </td>
+	  </tr>
+	</table>
+		");
+	}
+?>
+
+	<hr/>
+
+         <table class="width100">
+           <tr>
+              <td style="width:10%;" class="valign-middle align-center"><?php print("<input type=\"image\" src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/valid.gif\" name=\"valid\" alt=\"".$msg->read($STAGE_INPUTOK)."\" />"); ?></td>
+              <td class="valign-middle"><?php print($msg->read($STAGE_VALID)); ?></td>
+           </tr>
+           <tr>
+              <td class="valign-middle align-center">
+              	<a href="index.php"><?php print("<img src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/cancel.gif\" title=\"\" alt=\"".$msg->read($STAGE_INPUTCANCEL)."\" />"); ?></a>
+              </td>
+              <td class="valign-middle"><?php print($msg->read($STAGE_QUIT)); ?></td>
+           </tr>
+         </table>
+
+	</form>
+
+</div>

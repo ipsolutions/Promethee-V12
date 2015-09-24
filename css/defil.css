@@ -1,0 +1,560 @@
+.pointer {
+	 cursor: pointer;
+}
+
+/* BLOG_main_com defil */
+#mod_defil {
+}
+
+#mod_defil .entete{
+	 margin: 0;
+	 padding: 0;
+	 color: #FFFFFF;
+}
+
+#mod_defil .pied img{
+	 vertical-align: top;
+	 margin: 0;
+	 padding: 0;
+	 border: none;
+}
+
+#mod_defil .pied{
+}
+
+#mod_defil .entete img{
+	 vertical-align: bottom;
+	 margin: 0;
+	 padding: 0;
+	 border: none;
+}
+
+#mod_defil .cel_entete{
+	 background-color: #FFFFFF;
+	 padding: 2px;
+}
+
+#mod_defil .cel_centre{
+	 background-color: #FFFFFF;
+	 padding: 2px;
+}
+
+#mod_defil .cel_pied{
+	 background-color: #FFFFFF;
+	 padding: 2px;
+}
+
+#mod_defil .left{
+	 position: relative;
+	 padding-right: 1ex;
+	 float: left;
+	 margin-right: 5px;
+}
+
+#mod_defil .right{
+	 position: relative;
+	 padding-left: 1ex;
+	 float: right;
+	 margin-left: 5px;
+}
+
+#mod_defil .center, #mod_defil .top{
+	 position: relative;
+	 padding-bottom: 1ex;
+	 float: none;
+	 text-align: center;
+}
+
+#mod_defil .titre, #mod_defil .titre .access{
+	 color: #000000;
+	 font-family: verdana;
+	 font-size: 20px;
+	 font-weight: bold;
+	 text-align: left;
+	 text-decoration: none;
+}
+
+#mod_defil .titre a{
+	 color: #000000;
+	 font-family: verdana;
+	 font-size: 20px;
+	 font-weight: bold;
+	 text-align: left;
+	 text-decoration: none;
+}
+
+#mod_defil .titre a:hover{
+}
+
+#mod_defil .categorie, #mod_defil .categorie .access{
+	 color: #FFFFFF;
+	 font-family: verdana;
+	 font-size: 11px;
+	 font-weight: bold;
+	 text-align: left;
+	 text-decoration: none;
+}
+
+#mod_defil .resume, #mod_defil .resume .access{
+	 color: #000000;
+	 font-family: verdana;
+	 font-size: 12px;
+	 font-weight: bold;
+	 text-align: left;
+	 text-decoration: none;
+}
+
+#mod_defil .texte, #mod_defil .texte .access{
+	 color: #000000;
+	 font-family: verdana;
+	 font-size: 12px;
+	 font-weight: normal;
+	 text-align: left;
+	 text-decoration: none;
+}
+
+#mod_defil .date, #mod_defil .date .access{
+	 color: #000000;
+	 font-family: verdana;
+	 font-size: 10px;
+	 font-weight: bold;
+	 text-align: left;
+	 text-decoration: none;
+}
+
+#mod_defil .liens, #mod_defil .liens a{
+	 color: #000000;
+	 font-family: verdana;
+	 font-size: 12px;
+	 font-weight: bold;
+	 text-align: left;
+	 text-decoration: none;
+}
+
+#mod_defil .liens:hover, #mod_defil .liens a:hover{
+	 color: #FF9933;
+	 text-decoration: none;
+}
+
+#mod_defil .auteur, #mod_defil .auteur .access{
+	 color: #000000;
+	 font-family: verdana;
+	 font-size: 10px;
+	 font-weight: normal;
+	 text-align: left;
+	 text-decoration: none;
+}
+
+#mod_defil .auteur a, #mod_defil .auteur .access a{
+	 color: #000000;
+	 font-family: verdana;
+	 font-size: 10px;
+	 font-weight: normal;
+	 text-align: left;
+	 text-decoration: none;
+}
+
+#mod_defil .auteur a:hover, #mod_defil auteur .access a:hover{
+	 color: #000000;
+	 text-decoration: none;
+}
+
+#mod_defil .pied_page{
+	 color: #8A9BAC;
+	 font-family: verdana;
+	 font-size: 10px;
+	 font-weight: bold;
+	 text-align: left;
+	 text-decoration: none;
+}
+
+#mod_defil .pied_page a{
+	 color: #8A9BAC;
+	 font-family: verdana;
+	 font-size: 10px;
+	 font-weight: bold;
+	 text-align: left;
+	 text-decoration: none;
+}
+
+#mod_defil .pied_page a:hover{
+	 color: #FF9933;
+	 text-decoration: none;
+}
+
+#mod_defil .navi{
+	 color: #000000;
+	 font-family: verdana;
+	 font-size: 12px;
+	 font-weight: normal;
+	 text-align: left;
+	 text-decoration: none;
+	 text-align: center;
+}
+
+#mod_defil .navi a{
+	 color: #000000;
+	 font-family: verdana;
+	 font-size: 12px;
+	 font-weight: normal;
+	 text-align: left;
+	 text-decoration: none;
+}
+
+#mod_defil .pj, #mod_defil .pj a{
+	 color: #000000;
+	 font-family: verdana;
+	 font-size: 12px;
+	 font-weight: normal;
+	 text-align: left;
+	 text-decoration: none;
+}
+
+#mod_defil .suite, #mod_defil .suite .access{
+	 color: #000000;
+	 font-family: verdana;
+	 font-size: 12px;
+	 font-weight: normal;
+	 text-align: left;
+	 text-decoration: none;
+	 text-align: right;
+}
+
+#mod_defil .infos{
+	 color: #000000;
+	 font-family: verdana;
+	 font-size: 12px;
+	 font-weight: bold;
+	 text-align: left;
+	 text-decoration: none;
+}
+
+#mod_defil .infos a{
+	 color: #000000;
+	 font-family: verdana;
+	 font-size: 12px;
+	 font-weight: bold;
+	 text-align: left;
+	 text-decoration: none;
+}
+
+#mod_defil .message, #mod_defil .message a{
+	 color: #000000;
+	 font-family: verdana;
+	 font-size: 12px;
+	 font-weight: normal;
+	 text-align: left;
+	 text-decoration: none;
+}
+
+#mod_defil .submit{
+	 text-align: center;
+	 padding: 0px;
+}
+
+#mod_defil form{
+	 text-align: left;
+}
+
+#mod_defil .barre{
+	 background-color: #000000;
+	 height: 3px;
+}
+
+#mod_defil .texte .interet{
+	 font-size: 80%;
+}
+
+#mod_defil .rubrique{
+	 color: #FFFFFF;
+	 font-family: verdana;
+	 font-size: 11px;
+	 font-weight: bold;
+	 text-align: left;
+	 text-decoration: none;
+}
+
+#mod_defil .form{
+	 text-align: left;
+}
+
+#mod_defil .pager{
+	 text-align: center;
+}
+
+#mod_defil .pager a{
+	 color: #000000;
+	 font-family: verdana;
+	 font-size: 12px;
+	 font-weight: bold;
+	 text-align: left;
+	 text-decoration: none;
+}
+
+#mod_defil .titre_page{
+	 color: #000000;
+	 font-family: verdana;
+	 font-size: 20px;
+	 font-weight: bold;
+	 text-align: left;
+	 text-decoration: none;
+	 text-align: center;
+}
+
+#mod_defil .titre_diapo{
+	 color: #000000;
+	 font-family: verdana;
+	 font-size: 20px;
+	 font-weight: bold;
+	 text-align: left;
+	 text-decoration: none;
+	 height: 3em;
+	 vertical-align: top;
+	 text-align: center;
+}
+
+#mod_defil .titre_diapo a{
+	 color: #000000;
+	 font-family: verdana;
+	 font-size: 20px;
+	 font-weight: bold;
+	 text-align: left;
+	 text-decoration: none;
+}
+
+#mod_defil .titre_center{
+	 color: #FFFFFF;
+	 font-family: verdana;
+	 font-size: 11px;
+	 font-weight: bold;
+	 text-align: left;
+	 text-decoration: none;
+	 text-align: center;
+}
+
+#mod_defil .navigation{
+	 color: #000000;
+	 font-family: verdana;
+	 font-size: 12px;
+	 font-weight: bold;
+	 text-align: left;
+	 text-decoration: none;
+}
+
+#mod_defil .navi_left{
+	 color: #000000;
+	 font-family: verdana;
+	 font-size: 12px;
+	 font-weight: bold;
+	 text-align: left;
+	 text-decoration: none;
+	 text-align: left;
+	 float: left;
+}
+
+#mod_defil .navi_right{
+	 color: #000000;
+	 font-family: verdana;
+	 font-size: 12px;
+	 font-weight: bold;
+	 text-align: left;
+	 text-decoration: none;
+	 text-align: right;
+}
+
+#mod_defil .titre_left a{
+	 color: #000000;
+	 font-family: verdana;
+	 font-size: 20px;
+	 font-weight: bold;
+	 text-align: left;
+	 text-decoration: none;
+	 text-align: left;
+}
+
+#mod_defil .description, #mod_defil .description a{
+	 color: #000000;
+	 font-family: verdana;
+	 font-size: 12px;
+	 font-weight: normal;
+	 text-align: left;
+	 text-decoration: none;
+}
+
+#mod_defil .description_left a{
+	 color: #000000;
+	 font-family: verdana;
+	 font-size: 12px;
+	 font-weight: normal;
+	 text-align: left;
+	 text-decoration: none;
+	 text-align: left;
+}
+
+#mod_defil .image, #mod_defil .image a{
+	 color: #000000;
+	 font-family: verdana;
+	 font-size: 12px;
+	 font-weight: normal;
+	 text-align: left;
+	 text-decoration: none;
+	 text-align: center;
+}
+
+#mod_defil .left{
+	 float: left;
+	 position: relative;
+	 margin-right: 1ex;
+}
+
+#mod_defil .galerie_diapo_xl{
+	 width: 150px;
+	 margin: auto;
+	 margin-bottom: 10px;
+	 text-align: center;
+}
+
+#mod_defil .diapo_xl{
+	 width: 150px;
+	 height: 150px;
+	 text-align: center;
+	 vertical-align: middle;
+	 border-spacing: 0;
+	 border: #000000 1px solid;
+}
+
+#mod_defil .galerie_diapo_s{
+	 width: 100px;
+	 margin: auto;
+	 margin-bottom: 10px;
+	 text-align: center;
+}
+
+#mod_defil .diapo_s{
+	 width: 100px;
+	 height: 100px;
+	 text-align: center;
+	 vertical-align: middle;
+	 border-spacing: 0;
+	 border: #000000 1px solid;
+}
+
+#mod_defil .galerie{
+	 width: 50%;
+	 vertical-align: top;
+	 text-align: center;
+}
+
+#mod_defil .support_xl{
+	 height: 150px;
+	 position: relative;
+	 overflow: hidden;
+	 border: #000000 1px solid;
+}
+
+#mod_defil .contenu_xl{
+	 height: 150px;
+	 position: absolute;
+	 left: 0;
+	 top: 0;
+}
+
+#mod_defil .support_s{
+	 height: 100px;
+	 position: relative;
+	 overflow: hidden;
+	 border: #000000 1px solid;
+}
+
+#mod_defil .contenu_s{
+	 height: 100px;
+	 position: absolute;
+	 left: 0;
+	 top: 0;
+}
+
+#mod_defil .vsupport_xl{
+	 width: 150px;
+	 position: relative;
+	 overflow: hidden;
+	 height: 500px;
+	 float: left;
+	 border: #000000 1px solid;
+}
+
+#mod_defil .vcontenu_xl{
+	 width: 150px;
+	 position: absolute;
+	 left: 0;
+	 top: 0;
+	 height: 500px;
+}
+
+#mod_defil .vsupport_s{
+	 width: 100px;
+	 position: relative;
+	 overflow: hidden;
+	 height: 500px;
+	 float: left;
+	 border: #000000 1px solid;
+}
+
+#mod_defil .vcontenu_s{
+	 width: 100px;
+	 position: absolute;
+	 left: 0;
+	 top: 0;
+	 height: 500px;
+}
+
+#mod_defil .support_xxl{
+	 height: 500px;
+	 position: relative;
+	 overflow: hidden;
+	 border: #000000 1px solid;
+}
+
+#mod_defil .contenu_xxl{
+	 height: 500px;
+	 position: absolute;
+	 left: 0;
+	 top: 0;
+}
+
+#mod_defil .table_defil{
+	 height: 100%;
+	 width: 100%;
+	 border-spacing: 0;
+}
+
+#mod_defil .table_defil_xxl{
+	 width: 100%;
+	 border-spacing: 0;
+}
+
+#mod_defil .defil{
+	 padding: 10px;
+	 vertical-align: middle;
+	 text-align: center;
+}
+
+#mod_defil .navitop_s{
+	 width: 100px;
+	 position: relative;
+}
+
+#mod_defil .navitop_xl{
+	 width: 150px;
+	 position: relative;
+}
+
+#mod_defil .navitop_xxl{
+	 width: 100%;
+	 position: relative;
+}
+
+#mod_defil .type3_right{
+	 text-align: center;
+	 position: relative;
+	 padding-left: 20px;
+}

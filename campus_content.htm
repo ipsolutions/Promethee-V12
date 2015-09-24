@@ -1,0 +1,327 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2003-2008 by Dominique Laporte(C-E-D@wanadoo.fr)
+   Copyright (c) 2006 by Didier Roy (miraceti@free.fr)
+   Copyright (c) 2006 by Nordine Zetoutou (nordine.zetoutou@educagri.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : campus_content.htm
+ *		projet   : le menu du campus virtuel
+ *
+ *		version  : 1.1
+ *		auteur   : laporte
+ *		creation : 6/09/03
+ *		modif    : 08/06/06 - par Didier Roy
+ *		           migration PHP5  
+ *		modif    : 17/07/06 - Nordine Zetoutou
+ * 	                 migration des balises HTML en XHTML 1.0 strict
+ */
+
+
+$IDcentre = ( strlen(@$_POST["IDcentre"]) )	// ID du centre
+	? (int) $_POST["IDcentre"]
+	: (int) (@$_GET["IDcentre"] ? $_GET["IDcentre"] : $_SESSION["CnxCentre"]) ;
+$IDmat  = ( @$_POST["IDmat"] )			// ID de la matière ou de la formation
+	? (int) $_POST["IDmat"]
+	: (int) @$_GET["IDmat"] ;
+$IDmenu = ( @$_POST["IDmenu"] )			// ID du menu
+	? (int) $_POST["IDmenu"]
+	: (int) @$_GET["IDmenu"] ;
+
+$submit = (@$_POST["submit"] )			// bouton de validation
+	? $_POST["submit"]
+	: @$_GET["submit"] ;
+?>
+
+
+<?php
+//---------------------------------------------------------------------------
+function iscampusRegistered($IDmat)
+{
+/*
+ * fonction :	test si un membre est déjà enregistré
+ * in :		$IDdata : identifiant du egroupe
+ * out :		-1000 si pas enregistré, le statut sinon
+ */
+	require "globals.php";
+
+	$query  = "select _access from campus_user ";
+	$query .= "where _IDmat = '$IDmat' ";
+	$query .= "AND _ID = '".$_SESSION["CnxID"]."' ";
+	$query .= "limit 1";
+
+	$result = mysql_query($query, $mysql_link);
+	$row    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+	return ( $row ) ? $row[0] : -1000 ;
+}
+//---------------------------------------------------------------------------
+?>
+
+
+<?php
+	// gestion des ACL pour e-campus privés
+	require_once "include/user.php";
+	$acl = new user_acl("ecampus");
+
+	// chargement de la langue
+	require "msg/campus.php";
+	require_once "include/TMessage.php";
+
+	$msg    = new TMessage($_SESSION["ROOTDIR"]."/msg/".$_SESSION["lang"]."/campus.php");
+	$msg->msg_search  = $keywords_search;
+	$msg->msg_replace = $keywords_replace;
+
+	// recherche du campus
+	$query  = "select _table from campus ";
+	$query .= "where _visible = 'O' AND _lang = '".$_SESSION["lang"]."' ";
+	$query .= "limit 1";
+
+	$result = mysql_query($query, $mysql_link);
+	$table  = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+	// recherche du modérateur du campus
+	if ( $table[0] == "campus_data" ) {
+		$query  = "select _IDmod, _IDgrpwr, _IDmat, _titre, _private, _auto from campus_data ";
+		$query .= "where _lang = '".$_SESSION["lang"]."' ";
+		$query .= ( $IDmat ) ? "AND _IDmat = '$IDmat' " : "AND _titre = '".$_SESSION["CampusName"]."' ";
+		$query .= "limit 1";
+		}
+	else {
+		$query  = "select _IDmod, _IDgrpwr, _IDclass, _ident, _private, _auto from campus_classe ";
+		$query .= "where _IDcentre = '$IDcentre' ";
+		$query .= ( $IDmat ) ? "AND _IDclass = abs($IDmat) " : "AND _ident = '".$_SESSION["CampusName"]."' ";
+		$query .= "limit 1";
+		}
+
+	$result = mysql_query($query, $mysql_link);
+	$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+	// modérateur du campus virtuel
+	$IDmod  = (int) @$row[0];
+	$grpwr  = (int) @$row[1];
+	$IDmat  = (int) ( $table[0] == "campus_data" ) ? @$row[2] : -@$row[2] ;
+	$ispriv = @$row[4];
+	$isauto = @$row[5];
+	$_SESSION["CampusName"] = @$row[3];
+
+	// l'utilisateur à sélectionné des menus
+	switch ( $submit ) {
+		case "visible" :
+		case "invisible" :
+			$value = ( $submit == "visible" ) ? "N" : "O" ;
+
+			if ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $IDmod OR ($IDmod == 0 AND ($grpwr & pow(2, $_SESSION["CnxGrp"] - 1))) ) {
+				$Query  = "update campus_items ";
+				$Query .= "set _visible = '$value' ";
+				$Query .= "where _IDmenu = '$IDmenu' AND _IDmat = '$IDmat' AND _IDcentre = '$IDcentre' ";
+				$Query .= "limit 1";
+
+				mysql_query($Query, $mysql_link);
+				}
+			break;
+
+		default :
+			break;
+		}
+
+	// la ligne de commande sur les liens
+	$cmdStr = "index.php?IDcentre=$IDcentre&IDres=2&IDmat=$IDmat&salon=::".@$_SESSION["CampusName"];
+
+	// choix des centres
+	$mytext .= "
+		<form id=\"campus\" action=\"index.php\" method=\"post\">
+			<input type=\"hidden\" name=\"item\"  value=\"9\" />";
+
+	// on sélectionne les centres
+	$Query  = "select _IDcentre, _ident from config_centre ";
+	$Query .= "where _visible = 'O' AND _lang = '".$_SESSION["lang"]."' " ;
+	$Query .= "order by _ident";
+
+	$result = mysql_query($Query, $mysql_link);
+	$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+	if ( mysql_numrows($result) > 1 ) {
+		$mytext .= "<div class=\"center\" style=\"margin-bottom: 2px;\">
+				<label for=\"campus_IDcentre\"> 
+				<select 
+					id=\"campus_IDcentre\" name=\"IDcentre\" 
+		      	      style=\"font-size: 11px; font-family: Arial\" 
+		            	onchange=\"document.forms.campus.submit()\">";
+
+		while ( $row ) {
+			$check   = ( $IDcentre == $row[0] ) ? "selected=\"selected\"" : "" ;
+
+			$mytext .= "<option value=\"$row[0]\" $check >$row[1]</option>";
+
+			$row     = remove_magic_quotes(mysql_fetch_row($result));
+			}
+
+		$mytext .= "</select> <img src=\"".$_SESSION["ROOTDIR"]."/images/home.gif\" title=\"\" alt=\"\" />
+				</label>
+				</div>";
+		}
+
+	// on sélectionne les matières pédagogiques ou les formations des campus
+	if ( $table[0] == "campus_data" ) {
+		$Query  = "select _IDmat, _titre, _IDgrpwr from campus_data ";
+		$Query .= "where _visible = 'O' AND _lang = '".$_SESSION["lang"]."' ";
+		$Query .= ( $_SESSION["CnxAdm"] == 255 ) ? "" : "AND (_IDgrprd & ".pow(2, $_SESSION["CnxGrp"] - 1).") " ;
+		$Query .= "order by _titre";
+		}
+	else {
+		$Query  = "select _IDclass, _ident, _IDgrpwr from campus_classe ";
+		$Query .= "where _visible = 'O' AND _IDcentre = '$IDcentre' ";
+		$Query .= ( $_SESSION["CnxAdm"] == 255 ) ? "" : "AND (_IDgrprd & ".pow(2, $_SESSION["CnxGrp"] - 1).") " ;
+		$Query .= "order by _ident";
+		}
+
+	$result  = mysql_query($Query, $mysql_link);
+	$row     = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+	$private = ( $ispriv == "O" AND $isauto == "O" AND ($_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $IDmod) )
+		? "<a href=\"".myurlencode("index.php?item=1&cmde=acl&ident=ecampus&IDident=$IDmat")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/invisible.gif\" title=\"". $msg->read($CAMPUS_SUBSCRIPTION) ."\" alt=\"". $msg->read($CAMPUS_SUBSCRIPTION) ."\" /></a>"
+		: "" ;
+
+	$idmsg   = ( $table[0] == "campus_data" ) ? $msg->read($CAMPUS_CHOOSECOURSE) : $msg->read($CAMPUS_CHOOSECLASS) ;
+
+	$mytext .= "<div class=\"center\">
+			$private
+			<label for=\"campus_IDmat\"> 
+			<select 
+				id=\"campus_IDmat\" name=\"IDmat\" 
+		            style=\"font-size: 11px; font-family: Arial\" 
+		            onchange=\"document.forms.campus.submit()\">
+		            <option value=\"0\">$idmsg</option>";
+
+	while ( $row ) {
+		if ( @$_SESSION["CampusName"] == $row[1] ) {
+			$check = "selected=\"selected\"";
+			$grpwr = $row[2];
+			}
+		else
+			$check = "";
+
+		$value  = ( $table[0] == "campus_data" ) ? $row[0] : -$row[0] ;
+
+		// recherche des campus avec des modules activés
+		$query  = "select _IDmat from campus_items ";
+		$query .= "where _visible = 'O' AND _IDmat = '$value' AND _IDcentre = '$IDcentre'";
+
+		$return = mysql_query($query, $mysql_link);
+		$nbrow  = ( $return ) ? mysql_affected_rows($mysql_link) : 0 ;
+
+		// on affiche toutes les matières pour le personnel de l'établissement
+		if ( getAccess() == 2 OR $nbrow )
+			$mytext .= "<option value=\"$value\" $check>$row[1] ($nbrow)</option>";
+
+		$row   = remove_magic_quotes(mysql_fetch_row($result));
+		}
+
+	// action sur le lien
+	$link    = ( $IDmat AND ($_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $IDmod) )
+		? "<a href=\"".myurlencode("index.php?item=9&cmde=tuning&IDcentre=$IDcentre&IDmat=$IDmat")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/tools.gif\" title=\"". $msg->read($CAMPUS_CONFIG) ."\" alt=\"". $msg->read($CAMPUS_CONFIG) ."\" /></a>"
+		: "<img src=\"".$_SESSION["ROOTDIR"]."/images/campus.png\" title=\"\" alt=\"\" />" ;
+
+	$mytext .= "</select> $link
+			</label>
+			</div>";
+
+	// l'utilisateur a sélectionné un e-campus
+	if ( @$_SESSION["CampusName"] ) {
+
+		$mytext .= "<hr style=\"width:80%;\" />";
+
+		$mytext .= "
+			<div class=\"menu\">
+			<img src=\"".$_SESSION["CfgPuce"]."\" title=\"\" alt=\"*\" /> <a href=\"".myurlencode("$cmdStr&item=9&cmde=visu")."\">". $msg->read($CAMPUS_HOME) ."</a>
+			</div>";
+
+	    	// lecture du menu
+		$Query  = "select _IDmenu, _ident, _link from campus_menu ";
+		$Query .= "where _visible = 'O' AND _lang = '".$_SESSION["lang"]."' ";
+		$Query .= "order by _IDmenu";
+
+		$result = mysql_query($Query, $mysql_link);
+		$info   = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+		$i = 1;
+		while ( $info ) {
+			$color   = ( $i++ % 2 ) ? "item" : "menu" ;
+
+		    	// lecture des options du menu
+			$Query   = "select _visible from campus_items ";
+			$Query  .= "where _IDmat = '$IDmat' AND _IDmenu = '$info[0]' AND _IDcentre = '$IDcentre' ";
+			$Query  .= "limit 1";
+
+			$res     = mysql_query($Query, $mysql_link);
+			$row     = ( $res ) ? mysql_fetch_row($res) : 0 ;
+
+			// par défaut les menus ne sont pas visibles
+			$visible = ( $row ) ? $row[0] : "N" ;
+
+			// mise à jour de la dba si nécessaire
+			if ( !$row )
+				mysql_query("insert into campus_items values('$IDmat', '$info[0]', '$IDcentre', '$visible')", $mysql_link);
+
+			// validation d'une rubrique
+			$image   = ( $visible == "O" ) ? "visible" : "invisible" ;
+
+			// message d'avertissement
+			$req     = ( $visible == "O" )
+				? $msg->read($CAMPUS_INVISIBLE)
+				: $msg->read($CAMPUS_VISIBLE) ;
+
+			// rendre les items accessibles
+			// si admin ou modérateur ou rédacteur (si pas de modérateur)
+			$link    = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $IDmod OR ($IDmod == 0 AND ($grpwr & pow(2, $_SESSION["CnxGrp"] - 1))) )
+				? "<a href=\"".myurlencode("$cmdStr&item=9&IDmenu=$info[0]&submit=$image")."\" onclick=\"return confirmLink(this, '$req');\"><img src=\"".$_SESSION["ROOTDIR"]."/images/$image.gif\" title=\"$req\" alt=\"$req\" /></a>"
+				: ($visible == "O"
+					? "<img src=\"".$_SESSION["CfgPuce"]."\" title=\"\" alt=\"*\" />"
+					: "<img src=\"".$_SESSION["ROOTDIR"]."/images/close.gif\" title=\"\" alt=\"X\" />") ;
+
+			// lien externe
+			$mylink  = ( strstr($info[2], "http://") OR strstr($info[2], "https://") )
+				? $info[2]
+				: "$cmdStr&$info[2]&IDmenu=$info[0]" ;
+
+			$target  = ( strstr($info[2], "http://") OR strstr($info[2], "https://") )
+				? "onclick=\"window.open(this.href, '_blank'); return false;\" "
+				: "" ;
+
+			// les rédacteurs ont accès à tous les menus (visibles et invisibles)
+			if ( $row[0] == "O" OR ($grpwr & pow(2, $_SESSION["CnxGrp"] - 1)) )
+				$mytext .= ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $IDmod OR iscampusRegistered($IDmat) > 0 OR $ispriv != "O" OR $acl->isMember($IDmat, $_SESSION["CnxID"]) )
+					? "<div class=\"$color\">$link <a href=\"".myurlencode($mylink)."\" $target>$info[1]</a></div>"
+					: "<div class=\"$color\">$link $info[1]</div>";
+
+			$info = remove_magic_quotes(mysql_fetch_row($result));
+			}	// end while
+
+		$color   = ( $i++ % 2 ) ? "item" : "menu" ;
+
+		$mytext .= "
+			<div class=\"$color\">
+			<img src=\"".$_SESSION["CfgPuce"]."\" title=\"\" alt=\"*\" /> <a href=\"index.php?item=0\">".$msg->read($CAMPUS_EXIT)."</a>
+			</div>";
+		}	// end if
+
+	$mytext .= "</form>";
+?>

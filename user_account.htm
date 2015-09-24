@@ -1,0 +1,603 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2002-2007 by Dominique Laporte(C-E-D@wanadoo.fr)
+   Copyright (c) 2006 by Nordine Zetoutou (nordine.zetoutou@educagri.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : user_account.htm
+ *		projet   : la page de gestion du compte utilisateur
+ *
+ *		version  : 1.2
+ *		auteur   : laporte
+ *		creation : 20/10/02
+ *		modif    : 23/12/02 - par D. Laporte
+ *			     affichage du poste de connexion
+ *
+ *		           15/06/03 - par D. Laporte
+ *			     affichage des avatars
+ *					
+ *			     17/07/06 - Nordine Zetoutou
+ * 	                 migration des balises HTML en XHTML 1.0 strict
+ */
+
+
+$ID        = ( @$_POST["ID"] )		// ID de l'utilisateur
+	? (int) $_POST["ID"]
+	: (int) @$_GET["ID"] ;
+
+$visu      = (int) @$_GET["visu"];
+$show      = (int) @$_GET["show"];
+$page      = ( @$_GET["page"] )
+	? (int) @$_GET["page"]
+	: 1 ;
+
+$pwd       = trim(@$_POST["pwd"]);
+$titre     = trim(@$_POST["titre"]);
+$fonction  = trim(@$_POST["fonction"]);
+$email     = trim(@$_POST["email"]);
+$tel       = trim(@$_POST["tel"]);
+$mobile    = trim(@$_POST["mobile"]);
+$adr1      = trim(@$_POST["adr1"]);
+$adr2      = trim(@$_POST["adr2"]);
+$zip       = trim(@$_POST["zip"]);
+$city      = trim(@$_POST["city"]);
+$signature = trim(@$_POST["signature"]);
+$avatar    = (int) @$_POST["avatar"];
+$cbox      = @$_POST["cbox"];
+
+$submit    = ( @$_POST["submit"] )		// bouton de validation
+	? $_POST["submit"]
+	: @$_GET["submit"] ;
+?>
+
+
+<?php
+	// initialisation
+	$_ID = ( $_SESSION["CnxAdm"] == 255 )
+		? ($ID ? $ID : $_SESSION["CnxID"])
+		: $_SESSION["CnxID"] ;
+
+	if ( $submit == "Valider" ) {
+          	// pour éviter les injections SQL
+          	$pwd       = str_replace(" ", "-", $pwd);
+            	
+		$titre     = addslashes($titre);
+		$fonction  = str_replace("\n", "<br/>", addslashes($fonction));
+		$signature = str_replace("\n", "<br/>", addslashes($signature));
+
+		// les matières enseignées
+		$idmat    = " ";
+		for ($i = 0; $i < count($cbox); $i++)
+			$idmat .= ( @$cbox[$i] )  ? "$cbox[$i] " : "" ;
+
+		$Query     = "update user_id ";
+		$Query    .= "set _passwd = '$pwd', _title = '$titre', _fonction = '$fonction', _email = '$email', _signature = '$signature', _avatar = '$avatar', ";
+		$Query    .= "_tel = '$tel', _mobile = '$mobile', _adr1 = '$adr1', _adr2 = '$adr2', _cp = '$zip', _city = '$city', _IDmat = '$idmat' ";
+		$Query    .= "where _ID = '$_ID' ";
+		$Query    .= "limit 1";
+			
+		if ( !mysql_query($Query, $mysql_link) )
+			sql_error($mysql_link);
+		else
+			$_SESSION["CnxPasswd"] = $pwd;
+
+		// fichier à transférer
+		$file = @$_FILES["UploadedFile"]["tmp_name"];
+
+		if ( $file AND authfile(@$_FILES["UploadedFile"]["name"]) ) {
+			require_once "include/gallery.php";
+
+			$dest = ( getAccess() == 1 ) ? "$DOWNLOAD/photo/eleves" : "$DOWNLOAD/photo" ;
+
+			// création de la vignette
+			vignette("$file|".@$_FILES["UploadedFile"]["name"], $dest, "$_ID.gif", $srcWidth, $srcHeight);
+			}
+		}
+
+	// lecture du compte
+	if ( ($result = mysql_query("select * from user_id where _ID = '$_ID' limit 1", $mysql_link)) ) {
+		$row = remove_magic_quotes(mysql_fetch_row($result));
+
+		if ( $row ) {
+			// photos élèves et personnel ne sont pas dans le même répertoire
+			$image  = ( getAccess($row[1]) == 1 )
+				? "$DOWNLOAD/photo/eleves/$row[0].gif" 
+				: "$DOWNLOAD/photo/$row[0].gif" ;
+
+			// on vérifie si la photo existe
+			$photo  = ( file_exists($image) ) 
+				? $image
+				: $_SESSION["ROOTDIR"]."/css/themes/".$_SESSION["CfgTheme"]."/images/0.gif" ;
+					
+			// lectures de données à modifier
+			$pwd       = $row[10];
+			$titre     = $row[14];
+			$fonction  = str_replace("<br/>", "\n", $row[15]);
+			$email     = $row[16];
+			$tel       = $row[18];
+			$mobile    = $row[19];
+			$adr1      = $row[21];
+			$adr2      = $row[22];
+			$zip       = $row[23];
+			$city      = $row[24];
+			$signature = str_replace("<br/>", "\n", $row[25]);
+			$avatar    = $row[30];
+
+			switch ( $row[13] ) {
+				case "H" :
+	      	     		$sex = "male";
+	            		break;
+	            	case "F" :
+	            		$sex = "female";
+		           		break;
+		           	default :
+	            		$sex = "anonymous";
+	            		break;
+	            	}
+
+			// lecture de la station émettrice
+			$poste     = _getHostName($row[29]);
+
+			// lecture du groupe
+			$query     = "select _ident from user_group ";
+			$query    .= "where _IDgrp = '$row[1]' AND _lang = '".$_SESSION["lang"]."' ";
+			$query    .= "limit 1";
+
+			$result    = mysql_query($query, $mysql_link);
+			$data      = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+			// modification du compte
+			$update = ( $_SESSION["CnxAdm"] == 255 )
+				? "<a href=\"".myurlencode("index.php?item=$item&visu=$visu&cmde=new&ID=$row[0]")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/modify.gif\" title=\"".$msg->read($USER_UPDATE)."\" alt=\"\" /></a>"
+				: "" ;
+
+			}
+		}
+?>
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($USER_USERACCOUNT)); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+
+	<form id="account" action="index.php" method="post" enctype="multipart/form-data">
+	<?php
+		print("
+			<p class=\"hidden\"><input type=\"hidden\" name=\"item\"   value=\"$item\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"cmde\"   value=\"$cmde\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"ID\"     value=\"$ID\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"submit\" value=\"Valider\" /></p>
+			");
+	?>
+
+            <table class="width100">
+              <tr>
+                <td style="width:17%;" class="valign-top align-center">
+			<?php print("<img src=\"$photo\" title=\"$photo\" alt=\"$photo\" />"); ?>
+                </td>
+                <td style="width:83%;" class="valign-top align-left">
+
+			<div style="border:#cccccc solid 1px; padding:4px;">
+
+				<table class="width100">
+	                    <tr>
+	                      <td style="width:25%;" class="align-right valign-middle">
+	                        <?php print($msg->read($USER_NAME)); ?>
+	                      </td>
+	                      <td style="width:50%;" class="valign-middle">
+	                        <?php print(getUserName($row[0])." [<img src=\"".$_SESSION["ROOTDIR"]."/images/$sex.gif\" title=\"$image\" alt=\"$image\" />] $update"); ?>
+	                      </td>
+
+	                      <td class="valign-top" rowspan="7">
+
+					<div style="border:#000000 solid 2px; padding:2px; background-image:url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat:repeat; text-align:center">
+					<?php print($msg->read($USER_RIGHTS)); ?>
+					</div>
+
+					<div style="background-color:#eeeeee; border:#000000 solid 1px; padding:4px;">
+					<?php
+						$sql  = "select _adm, _ident from user_admin ";
+						$sql .= "where _adm > 0 AND _adm != 255 ";
+						$sql .= "AND _lang = '".$_SESSION["lang"]."' ";
+						$sql .= "order by _adm";
+
+						$res  = mysql_query($sql, $mysql_link);
+						$adm  = ( $res ) ? remove_magic_quotes(mysql_fetch_row($res)) : 0 ;
+
+						while ( $adm ) {
+							$val = ( (bool) ((int) $adm[0] & (int) $row[8]) == 1 ) ? "on" : "off" ;
+
+							print("<img src=\"".$_SESSION["ROOTDIR"]."/images/checkbox_$val.gif\" title=\"\" alt=\"\" /> $adm[1]");
+							if ( $adm = remove_magic_quotes(mysql_fetch_row($res)) )
+								print("<br/>");
+							}
+					?>
+					</div>
+
+	                      </td>
+	                    </tr>
+
+	                    <tr>
+	                      <td class="align-right valign-middle">
+	                        <?php print($msg->read($USER_INSCRIPTION)); ?>
+	                      </td>
+	                      <td class="valign-middle">
+	                        <?php print(date2longfmt($row[5])); ?>
+	                      </td>
+	                    </tr>
+
+	                    <tr>
+	                      <td class="align-right valign-middle">
+	                        <?php print($msg->read($USER_CNX)); ?>
+	                      </td>
+	                      <td class="valign-middle">
+	                        <?php print(date2longfmt($row[7])); ?>
+	                      </td>
+	                    </tr>
+
+	                    <tr>
+	                      <td class="align-right valign-middle">
+	                        <?php print($msg->read($USER_CONNECTO)); ?>
+	                      </td>
+	                      <td class="valign-middle">
+	                        <?php print("$poste (".$_SERVER["REMOTE_ADDR"].")"); ?>
+	                      </td>
+	                    </tr>
+
+	                    <tr>
+	                      <td class="align-right valign-middle">
+	                        <?php print($msg->read($USER_CENTER)); ?>
+	                      </td>
+	                      <td class="valign-middle">
+					<?php
+						$query  = "select _ident, _IDcentre from config_centre ";
+						$query .= "where (_IDcentre = '$row[2]' OR $row[38] & pow(2, _IDcentre - 1)) ";
+						$query .= "AND _lang = '".$_SESSION["lang"]."' ";
+
+						$result = mysql_query($query, $mysql_link);
+						$centre = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+						while ( $centre ) {
+							$img = ( $centre[1] == $row[2] ) ? "home.gif" : "register.gif" ;
+
+			                        print("$centre[0] <img src=\"".$_SESSION["ROOTDIR"]."/images/$img\" title=\"\" alt=\"\" /><br/>");
+
+							$centre = remove_magic_quotes(mysql_fetch_row($result));
+							}
+					?>
+	                      </td>
+	                    </tr>
+
+	                    <tr>
+	                      <td class="align-right valign-middle">
+	                        <?php print($msg->read($USER_GROUP)); ?>
+	                      </td>
+	                      <td class="valign-middle">
+	                        <?php
+						$more = ( getAccess($row[1]) == 2 )
+							? "<span style=\"cursor: pointer;\" onclick=\"$('subject')._display.toggle(); return false;\"><img src=\"".$_SESSION["ROOTDIR"]."/images/updown.png\" title=\"". $msg->read($USER_MORE) ."\" alt=\"". $msg->read($USER_MORE) ."\" /></span>"
+							: "<img src=\"".$_SESSION["ROOTDIR"]."/images/smiley/$row[1].gif\" title=\"\" alt=\"\" />" ;
+
+						print("$data[0] $more");
+					?>
+	                      </td>
+	                    </tr>
+
+				<?php
+					// affichage des matières enseignées
+					if ( getAccess($row[1]) == 2 ) {
+						// recherche des groupes
+						$query  = "select _IDmat, _titre from campus_data ";
+						$query .= "where _visible = 'O' AND _lang = '".$_SESSION["lang"]."' ";
+						$query .= "order by _titre asc";
+
+						$return = mysql_query($query, $mysql_link);
+						$myrow  = ( $return ) ? remove_magic_quotes(mysql_fetch_row($return)) : 0 ;
+
+						print("
+				                    <tr>
+				                      <td></td>
+				                      <td class=\"valign-top\">
+								<div id=\"subject\" style=\"display:none;\">
+								  <fieldset style=\"width:80%; border:#cccccc solid 1px;\">
+								  <legend>". $msg->read($USER_SUBJECTS) ."</legend>
+								  	<table class=\"width100\">");
+
+							$i = 0;
+							while ( $myrow ) {
+								if ( $i++ % 2 == 0 )
+									print("<tr>");
+
+								$check = ( strstr(@$row[39], " $myrow[0] ") ) ? "checked=\"checked\"" : "" ;
+
+								print("
+									<td style=\"width:50%;\">
+										<label for=\"cbox_$i\"><input type=\"checkbox\" id=\"cbox_$i\" name=\"cbox[]\" value=\"$myrow[0]\" $check /></label> $myrow[1]
+									</td>");
+
+								if ( $i % 2 == 0 )
+									print("</tr>");
+
+								$myrow = remove_magic_quotes(mysql_fetch_row($return));
+								}
+
+							if ( $i % 2 )
+								print("
+									  <td></td>
+									</tr>");
+
+						print("
+									</table>
+								  </fieldset>
+								</div>
+				                      </td>
+				                    </tr>");
+						}
+				?>
+
+	                    <tr>
+	                      <td class="align-right valign-middle">
+	                        <?php print($msg->read($USER_USERID)); ?>
+	                      </td>
+	                      <td class="valign-middle">
+	                        <?php print("$row[9]"); ?>
+	                      </td>
+	                    </tr>                      
+
+	                    <tr>
+	                      <td class="align-right valign-top">
+	                        <?php print($msg->read($USER_ACTIVITY)); ?>
+	                      </td>
+	                      <td class="valign-middle">
+	                        <?php
+						$r   = (int) ($row[26] / $HITBYSTAR);
+						$r   = ( $r > $MAXSTAR ) ? $MAXSTAR : $r ;
+						print("<img src=\"".$_SESSION["ROOTDIR"]."/images/stats/r$r.gif\" title=\"\" alt=\"\" /> ".$msg->read($USER_NBMSG)." : $row[26]<br/>");
+
+						$r   = (int) ($row[27] / $HITBYSTAR);
+						$r   = ( $r > $MAXSTAR ) ? $MAXSTAR : $r ;
+						$res = ( $row[27] ) ? "<a href=\"index.php?item=7&amp;ID=$row[0]&amp;cmde=items\">".$msg->read($USER_NBRESOURCE)."</a>" : $msg->read($USER_NBRESOURCE) ;
+						print("<img src=\"".$_SESSION["ROOTDIR"]."/images/stats/r$r.gif\" title=\"\" alt=\"\" /> $res : $row[27]<br/>");
+
+						$r   = (int) ($row[28] / $HITBYSTAR);
+						$r   = ( $r > $MAXSTAR ) ? $MAXSTAR : $r ;
+						print("<img src=\"".$_SESSION["ROOTDIR"]."/images/stats/r$r.gif\" title=\"\" alt=\"\" /> ".$msg->read($USER_NBCNX)." : $row[28]");
+		                        ?>
+	                      </td>
+	                    </tr>                                        
+	                  </table>
+
+                  </div>
+
+			<table class="width100">
+			<?php
+				// vérification du mot de passe
+				$errtext = "";
+
+                  	if ( strlen($pwd) < $USERPWD )
+					$errtext = $msg->read($USER_MINPASSWD, strval($USERPWD));
+				else
+	                  	if ( !strlen($pwd) )
+						$errtext  = $msg->read($USER_NOPASSWD);
+
+				if ( $errtext )
+                  		print("
+		                    <tr>
+		                      <td style=\"width:100%; text-align: justify\" class=\"valign-middle\" colspan=\"2\">
+		                        <span style=\"color:#FF0000;\">".$msg->read($USER_WARNING)." $errtext</span>
+		                      </td>
+		                    </tr>
+						");
+			?>
+
+                      <tr>
+                        <td style="width:27%;" class="align-right valign-middle"><?php print($msg->read($USER_PASSWORD)); ?></td>
+                        <td style="width:73%;">
+                          <?php 
+                          	$visu = !$show;
+                          	$text = ( $show ) ? $msg->read($USER_HIDE) : $msg->read($USER_SHOW) ;
+                          	$type = ( $show ) ? "text" : "password" ;
+
+                          	print("<label for=\"pwd\"><input type=\"$type\" id=\"pwd\" name=\"pwd\" size=\"20\" value=\"$pwd\" /></label> ");
+					print("[<a href=\"".myurlencode("index.php?item=$item&cmde=$cmde&page=$page&show=$visu&ID=$ID")."\">$text</a>]");
+                          ?>
+                        </td>
+                      </tr>
+
+			<?php
+                  	if ( strlen($email) ) {
+					// vérification de la validité de l'email
+					$point = strpos($email, ".");
+					$aroba = strpos($email, "@");
+
+					if ( $point == '' || $aroba == '' )
+	                  		print("
+			                    <tr>
+	          					<td style=\"width:100%; text-align: justify\" class=\"valign-middle\" colspan=\"2\">
+								<span style=\"color:#FF0000;\">".$msg->read($USER_BADEMAIL)."</span>
+	          					</td>
+			                    </tr>
+							");
+	          			}
+			?>
+
+                      <tr>
+                        <td class="align-right valign-middle"><?php print($msg->read($USER_EMAIL)); ?></td>
+                        <td>
+                          <?php print("<label for=\"email\"><input type=\"text\" id=\"email\" name=\"email\" size=\"40\" value=\"$email\" /></label>"); ?>
+                        </td>
+                      </tr>
+
+                      <tr>
+                        <td class="align-right valign-middle"><?php print($msg->read($USER_TEL)); ?></td>
+                        <td>
+                          <?php print("<label for=\"tel\"><input type=\"text\" id=\"tel\" name=\"tel\" size=\"20\" value=\"$tel\" /></label>"); ?>
+                        </td>
+                      </tr>
+
+                      <tr>
+                        <td class="align-right valign-middle"><?php print($msg->read($USER_MOBILE)); ?></td>
+                        <td>
+                          <?php print("<label for=\"mobile\"><input type=\"text\" id=\"mobile\" name=\"mobile\" size=\"20\" value=\"$mobile\" /></label>"); ?>
+                        </td>
+                      </tr>
+
+                      <tr>
+                        <td class="align-right valign-middle"><?php print($msg->read($USER_ADDRESS)); ?></td>
+                        <td>
+                          <?php print("<label for=\"adr1\"><input type=\"text\" id=\"adr1\" name=\"adr1\" size=\"40\" value=\"$adr1\" /></label>"); ?>
+                        </td>
+                      </tr>
+
+                      <tr>
+                        <td></td>
+                        <td>
+                          <?php print("<label for=\"adr2\"><input type=\"text\" id=\"adr2\" name=\"adr2\" size=\"40\" value=\"$adr2\" /></label>"); ?>
+                        </td>
+                      </tr>
+
+                      <tr>
+                        <td class="align-right valign-middle"><?php print($msg->read($USER_CITY)); ?></td>
+                        <td>
+                          <?php print("<label for=\"zip\"><input type=\"text\" id=\"zip\" name=\"zip\" size=\"10\" value=\"$zip\" /></label>"); ?> - 
+                          <?php print("<label for=\"city\"><input type=\"text\" id=\"city\" name=\"city\" size=\"20\" value=\"$city\" /></label>"); ?>
+                        </td>
+                      </tr>
+
+                      <tr>
+                        <td class="align-right valign-middle"><?php print($msg->read($USER_TITLE)); ?></td>
+                        <td>
+                          <?php print("<label for=\"titre\"><input type=\"text\" id=\"titre\" name=\"titre\" size=\"40\" value=\"$titre\" /></label>"); ?>
+                        </td>
+                      </tr>
+
+                      <tr>
+                        <td class="align-right valign-top">
+					<?php print($msg->read($USER_FUNCTION)); ?><br/>
+					<a href="#" onclick="popWin('<?php print($_SESSION["ROOTDIR"]."/spip_typo.php?lang=".$_SESSION["lang"]); ?>', '450', '350'); return false;">
+					<img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/spip/aide.gif" title="" alt="" /></a>
+				</td>
+                        <td>
+					<?php print("<label for=\"fonction\"><textarea rows=\"7\" id=\"fonction\" name=\"fonction\" cols=\"35\">$fonction</textarea></label>"); ?>
+                        </td>
+                      </tr>
+
+                      <tr>
+                        <td class="align-right valign-top"><?php print($msg->read($USER_SIGNATURE)); ?></td>
+                        <td>
+                          <?php print("<label for=\"signature\"><textarea rows=\"3\" id=\"signature\" name=\"signature\" cols=\"35\">$signature</textarea></label>"); ?>
+                        </td>
+                      </tr>
+
+                      <tr>
+                        <td class="align-right valign-top">
+					<?php print($msg->read($USER_AVATAR)); ?>
+					<?php
+						if ( $avatar )
+							print("<p><img src=\"".$_SESSION["ROOTDIR"]."/images/avatar/$avatar.gif\" title=\"$avatar\" alt=\"$avatar\" style=\"margin-right:10px;\" /></p>");
+					?>
+				</td>
+                        <td>
+					<div style="border:#cccccc solid 1px; width:305px; padding:4px;">
+					<?php
+						print("<table class=\"width100\">");
+
+						$start = (($page - 1) * 30) + 1;
+						$end   = $start + 30;
+
+	                          	for ($i = $start; $i < $end; $i++) {
+	                          		$check = ( $avatar == $i ) ? "checked=\"checked\"" : "" ;
+
+							if ( $i % 5 == 1 )
+								print("<tr>");
+
+							if ( is_file("images/avatar/$i.gif") )
+								print("<td style=\"width:20%\"><label for=\"avatar_$i\"><input type=\"radio\" id=\"avatar_$i\" name=\"avatar\" value=\"$i\" $check /><img src=\"".$_SESSION["ROOTDIR"]."/images/avatar/$i.gif\" title=\"$i\" alt=\"\" /></label></td>");
+							else
+								print("<td style=\"width:20%\"></td>");
+
+							if ( $i % 5 == 0 )
+								print("</tr>");
+							}
+
+						print("
+						  <tr>
+						    <td style=\"width:50%;\" colspan=\"5\" class=\"align-center\">
+							<hr style=\"width:50%;\" />
+						    	<a href=\"index.php?item=$item&amp;cmde=$cmde&amp;ID=$ID&amp;page=1\">1</a><strong> .</strong>
+						    	<a href=\"index.php?item=$item&amp;cmde=$cmde&amp;ID=$ID&amp;page=2\">2</a><strong> .</strong>
+						    	<a href=\"index.php?item=$item&amp;cmde=$cmde&amp;ID=$ID&amp;page=3\">3</a><strong> .</strong>
+						    	<a href=\"index.php?item=$item&amp;cmde=$cmde&amp;ID=$ID&amp;page=4\">4</a><strong> .</strong>
+						    	<a href=\"index.php?item=$item&amp;cmde=$cmde&amp;ID=$ID&amp;page=5\">5</a><strong> .</strong>
+						    	<a href=\"index.php?item=$item&amp;cmde=$cmde&amp;ID=$ID&amp;page=6\">6</a><strong> .</strong>
+						    	<a href=\"index.php?item=$item&amp;cmde=$cmde&amp;ID=$ID&amp;page=7\">7</a><strong> .</strong>
+						  	<a href=\"index.php?item=$item&amp;cmde=$cmde&amp;ID=$ID&amp;page=8\">8</a>
+						    </td>
+						  </tr>
+							");
+
+						print("</table>");
+					?>
+				</div>
+                        </td>
+                      </tr>
+
+                      <tr>
+                        <td class="align-right valign-top"><?php print($msg->read($USER_PICTURE) ." ($MAXIMGWDTH x $MAXIMGHGTH)"); ?></td>
+                        <td>
+					<?php print("<p class=\"hidden\"><input type=\"hidden\" name=\"MAX_FILE_SIZE\" value=\"$FILESIZE\" /></p>"); ?>
+					<input type="file" name="UploadedFile" />
+                        </td>
+                      </tr>
+                    </table>
+
+			<hr style="width:80%;" />
+
+		         <table class="width100">
+		           <tr>
+		              <td style="width:20%;" class="valign-middle align-right">
+		              	<?php print("<input type=\"image\" src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/valid.gif\" name=\"valid\" alt=\"".$msg->read($USER_INPUTOK)."\" />"); ?>
+		              </td>
+		              <td class="valign-middle align-left">
+		              	<?php print($msg->read($USER_VALIDATE)); ?>
+		              </td>
+		           </tr>
+
+		           <tr>
+		              <td class="valign-middle align-right">
+		              	<?php print("<a href=\"index.php\"><img src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/cancel.gif\" title=\"\" alt=\"".$msg->read($USER_INPUTCANCEL)."\" />"); ?></a>
+		              </td>
+		              <td class="valign-middle align-left">
+		              	<?php print($msg->read($USER_BACK)); ?>
+		              </td>
+		           </tr>
+		         </table>
+                  
+                  </td>
+              </tr>
+            </table>
+
+	</form>
+
+</div>

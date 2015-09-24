@@ -1,0 +1,297 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2004-2006 by Dominique Laporte(C-E-D@wanadoo.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : ftp_new.htm
+ *		projet   : la page de gestion du système de publication par Internet
+ *
+ *		version  : 1.0
+ *		auteur   : laporte
+ *		creation : 21/12/04
+ *		modif    : 
+ *		modif    : 17/07/06 - Nordine Zetoutou
+ * 	                 migration des balises HTML en XHTML 1.0 strict
+ */
+?>
+
+
+      <table  class="maintitle width100" style="background-image: url(' <?php echo $_SESSION["CfgHeader"] ; ?>');background-repeat: repeat-x;">
+        <tr>
+          <td style="width:100%;"  class="align-center">
+		<span><strong>Gestion des ressources ftp</strong><br/>
+		<em>Veuillez compléter le formulaire suivant pour paramétrer vos ressources</em></span>
+          </td>
+        </tr>
+      </table>
+      
+      <?php
+		// l'utilisateur a validé la saisie
+		if ( strlen($x) ) {
+			$status = "modification ";
+
+			// droits des rédacteurs et des lecteurs
+			$grpwr = $grprd = 0;
+			for ($i = 0; $i < $nbr; $i++) {
+				$grpwr += $cbwr[$i];
+				$grprd += $cbrd[$i];
+				}
+
+			// valeurs des cases à cocher
+			$visible = ( $chkbox1 == "O" ) ? "N" : "O" ;
+			$private = ( $chkbox2 == "O" ) ? "O" : "N" ;
+
+			// modification de la publi
+			$Query  = "UPDATE ftp_data ";
+			$Query .= "SET _IDmod = '$IDmod', _IDgrpwr = '$grpwr', _IDgrprd= '$grprd', _visible = '$visible', _private = '$private' ";
+			$Query .= "where _IDdata = '$IDdata' ";
+
+			if ( !mysql_query($Query, $mysql_link) ) {
+				$status .= "<img src=\"".$_SESSION["ROOTDIR"]."/images/bad.gif\" title=\"non valid&eacute;\"  alt=\"non valid&eacute;\"  />";
+				sql_error($mysql_link);
+				}
+			else
+				$status .= "<img src=\"".$_SESSION["ROOTDIR"]."/images/ok.gif\" title=\"valid&eacute;\"  alt=\"valid&eacute;\"     />";
+			}
+		// initialisation
+		else
+			$status = "-";
+
+		// recherche des répertoires
+		$Query  = "select _IDmod, _ident, _IDgrpwr, _IDgrprd, _visible, _private from ftp_data ";
+		$Query .= "where _IDftp = '$IDftp' ";
+		$Query .= ( $IDdata )
+			? "AND _IDdata = '$IDdata '"
+			: "AND _IDdata > '0' order by _IDdata limit 1" ;
+
+		$result = mysql_query($Query, $mysql_link);
+		$row    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+		// initialisation
+		$IDmod   = $row[0];
+		$title   = $row[1];
+		$grpwr   = $row[2];
+		$grprd   = $row[3];
+		$visible = $row[4];
+		$private = $row[5];
+	?>
+
+      <table class="width100 maincontent">
+        <tr>
+          <td>
+
+		  <table class="width100">
+		    <tr>
+				<td style=\"width:13%;\" class=\"align-right\">
+					<strong>Statut :</strong>
+				</td>
+				<td  style="width:57%;">
+					<?php print("$status"); ?>
+				</td>
+				<td style="width:30%;" class="align-right"></td>
+		    </tr>
+		  </table>
+
+		<form action="index.php" name="formulaire">
+
+		<?php
+			print("
+				<p class=\"hidden\"><input type=\"hidden\" name=\"sid\"     value=\"$sid\" /></p>
+				<p class=\"hidden\"><input type=\"hidden\" name=\"item\"    value=\"$item\" /></p>
+				<p class=\"hidden\"><input type=\"hidden\" name=\"cmde\"    value=\"$cmde\" /></p>
+				<p class=\"hidden\"><input type=\"hidden\" name=\"IDftp\"   value=\"$IDftp\" /></p>
+				<p class=\"hidden\"><input type=\"hidden\" name=\"IDroot\"  value=\"$IDroot\" /></p>
+				");
+		?>
+		
+       <table class="width100" style="border-color:#C0C0C0; border: 1px solid black">
+        <tr>
+         <td>
+          
+		  <table class="width100">
+		    <tr>
+		      <td style="width:33%;">
+	                <strong>Répertoire</strong>
+		      </td>
+		      <td style="width:33%;">
+	                <strong>Fermer le répertoire</strong>
+		      </td>
+		      <td style="width:33%;">
+		      </td>
+		    </tr>
+	    
+		    <tr>
+		      <td style="width:33%;">
+				<select onchange="document.forms.formulaire.submit()" name="IDdata">
+				<?php
+					// recherche des répertoires
+					$query  = "select _IDdata , _ident from ftp_data ";
+					$query .= "where _IDftp = '$IDftp' ";
+					$query .= ( $IDdata ) ? "AND _IDdata = '$IDdata' " : "" ;
+					$query .= "order by _IDdata asc";
+
+					$result = mysql_query($query, $mysql_link);
+					$row    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+					while ( $row ) {
+						$select = ( $IDdata == $row[0] ) ? "selected=\"selected\"" : "" ;
+
+						print("<option value=\"$row[0]\" $select>$row[1]</option>");
+
+						$row = mysql_fetch_row($result);
+						}
+				?>
+				</select>
+		      </td>
+		      <td style="width:33%;">
+             		<label for=\"my_id\"><input type=\"checkbox\" id=\"my_id\" name=\"chkbox1\" value="O" <?php print(($visible == "N") ? "checked" : ""); ?> />
+		      </td>
+		      <td style="width:33%;">
+		      </td>
+		    </tr>
+
+		    <tr>
+		      <td style="width:33%;">
+	                <p style="margin-top: 10; margin-bottom: 0">
+	                <strong>Modérateur</strong>
+	                </p>
+		      </td>
+		      <td style="width:33%;">
+	                <p style="margin-top: 10; margin-bottom: 0">
+	                <strong>Rédacteur</strong>
+	                </p>
+		      </td>
+		      <td style="width:33%;">
+	                <p style="margin-top: 10; margin-bottom: 0">
+      	          <strong>Lecteurs</strong>
+            	    </p>
+		      </td>
+		    </tr>
+
+		    <tr>
+		      <td style="width:33%;"  class="valign-top">
+				<select size="1" name="IDmod">
+					<option value="0">aucun</option>
+					<?php
+						// recherches des modérateurs
+						$result = mysql_query("select _ID, _name from user_id where _adm & 4 order by _name asc", $mysql_link);
+						$row    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+						while ( $row ) {
+							$select = ( $IDmod == $row[0] ) ? "selected=\"selected\"" : "" ;
+
+							print("<option $select value=\"$row[0]\">$row[1]</option>");
+
+							$row = mysql_fetch_row($result);
+							}
+					?>
+				</select>
+		      </td>
+		      <td style="width:33%;"  class="valign-top">
+	      		<?php
+					// recherche des groupes
+					$query  = "select _IDgrp, _ident from user_group ";
+					$query .= "where _visible = 'O' AND _lang = '".$_SESSION["lang"]."' ";
+					$query .= "order by _IDgrp asc";
+
+					$result = mysql_query($query, $mysql_link);
+					$row    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+					$nbr = 0;
+					while ( $row ) {
+						$check = ( $grpwr & pow(2, $row[0] - 1) ) ? "checked" <label for=\"my_id\"><input type=\"checkbox\" id=\"my_id\" name=\"cbwr[". $nbr++ ."]\" value=\"". pow(2, $row[0] - 1) ."\" $check />&nbsp;$row[1]<br/>");
+
+						$row   = mysql_fetch_row($result);
+						}
+             		?>
+		      </td>
+		      <td style="width:33%;"  class="valign-top">
+	      		<?php
+					// recherche des groupes
+					mysql_data_seek($result, 0);
+					$row = mysql_fetch_row($result);
+
+					$nbr = 0;
+					while ( $row ) {
+						$check = ( $grprd & pow(2, $row[0] - 1) ) ? "checked" <label for=\"my_id\"><input type=\"checkbox\" id=\"my_id\" name=\"cbrd[". $nbr++ ."]\" value=\"". pow(2, $row[0] - 1) ."\" $check />&nbsp;$row[1]<br/>");
+
+						$row = mysql_fetch_row($result);
+						}
+             		?>
+		      </td>
+		    </tr>
+
+		    <tr>
+		      <td style="width:33%;">
+	                <p style="margin-top: 10; margin-bottom: 0">
+	                <strong>Autorisations</strong>
+	                </p>
+		      </td>
+		      <td style="width:33%;">
+		      </td>
+		      <td style="width:33%;">
+		      </td>
+		    </tr>
+
+		    <tr>
+		      <td style="width:33%;"  class="valign-top">
+	           		<label for="my_id"><input type="checkbox" id="my_id" name="chkbox2" value="O" <?php print(($private == "O") ? "checked" : ""); ?> />
+				Répertoire privé
+		      </td>
+		      <td>
+		      </td>
+		      <td>
+		      </td>
+		    </tr>
+		  </table>
+		 
+        </td>
+      </tr>
+    </table>
+
+         <table class="width100">
+           <tr>
+              <td style="width:100%;" colspan="2"><hr style="width:80%;" /></td>
+           </tr>
+           <tr>
+              <td style="width:15%;" class="valign-middle align-center">
+              	<input type="image" src="images/lang/<?php print($_SESSION["lang"]); ?>/valid.gif"  title="valider" alt ="valider" />
+              </td>
+              <td style="width:85%;" class="valign-middle">
+              	pour modifie une répertoire.
+              </td>
+           </tr>
+           <tr>
+              <td style="width:15%;" class="valign-middle align-center">
+              	<?php print("<a href=\"index.php?item=$item&amp;IDftp=$IDftp&amp;IDroot=$IDroot\">"); ?><img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/lang/<?php print($_SESSION["lang"]); ?>/cancel.gif" title=\"annuler\"  alt=\"annuler\" /></a>
+              </td>
+              <td style="width:85%;" class="valign-middle">
+              	pour annuler et quitter.
+              </td>
+           </tr>
+         </table>
+
+		<p class="hidden"><input type="hidden" name="nbr"  value="<?php print("$nbr"); ?>" /></p>
+
+		</form>
+
+          </td>
+        </tr>
+      </table>

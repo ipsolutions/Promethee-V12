@@ -1,0 +1,232 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2007 by Dominique Laporte(C-E-D@wanadoo.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : stage_offre.htm
+ *		projet   : la page de visualisation des offres
+ *
+ *		version  : 1.0
+ *		auteur   : laporte
+ *		creation : 11/08/07
+ *		modif    : 
+ */
+
+
+$IDoffre  = (int) @$_GET["IDoffre"];		// n° de l'offre
+?>
+
+
+<?php
+	//---- lecture de la base de données ----
+	$Query  = "select _date, _IDcontrat, _IDposte, _IDregion, _texte, _dispo, _titre, _salaire, _lieu, _IDsociete, _IDlevel, _IDdegree, _IDlangtype, _Idlanglvl ";
+	$Query .= "from cv_offre ";
+	$Query .= "where _IDoffre  = '$IDoffre' ";
+	$Query .= "limit 1 ";
+
+	// détermination du nombre de pages
+	$result = mysql_query($Query, $mysql_link);
+	$offre  = ( $result ) ? mysql_fetch_row($result) : 0 ;
+?>
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($STAGE_OFFERNUMBER, Array(strval($IDoffre), date2longfmt($offre[0])))); ?>
+	</div>
+</div>
+
+	<div class="maincontent">
+
+	<?php
+		// log de lecture des offres
+		mysql_query("update cv_offre set _vus = _vus + 1 where _IDoffre = '$IDoffre' limit 1", $mysql_link);
+
+		mysql_query("insert into cv_vu values('-$IDoffre', '".$_SESSION["CnxID"]."', '".$_SESSION["CnxIP"]."', '".date("Y-m-d H:i:s", time())."')", $mysql_link);
+
+		//----- coordonnées entreprise
+		$query  = "select _text, _societe, _adresse, _cp, _ville, _tel, _fax, _email, _web from stage_lieu ";
+		$query .= "where _IDlieu = '$offre[9]' ";
+		$query .= "limit 1";
+
+		$return = mysql_query($query, $mysql_link);
+		$myrow  = ( $return ) ? remove_magic_quotes(mysql_fetch_row($return)) : 0 ;
+
+		if ( strlen($myrow[0]) )
+			print("<p style=\"background-color:#eeeeee;\">". find_typo($myrow[0], $note) ."</p>");
+
+		//----- poste recherché
+		$query  = "select _ident from cv_poste ";
+		$query .= "where _IDposte = '$offre[2]' ";
+		$query .= "AND _lang = '".$_SESSION["lang"]."' ";
+		$query .= "limit 1";
+
+		$return = mysql_query($query, $mysql_link);
+		$row    = ( $return ) ? remove_magic_quotes(mysql_fetch_row($return)) : 0 ;
+
+		$ident  = "<strong>: ". trim(str_replace("-", "", $row[0])) ."</strong>";
+		$ident .= ( $offre[6] != "" ) ? ", $offre[6]" : "" ;
+
+		print("<p style=\"margin-bottom:0px;\">". $msg->read($STAGE_POSITION) ." $ident</p><hr/>");
+
+		// contrat
+		$query  = "select _ident from cv_contrat ";
+		$query .= "where _IDcontrat = '$offre[1]' ";
+		$query .= "AND _lang = '".$_SESSION["lang"]."' ";
+		$query .= "limit 1";
+
+		$return = mysql_query($query, $mysql_link);
+		$row    = ( $return ) ? remove_magic_quotes(mysql_fetch_row($return)) : 0 ;
+
+		$contrat = $msg->read($STAGE_CONTRACT) ." ". $row[0];
+
+		// région
+		$query  = "select _ident from cv_region ";
+		$query .= "where _IDregion = '$offre[3]' ";
+		$query .= "AND _lang = '".$_SESSION["lang"]."' ";
+		$query .= "limit 1";
+
+		$return = mysql_query($query, $mysql_link);
+		$row    = ( $return ) ? remove_magic_quotes(mysql_fetch_row($return)) : 0 ;
+
+		$region  = $msg->read($STAGE_REGION);
+		$region .= " " . trim(str_replace("-", "", $row[0]));
+		$region .= ( $offre[8] != "" ) ? ", $offre[8]" : "" ;
+
+		// rénumération
+		$salaire = ( $offre[7] != "" )
+			? $msg->read($STAGE_SALARY) ." $offre[7]<br/>"
+			: "" ;
+
+		// disponibilité
+		$dispo   = ( $offre[5] != "" )
+			? $msg->read($STAGE_AVAILIBILITY) ." $offre[5]<br/>"
+			: "" ;
+
+		// expérience
+		$query  = "select _ident from cv_level ";
+		$query .= "where _IDlevel = '$offre[10]' AND _lang = '".$_SESSION["lang"]."' ";
+		$query .= "limit 1";
+
+		$result = mysql_query($query, $mysql_link);
+		$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+		$exp    = ( $offre[10] )
+			? $msg->read($STAGE_EXP) ." $row[0]<br/>"
+			: "" ;
+
+		// diplôme
+		$query  = "select _ident from cv_degree ";
+		$query .= "where _IDdegree = '$offre[11]' ";
+		$query .= "AND _lang = '".$_SESSION["lang"]."' ";
+		$query .= "limit 1";
+
+		$result = mysql_query($query, $mysql_link);
+		$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+		$degree = ( $offre[11] )
+			? $msg->read($STAGE_DIPLOMA) ." $row[0]<br/>"
+			: "" ;
+
+		// langue
+		$query  = "select _ident from cv_langtype ";
+		$query .= "where _IDtype = '$offre[12]' ";
+		$query .= "AND _lang = '".$_SESSION["lang"]."' ";
+		$query .= "limit 1";
+
+		$result = mysql_query($query, $mysql_link);
+		$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+		$langue = ( $offre[12] )
+			? $msg->read($STAGE_LANG) ." $row[0]"
+			: "" ;
+
+		if ( $langue != "" AND $offre[13] ) {
+			$query   = "select _ident from cv_langlevel ";
+			$query  .= "where _IDlevel = '$offre[13]' ";
+			$query  .= "AND _lang = '".$_SESSION["lang"]."' ";
+			$query  .= "limit 1";
+
+			$result  = mysql_query($query, $mysql_link);
+			$row     = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+			$langue .= ", $row[0]";
+			}
+
+		$langue .= "<br/>";
+
+		print("
+			<p style=\"margin-top:0px;\">
+			$dispo
+			$contrat<br/>
+			$region<br/>
+			$exp
+			$degree
+			$langue
+			$salaire
+			</p>
+			");
+
+		//----- description de l'offre
+		print("<p style=\"margin-bottom:0px;\"><strong>. </strong>". $msg->read($STAGE_DETAIL) ."</p><hr/>");
+
+		if ( $offre[4] != "" )
+			print("<div>". find_typo($offre[4], $note) ."</div>");
+
+		//----- coordonnées entreprise
+		print("<p style=\"margin-bottom:0px;\"><strong>. </strong>". $msg->read($STAGE_MYCOMPANY) ."</p><hr/>");
+
+		$texte  = strlen($myrow[8]) ? "<a href=\"$myrow[8]\" onclick=\"window.open(this.href, '_blank'); return false;\">$myrow[1]</a>" : $myrow[1] ;
+		$texte .= "<br />";
+		$texte .= strlen($myrow[2]) ? "$myrow[2]<br />" : "" ;
+		$texte .= strlen($myrow[3]) ? "$myrow[3] " : "" ;
+		$texte .= strlen($myrow[4]) ? "$myrow[4]<br />" : "" ;
+		$texte .= strlen($myrow[5]) ? "<img src=\"".$_SESSION["ROOTDIR"]."/images/tel.gif\" title=\"\" alt=\"\" /> $myrow[5]<br />" : "" ;
+		$texte .= strlen($myrow[6]) ? "<img src=\"".$_SESSION["ROOTDIR"]."/images/fax.gif\" title=\"\" alt=\"\" /> $myrow[6]<br />" : "" ;
+
+		// recruteur
+		$query  = "select user_id._sexe, user_id._ID, user_id._title ";
+		$query .= "from user_id, cv_user ";
+		$query .= "where _ID = _IDuser ";
+		$query .= "AND _IDsociete = '$offre[9]' ";
+		$query .= "limit 1";
+
+		$result = mysql_query($query, $mysql_link);
+		$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+		$list   = explode(",", $msg->read($STAGE_SEX));
+		$genre  = ( $row[0] == "H" ) ? $list[0] : $list[1] ; 
+		$mail   = strlen($myrow[7]) ? getUserName($row[1], "E") : getUserName($row[1], false) ;
+
+		print("
+		      <table class=\"width100\">
+		        <tr>
+		          <td class=\"align-left\">
+
+
+$texte</td>
+		          <td class=\"align-right\">$genre $mail<br />$row[2]</td>
+		        </tr>
+		      </table>
+			");
+
+		print("<p style=\"margin-bottom:0px;\">[ <a href=\"index.php?item=$item&amp;cmde=pro\">". $msg->read($STAGE_BACKTOFFER) ."</a> ]</p>");
+	?>
+
+	</div>

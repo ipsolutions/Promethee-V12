@@ -1,0 +1,282 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2003-2007 by Dominique Laporte(C-E-D@wanadoo.fr)
+   Copyright (c) 2006 by FG (persofg@gmail.com)
+   Copyright (c) 2006 by Nordine Zetoutou (nordine.zetoutou@educagri.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : stage_search.htm
+ *		projet   : la page de recherche des stages
+ *
+ *		version  : 1.0
+ *		auteur   : laporte
+ *		creation : 15/02/03
+ *		modif    : 20/06/05 par FG
+ *                     migration -> PHP5
+ * 		           17/07/06 - par Nordine Zetoutou
+ * 	                 migration des balises HTML en XHTML 1.0 strict
+ */
+
+
+$IDclass = ( @$_POST["IDclass"] )
+	? (int) $_POST["IDclass"]
+	: (int) @$_GET["IDclass"] ;
+$IDeleve = ( @$_POST["IDeleve"] )
+	? (int) $_POST["IDeleve"]
+	: (int) @$_GET["IDeleve"] ;
+$secteur = ( @$_POST["secteur"] )
+	? (int) $_POST["secteur"]
+	: (int) @$_GET["secteur"] ;
+
+$societe   = @$_POST["societe"];
+$activite  = @$_POST["activite"];
+$ville     = @$_POST["ville"];
+$directeur = @$_POST["directeur"];
+$cp        = @$_POST["cp"];
+$loge      = @$_POST["loge"];
+$nourri    = @$_POST["nourri"];
+$idclass   = (int) @$_POST["idclass"];
+
+$IDcat1    = (int) @$_POST["IDcat1"];
+$IDcat2    = (int) @$_POST["IDcat2"];
+$IDcat3    = (int) @$_POST["IDcat3"];
+
+$infos     = "";
+?>
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($STAGE_SEARCH)); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+
+		<form id="formulaire" action="index.php" method="post">
+		<?php
+			print("
+				<p class=\"hidden\"><input type=\"hidden\" name=\"item\"    value=\"$item\"/></p>
+				<p class=\"hidden\"><input type=\"hidden\" name=\"cmde\"    value=\"$cmde\" /></p>
+				<p class=\"hidden\"><input type=\"hidden\" name=\"IDclass\" value=\"$IDclass\" /></p>
+				<p class=\"hidden\"><input type=\"hidden\" name=\"IDeleve\" value=\"$IDeleve\" /></p>
+				");
+		?>
+
+	        <table class="width100">
+	          <tr>
+	            <td style="width:30%;" class="align-right"><?php print($msg->read($STAGE_SECTOR)); ?></td>
+	            <td style="width:70%;">
+				<label for="secteur">
+			  	<select id="secteur" name="secteur" onchange="document.forms.formulaire.submit()">
+					<option selected="selected" value="0">&nbsp;</option>
+				<?php
+					// affichage des secteurs d'activité
+					$query  = "select _IDblock, _ident, _infos from stage_secteur ";
+					$query .= "where _visible = 'O' AND _lang = '".$_SESSION["lang"]."' ";
+					$query .= "order by _ident";
+
+					$result = mysql_query($query, $mysql_link);
+					$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+					while ( $row ) {			
+						if ( $row[0] == $secteur ) {
+							print("<option selected=\"selected\" value=\"$row[0]\">$row[1]</option>");
+							$infos = $row[2];
+							}
+						else
+							print("<option value=\"$row[0]\">$row[1]</option>");
+
+						$row = remove_magic_quotes(mysql_fetch_row($result));
+						}	// endwhile secteur d'activité
+				?>
+			      </select> <img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/secteur.gif" title="" alt="" />
+			      </label>
+	            </td>
+	          </tr>
+	        </table>
+        
+	      </form>
+
+		<hr style="width:80%;" />
+
+		<form id="formulaire2" action="index.php" method="post">
+		<?php
+			print("
+				<p class=\"hidden\"><input type=\"hidden\" name=\"item\"    value=\"$item\"/></p>
+				<p class=\"hidden\"><input type=\"hidden\" name=\"cmde\"    value=\"find\" /></p>
+				<p class=\"hidden\"><input type=\"hidden\" name=\"IDclass\" value=\"$IDclass\" /></p>
+				<p class=\"hidden\"><input type=\"hidden\" name=\"IDeleve\" value=\"$IDeleve\" /></p>
+				<p class=\"hidden\"><input type=\"hidden\" name=\"secteur\" value=\"$secteur\" /></p>
+				");
+		?>
+
+        <table class="width100">
+          <tr>
+            <td style="width:30%;" class="align-right"><?php print($msg->read($STAGE_COMPANY)); ?></td>
+            <td style="width:70%;"><label for="societe"><input type="text" id="societe" name="societe" size="40" /></label></td>
+          </tr>
+
+          <tr>
+            <td class="align-right"><?php print($msg->read($STAGE_ACTIVITY)); ?></td>
+            <td><label for="activite"><input type="text" id="activite" name="activite" size="40" /></label></td>
+          </tr>
+
+          <tr>
+            <td class="align-right"><?php print($msg->read($STAGE_DIRECTOR)); ?></td>
+            <td><label for="directeur"><input type="text" id="directeur" name="directeur" size="40" /></label></td>
+          </tr>
+
+          <tr>
+            <td class="align-right"><?php print($msg->read($STAGE_CITY)); ?></td>
+            <td><label for="ville"><input type="text" id="ville" name="ville" size="40" /></label></td>
+          </tr>
+
+          <tr>
+            <td class="align-right"><?php print($msg->read($STAGE_COUNTY)); ?></td>
+            <td><label for="cp"><input type="text" id="cp" name="cp" size="6" /></label> <?php print($msg->read($STAGE_NUMBERS)); ?></td>
+          </tr>
+
+          <tr>
+            <td class="align-right"><?php print($msg->read($STAGE_CLASS)); ?></td>
+            <td>
+			<?php
+				print("
+					<label for=\"idclass\">
+				  	<select id=\"idclass\" name=\"idclass\">
+						<option value=\"0\" selected=\"selected\">&nbsp;</option>");
+            	
+				$result = mysql_query("select _IDclass, _ident from campus_classe where _visible = 'O'", $mysql_link);
+				$row    = ($result) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+    	
+	    			while ( $row ) {
+					print("<option value=\"$row[0]\">$row[1]</option>");
+
+					$row = remove_magic_quotes(mysql_fetch_row($result));
+					}
+
+				print("
+		      	      </select>
+		      	      </label>");
+			?>
+            </td>
+          </tr>
+
+          <tr>
+            <td class="align-right"><?php print($msg->read($STAGE_HOSTED)); ?></td>
+            <td><label for="loge"><input type="checkbox" id="loge" name="loge" value="O" /></label></td>
+          </tr>
+
+          <tr>
+            <td class="align-right"><?php print($msg->read($STAGE_CANEAT)); ?></td>
+            <td><label for="nourri"><input type="checkbox" id="nourri" name="nourri" value="O" /></label></td>
+          </tr>
+
+<?php
+	if ( $infos == "O" ) {
+		print("
+	        <tr>
+	          <td class=\"align-right\">". $msg->read($STAGE_ANIMAL) ."</td>
+	          <td>
+			<label for=\"IDcat1\">
+		  	<select id=\"IDcat1\" name=\"IDcat1\">
+				<option value=\"0\" selected=\"selected\">&nbsp;</option>
+			");
+            	
+		$result = mysql_query("select _IDcat, _text from prod_categorie where _type = 'A' AND _lang = '".$_SESSION["lang"]."'", $mysql_link);
+		$row    = ($result) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+    	
+	    	while ( $row ) {
+			print("<option value=\"$row[0]\">$row[1]</option>");
+			$row = remove_magic_quotes(mysql_fetch_row($result));
+			}
+
+		print("
+      	      </select>
+      	      </label>
+	          <td>
+	        </tr>
+
+	        <tr>
+	          <td class=\"align-right\">". $msg->read($STAGE_VEGETAL) ."</td>
+	          <td>
+			<label for=\"IDcat2\">
+		  	<select id=\"IDcat2\" name=\"IDcat2\">
+				<option value=\"0\" selected=\"selected\">&nbsp;</option>
+			");
+            	
+		$result = mysql_query("select _IDcat, _text from prod_categorie where _type = 'V' AND _lang = '".$_SESSION["lang"]."'", $mysql_link);
+		$row    = ($result) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+    	
+	    	while ( $row ) {
+			print("<option value=\"$row[0]\">$row[1]</option>");
+			$row = remove_magic_quotes(mysql_fetch_row($result));
+			}
+
+		print("
+      	      </select>
+      	      </label>
+	          <td>
+	        </tr>
+
+	        <tr>
+	          <td class=\"align-right\">". $msg->read($STAGE_COMPLEMENT) ."</td>
+	          <td>
+			<label for=\"IDcat3\">
+		  	<select id=\"IDcat3\" name=\"IDcat3\">
+				<option value=\"0\" selected=\"selected\">&nbsp;</option>
+			");
+            	
+		$result = mysql_query("select _IDcat, _text from prod_categorie where _type = 'C' AND _lang = '".$_SESSION["lang"]."'", $mysql_link);
+		$row    = ($result) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+    	
+	    	while ( $row ) {
+			print("<option value=\"$row[0]\">$row[1]</option>");
+			$row = remove_magic_quotes(mysql_fetch_row($result));
+			}
+
+		print("
+	            </select>
+	          <td>
+	        </tr>
+			");
+		}
+?>
+        </table>
+
+	<hr style="width:80%;" />
+
+        <table class="width100">
+          <tr>
+             <td style="width:10%;" class="valign-middle align-center"><?php print("<input type=\"image\" src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/valid.gif\" name=\"valid\" alt=\"".$msg->read($STAGE_INPUTOK)."\" />"); ?></td>
+             <td class="valign-middle"><?php print($msg->read($STAGE_LUNCHSEARCH)); ?></td>
+          </tr>
+
+          <tr>
+             <td class="valign-middle align-center">
+			<a href="index.php"><?php print("<img src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/cancel.gif\" title=\"\" alt=\"".$msg->read($STAGE_INPUTCANCEL)."\" />"); ?></a>
+             </td>
+             <td class="valign-middle"><?php print($msg->read($STAGE_QUIT)); ?></td>
+          </tr>
+        </table>
+        
+      </form>
+      
+</div>

@@ -1,0 +1,345 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2006-2007 by Dominique Laporte(C-E-D@wanadoo.fr)
+   Copyright (c) 2006 by Didier Roy (miraceti@free.fr)
+   Copyright (c) 2006 by Nordine Zetoutou (nordine.zetoutou@educagri.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : campus_class.htm
+ *		projet   : la page de visualisation des classes
+ *
+ *		version  : 1.1
+ *		auteur   : laporte
+ *		creation : 1/04/06
+ *		modif    : 08/06/06 - par Didier Roy
+ *		           migration PHP5  
+ *		modif    : 17/07/06 - Nordine Zetoutou
+ * 	                 migration des balises HTML en XHTML 1.0 strict
+ */
+
+
+$IDcentre = ( @$_POST["IDcentre"] )		// identification du centre
+	? (int) $_POST["IDcentre"]
+	: (int) $_SESSION["CnxCentre"] ;
+$IDsel    = ( @$_POST["IDsel"] )		// ID de la catégorie
+	? (int) $_POST["IDsel"]
+	: (int) @$_GET["IDsel"] ;
+$idclass  = @$_POST["idclass"];		// ID de la classe
+$idpp     = @$_POST["idpp"];			// ID des profs principaux
+$idcc     = @$_POST["idcc"];			// ID des profs coordinateurs
+
+$submit   = ( @$_POST["valid_x"] )		// bouton validation
+	? "update"
+	: @$_GET["submit"] ;
+?>
+
+
+<?php
+	// modification des utilisateurs
+	if ( $_SESSION["CnxAdm"] == 255 )
+           	switch ( $submit ) {
+			case "delpp" :
+			case "delcc" :
+				$id     = (int) @$_GET["id"];
+
+           			$Query  = "update campus_classe ";
+      	      	$Query .= ( $submit == "delpp" ) ? "set _IDpp = '0' " : "set _IDcoordo = '0' " ;
+     				$Query .= "where _IDclass = '$id' ";
+           			$Query .= "limit 1";
+
+				mysql_query($Query, $mysql_link);
+				break;
+
+			case "update" :
+				for ($i = 0; $i < count($idclass); $i++)
+      		      	if ( @$idpp[$i] OR @$idcc[$i] ) {
+	            			$Query  = "update campus_classe ";
+	      		      	$Query .= "set ";
+      			      	$Query .= ( @$idpp[$i] ) ? "_IDpp = '". $idpp[$i] ."'" : "" ;
+      	      			$Query .= ( @$idpp[$i] AND @$idcc[$i] ) ? ", " : " " ;
+	      		      	$Query .= ( @$idcc[$i] ) ? "_IDcoordo = '". $idcc[$i] ."' " : "" ;
+           					$Query .= "where _IDclass = '". $idclass[$i] ."' ";
+           					$Query .= "limit 1";
+
+						mysql_query($Query, $mysql_link);
+						}
+				break;
+
+			default :
+				break;
+			}
+?>
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($CAMPUS_CLASSLIST)); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+
+	<form id="formulaire" action="index.php" method="post">
+	<?php
+		print("
+			<p class=\"hidden\"><input type=\"hidden\" name=\"item\" value=\"$item\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"cmde\" value=\"$cmde\" /></p>");
+	?>
+
+		<table class="width100">
+		  <tr>
+			<td style="width:50%;" class="align-right">
+			    	<?php print($msg->read($CAMPUS_CHOOSECENTER)); ?> 
+			</td>
+			<td style="width:50%;">
+				<label for="IDcentre">
+			  	<select id="IDcentre" name="IDcentre" onchange="document.forms.formulaire.submit()">
+				<?php
+					// lecture des centres constitutifs
+					$query  = "select _IDcentre, _ident from config_centre ";
+					$query .= "where _visible = 'O' AND _lang = '".$_SESSION["lang"]."' ";
+					$query .= "order by _IDcentre";
+
+					$result = mysql_query($query, $mysql_link);
+					$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+					while ( $row ) {			
+						printf("<option value=\"$row[0]\" %s>$row[1]</option>", $IDcentre == $row[0] ? "selected=\"selected\"" : "");
+
+						$row = remove_magic_quotes(mysql_fetch_row($result));
+						}				
+				?>
+				</select> <img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/home.gif" title="" alt="" />
+				</label>
+			</td>
+		  </tr>
+
+	<?php
+		if ( $_SESSION["CnxAdm"] == 255 ) {
+			print("
+			  <tr>
+				<td class=\"align-right\">
+				  ". $msg->read($CAMPUS_CHOOSECAT) ." 
+				</td>
+				<td>
+				  <label for=\"IDsel\">
+			  	  <select id=\"IDsel\" name=\"IDsel\" onchange=\"document.forms.formulaire.submit()\">
+					<option value=\"0\">&nbsp;</option>");
+
+			// recherche des groupes
+			$query  = "select _IDgrp, _ident from user_group ";
+			$query .= "where _visible = 'O' AND _lang = '".$_SESSION["lang"]."' ";
+			$query .= "AND _IDcat = '2' ";
+			$query .= "order by _IDgrp asc";
+
+			$result = mysql_query($query, $mysql_link);
+			$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+			$i = 0;
+			while ( $row ) {
+				printf("<option value=\"$row[0]\" %s>$row[1]</option>", ($IDsel == $row[0]) ? "selected=\"selected\"" : "");
+
+				$row = remove_magic_quotes(mysql_fetch_row($result));
+				}	// endwhile catégorie
+
+			print("
+				  </select> <img src=\"".$_SESSION["ROOTDIR"]."/images/group.gif\" alt=\"\" title=\"\" />
+				  </label>
+				</td>
+			  </tr>");
+			}
+	?>
+
+		  <tr>
+			<td colspan="2"><hr/></td>
+		  </tr>
+		</table>
+
+		</form>
+
+	<?php
+		// initialisation
+		$Query  = "select _ID, _name, _fname from user_id ";
+		$Query .= "where _adm ";
+		$Query .= "AND (_IDcentre = '$IDcentre' OR _centre & pow(2, $IDcentre - 1)) ";
+		$Query .= "AND _IDgrp = '$IDsel' ";
+		$Query .= "order by _name";
+
+		$result = mysql_query($Query, $mysql_link);
+		$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+		$i = 0;
+		$myclass[0][$i]   = 0;
+		$myclass[1][$i++] = "";
+
+		while ( $row ) {
+			$myclass[0][$i]   = $row[0];
+			$myclass[1][$i++] = formatUserName($row[1], $row[2]);
+
+			$row = remove_magic_quotes(mysql_fetch_row($result));
+			}
+
+		// on classe par ordre alphabétique
+		$Query  = "select _IDclass, _ident, _IDpp, _IDcoordo from campus_classe ";
+		$Query .= "where _visible = 'O' ";
+		$Query .= "AND _IDcentre = '$IDcentre' ";
+		$Query .= "order by _ident";
+
+		$result = mysql_query($Query, $mysql_link);
+		$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+		print("
+		   <form id=\"selection\" action=\"index.php\" method=\"post\">
+			<p class=\"hidden\"><input type=\"hidden\" name=\"item\"     value=\"$item\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"cmde\"     value=\"$cmde\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"IDcentre\" value=\"$IDcentre\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"IDsel\"    value=\"$IDsel\" /></p>
+
+			<table class=\"width100\">
+			  <tr class=\"align-center\" style=\"background-color:#c0c0c0;\">
+	                <td style=\"width:30%;\">". $msg->read($CAMPUS_CLASS) ."</td>
+	                <td style=\"width:30%;\">". $msg->read($CAMPUS_PRIMTEACHER) ."</td>
+	                <td style=\"width:30%;\">". $msg->read($CAMPUS_COORDTEACHER) ."</td>
+	                <td style=\"width:10%;\">". $msg->read($CAMPUS_NUMBERS) ."</td>
+			  </tr>
+			");
+
+		$total = $i = 0;
+		while ( $row ) {
+			$bgcolor = ( $i % 2 ) ? "item" : "menu" ;
+
+			print("<tr><td><p class=\"hidden\"><input type=\"hidden\" name=\"idclass[$i]\" value=\"$row[0]\" /></p></td></tr>"); 
+
+			print("
+				<tr class=\"$bgcolor\">
+				  <td><a href=\"".myurlencode("index.php?item=38&IDcentre=$IDcentre&IDsel=$row[0]&cmde=show")."\">$row[1]</a></td>
+				  <td class=\"align-center\">
+				");
+
+			if ( $row[2] ) {
+				$mailto = getUserName($row[2]);
+
+				$delete = ( $_SESSION["CnxAdm"] == 255 )
+					? "<a href=\"".myurlencode("index.php?item=$item&cmde=$cmde&submit=delpp&id=$row[0]&IDsel=$IDsel")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/corb.gif\" alt=\"\" title=\"\" /></a>"
+					: "" ;
+
+				print("$mailto $delete");
+				}
+			else {
+				if ( $_SESSION["CnxAdm"] == 255 AND $IDsel ) {
+					print("<label for=\"idpp_$i\">");
+					print("<select id=\"idpp_$i\" name=\"idpp[$i]\">");
+
+					for ($j = 0; $j < count($myclass[0]); $j++) {			
+						if ( $row[2] == $myclass[0][$j] )
+							print("<option value=\"".$myclass[0][$j]."\" selected=\"selected\">".$myclass[1][$j]."&nbsp;</option>");
+						else
+							print("<option value=\"".$myclass[0][$j]."\">".$myclass[1][$j]."&nbsp;</option>");
+						}
+
+					print("</select>");
+					print("</label>");
+					}
+				}
+
+			print("
+		                 </td>
+		                 <td class=\"align-center\">
+				");
+
+			if ( $row[3] ) {
+				$mailto = getUserName($row[3]);
+
+				$delete = ( $_SESSION["CnxAdm"] == 255 )
+					? "<a href=\"".myurlencode("index.php?item=$item&cmde=$cmde&submit=delcc&id=$row[0]&IDsel=$IDsel")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/corb.gif\" alt=\"\" title=\"\" /></a>"
+					: "" ;
+
+				print("$mailto $delete");
+				}
+			else {
+				if ( $_SESSION["CnxAdm"] == 255 AND $IDsel ) {
+					print("<label for=\"idcc_$i\">");
+					print("<select id=\"idcc_$i\" name=\"idcc[$i]\">");
+
+					for ($j = 0; $j < count($myclass[0]); $j++) {			
+						if ( $row[3] == $myclass[0][$j] )
+							print("<option value=\"".$myclass[0][$j]."\" selected=\"selected\">".$myclass[1][$j]."</option>");
+						else
+							print("<option value=\"".$myclass[0][$j]."\">".$myclass[1][$j]."</option>");
+						}
+
+					print("</select>");
+					print("</label>");
+					}
+				}
+
+			print("
+		                </td>
+		                <td class=\"align-center\">
+				");
+
+			$Query  = "select _ID from user_id ";
+			$Query .= "where _visible = 'O' AND _IDgrp = '1' ";
+			$Query .= "AND _IDclass = '$row[0]' ";
+
+			$return = mysql_query($Query, $mysql_link);
+			$elem   = ( $return ) ? mysql_affected_rows($mysql_link) : 0 ;
+			$total += (int) $elem;
+
+			print("
+					$elem
+		                </td>
+				  </tr>
+				");
+
+			$i++;	
+			$row = remove_magic_quotes(mysql_fetch_row($result));
+			}
+
+		print("
+			  <tr>
+	                <td colspan=\"4\"><hr/></td>
+			  </tr>
+			  <tr>
+	                <td colspan=\"2\"></td>
+	                <td class=\"align-right\">". $msg->read($CAMPUS_TOTAL) ."</td>
+	                <td class=\"align-center\">$total</td>
+			  </tr>
+	            </table>
+			");
+
+	if ( $_SESSION["CnxAdm"] == 255 )
+		print("
+			<table class=\"width100\">
+			  <tr>
+	                <td style=\"width:10%;\" class=\"valign-middle align-center\">
+				<input type=\"image\" src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/valid.gif\" name=\"valid\" alt=\"".$msg->read($CAMPUS_INPUTOK)."\" />
+	                </td>
+	                <td class= \"valign-middle\">
+				". $msg->read($CAMPUS_ISOK) ."
+	                </td>
+			  </tr>
+	            </table>
+			");
+	?>
+
+	</form>
+
+</div>

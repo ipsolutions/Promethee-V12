@@ -1,0 +1,183 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2007-2008 by Dominique Laporte(C-E-D@wanadoo.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Foobar.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : valid.htm
+ *		projet   : la page de validation des plate-formes P2P
+ *
+ *		version  : 1.0
+ *		auteur   : laporte
+ *		creation : 9/12/07
+ *		modif    : 
+ */
+
+
+$del    = @$_POST["del"];
+$ip     = @$_POST["ip"];
+
+$submit = @$_POST["submit_x"];		// bouton validation
+?>
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($SERVER_LIST)); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+	<form id="formulaire" action="" method="post">
+
+<?php
+	require "include/setup.php";
+
+	if ( $submit ) {
+		// suppression
+		for ($i = 0; $i < count($del); $i++)
+			if ( @$del[$i] ) {
+				$query  = "delete from p2p_data ";
+				$query .= "where _IDdata = '".$del[$i]."' limit 1";
+
+				mysql_query($query, $mysql_link);
+				}
+
+		// validation
+		for ($i = 0; $i < count($ip); $i++)
+			if ( @$ip[$i] ) {
+				$query  = "update p2p_data ";
+				$query .= "set _visible = 'O' ";
+				$query .= "where _IDdata = '".$ip[$i]."' limit 1";
+
+				if ( mysql_query($query, $mysql_link) ) {
+					// création arborescence pour hébergement
+					$Query  = "select _ident, _adresse, _tel, _fax, _webmaster, _url, _zip, _city, _public ";
+					$Query .= "from p2p_data ";
+					$Query .= "where _IDdata = '".$ip[$i]."' " ;
+					$Query .= "limit 1";
+
+					$result = mysql_query($Query, $mysql_link);
+					$row    = remove_magic_quotes(mysql_fetch_row($result));
+
+					if ( @$row[8] == "O" ) {
+						$etab = $ip[$i] . "-" . stripaccent(str_replace(' ', '', strtolower($row[0])));
+						$dest = "host/$etab";
+
+						if ( mymkdir($dest, $CHMOD) ) {
+							// création du fichier de configuration
+							writeconfigfile($_SESSION["CFGDIR"]."/config.ini", .$_SESSION["CFGDIR"]."/$dest/config.php",
+								$SERVER, $USER, $PASSWD, $etab, $SERVPORT, $CHARSET, "$dest/download");
+
+							// création de la base de données
+							if ( mysql_query("create database `$etab`", $mysql_link) )
+								createdatabase($SERVER, $USER, $PASSWD, $etab, $SERVPORT, Array($_SESSION["lang"]));
+
+							// mise à jour de la base de données
+							updateconfigfile(
+								$SERVER, $USER, $PASSWD, $etab, $SERVPORT,
+								$row[0], $row[1], $row[2], $row[3], $row[4], $row[5], $row[6], $row[7]);
+
+							// création répertoires utiles
+							mymkdir("$dest/download", $CHMOD);
+							mymkdir("$dest/tmp", $CHMOD);
+							}
+						}
+
+					// envoie de la clef P2P
+					$query  = "select _key, _webmaster ";
+					$query .= "from p2p_data ";
+					$query .= "where _IDdata = '".$ip[$i]."' AND _visible = 'O' ";
+					$query .= "where limit 1";
+
+					$result = mysql_query($query, $mysql_link);
+					$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+					if ( $row ) {
+						require_once "lib/libmail.php";
+
+						$mymail = new Mail();	// create the mail
+
+						$mymail->From("noreply@".$_SESSION["CfgWeb"]);
+						$mymail->To($row[1]);
+						$mymail->Subject($msg->read($SERVER_YOURKEY));	
+						$mymail->Body($msg->read($SERVER_OBJECT, Array($row[0], $WEBSITE)));	// set the body
+
+						$mymail->Send();		// send the mail
+						}
+					}
+				}
+		}
+
+	print("
+		<table summary=\"\" width=\"100%\" cellspacing=\"1\" cellpadding=\"2\">
+		  <tr align=\"center\" style=\"background-color:#c0c0c0;\">
+                <td style=\"width:1%;\"><img src=\"images/corb.gif\" title=\"\" alt=\"\" /></td>
+                <td style=\"width:1%;\"><img src=\"images/ip.gif\" title=\"\" alt=\"\" /></td>
+                <td style=\"width:60%;\">".$msg->read($SERVER_IDENT)."</td>
+                <td style=\"width:38%;\">".$msg->read($SERVER_ADMIN)."</td>
+		  </tr>
+		");
+
+	// on classe par ordre demande les plus récentes
+	$Query  = "select _IDdata, _ident, _adresse, _tel, _fax, _webmaster, _url, _zip, _city, _public ";
+	$Query .= "from p2p_data ";
+	$Query .= "where _visible = 'N' " ;
+	$Query .= "order by _IDdata asc";
+
+	$result = mysql_query($Query, $mysql_link);
+	$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+	$i = 0;
+	while ( $row ) {
+		$bgcol  = ( $i % 2 ) ? "item" : "menu" ;
+
+		print("
+			<tr class=\"$bgcol\">
+	                <td align=\"center\"><input type=\"checkbox\" name=\"del[$i]\" value=\"$row[0]\" /></td>
+	                <td align=\"center\"><input type=\"checkbox\" name=\"ip[$i]\" value=\"$row[0]\" /></td>
+	                <td>$row[1]<br/><span class=\"x-small\">$row[2], $row[7] $row[8]</span></td>
+	                <td><a href=\"mailto:$row[5]\">$row[5]</a><br/>@ $row[6]</td>
+			  </tr>
+			");
+
+		$i++;
+		$row = remove_magic_quotes(mysql_fetch_row($result));
+		}
+
+	print("</table>");
+?>
+
+	<hr/>
+
+	<table summary="" width="100%" cellspacing="0" cellpadding="2">
+	  <tr>
+		<td style="width:10%;" valign="middle" align="center">
+		<?php
+			print("<input type=\"image\" src=\"images/lang/".$_SESSION["lang"]."/valid.gif\" name=\"submit\" alt=\"".$msg->read($SERVER_INPUTOK)."\" />");
+		?>
+		</td>
+		<td valign="middle">
+			<?php print($msg->read($SERVER_RECORD)); ?>
+		</td>
+	  </tr>
+	</table>
+
+	</form>
+</div>

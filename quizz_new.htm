@@ -1,0 +1,390 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2002-2007 by Dominique Laporte (C-E-D@wanadoo.fr)
+   Copyright (c) 2006 by frédéric poyet(frederic.poyet@free.fr)
+   Copyright (c) 2006 by Nordine Zetoutou (nordine.zetoutou@educagri.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : quizz_new.htm
+ *		projet   : la page de création des quizz
+ *
+ *		version  : 1.0
+ *		auteur   : laporte
+ *		creation : 20/06/04
+ *		modif    : 19/06/06 - par Fred POYET
+ *                     migration php5
+ *		           17/07/06 - Nordine Zetoutou
+ * 	                 migration des balises HTML en XHTML 1.0 strict
+ */
+
+
+$IDquizz   = ( @$_POST["IDquizz"] )		// ID du quizz
+         ? (int) $_POST["IDquizz"]
+         : (int) @$_GET["IDquizz"] ;
+$IDsel     = ( @$_POST["IDsel"] )		// ID de la classe
+       ? (int) $_POST["IDsel"] 
+       : (int) (@$_GET["IDsel"] ? $_GET["IDsel"] : $_SESSION["CnxClass"] );
+$IDmat     = ( @$_POST["IDmat"] )		// ID de la matière/formation
+       ? (int) $_POST["IDmat"]
+       : (int) @$_GET["IDmat"] ;
+$IDdata    = ( @$_POST["IDdata"] )		// Identifiant de la matière
+	? (int) $_POST["IDdata"]
+	: (int) @$_GET["IDdata"] ;
+$IDroot    = ( @$_POST["IDroot"] )		// Identifiant répertoire courant
+	? (int) $_POST["IDroot"]
+	: (int) @$_GET["IDroot"] ;
+
+$title     = addslashes(@$_POST["title"]);
+$texte     = addslashes(@$_POST["texte"]);
+$group     = @$_POST["group"];
+$level     = (int) @$_POST["level"];
+$anonyme   = ( @$_POST["anonyme"] ) ? "O" : "N" ;
+$resultat  = ( @$_POST["resultat"] ) ? "O" : "N" ;
+$back      = ( @$_POST["back"] ) ? "O" : "N" ;
+$page      = ( @$_POST["page"] ) ? "O" : "N" ;
+$mandatory = ( @$_POST["mandatory"] ) ? "O" : "N" ;
+$random    = @$_POST["random"];
+$delay     = @$_POST["delay"];
+
+$submit    = @$_POST["submit"];		// bouton de validation
+?>
+
+
+<?php
+	// initialisation
+	$error  = 0;
+	$status = ( $IDquizz )
+		? $msg->read($QUIZZ_UPDEXERCICE)
+		: $msg->read($QUIZZ_NEWEXERCICE) ;
+
+	// l'utilisateur a cliqué sur un lien
+	switch ( $submit ) {
+		case "Valider" :
+			// test d'erreur sur champs non renseignés
+			$error = ( !strlen($title) ) ? 1 : 0 ;
+
+			// on transfére le fichier si pas d'erreur
+			if ( !$error ) {
+				$status = $msg->read($QUIZZ_DOWNLOAD) ." ";
+
+				// initialisation des champs
+				$date   = date("Y-m-d H:i:s");
+
+				// groupes autorisés
+				$grpid = " ";
+				@sort($group);
+				for ( $i = 0; $i < count($group); $i++ )
+					$grpid .= ( @$group[$i] ) ? "$group[$i] " : "" ;
+
+				// et on insére un nouvel exercice dans la base de données
+				$Query  = "insert into quizz ";
+				$Query .= "values('', '$IDdata', '$IDroot', '$date', '".$_SESSION["CnxID"]."', '$grpid', '".$_SESSION["CnxIP"]."', '$title', '$texte', '$level', '$anonyme', '$resultat', '$back', '$page', '$mandatory', '$random', '$delay', 'N')";
+
+				if ( !mysql_query($Query, $mysql_link) ) {
+					$status .= "<img src=\"".$_SESSION["ROOTDIR"]."/images/bad.gif\" title=\"\" alt=\"\" />";
+					sql_error($mysql_link);
+					}
+				else
+					$status .= "<img src=\"".$_SESSION["ROOTDIR"]."/images/ok.gif\" title=\"\"  alt=\"\" />";
+				}
+			break;
+
+		case "Update" :
+			$status = $msg->read($QUIZZ_MODIFICATION) ." ";
+
+			// groupes autorisés
+			$grpid = " ";
+			@sort($group);
+			for ( $i = 0; $i < count($group); $i++ )
+				$grpid .= ( @$group[$i] ) ? "$group[$i] " : "" ;
+
+			$Query  = "update quizz ";
+			$Query .= "set _titre = '$title', _texte = '$texte', _anonyme ='$anonyme', _result = '$resultat', _back = '$back', _page = '$page', _mandatory = '$mandatory', _random = '$random', _delay = '$delay', _level = '$level', _IDgrprd = '$grpid' ";
+			$Query .= "where _IDquizz = '$IDquizz' ";
+
+			if ( ! mysql_query($Query, $mysql_link) ) {
+				mysql_error($mysql_link);
+				$status .= "<img src=\"".$_SESSION["ROOTDIR"]."/images/bad.gif\" title=\"\" alt=\"\" />";
+				}
+			else 
+				$status .= "<img src=\"".$_SESSION["ROOTDIR"]."/images/ok.gif\" title=\"\"  alt=\"\" />";
+			break;
+
+		default :
+			break;
+		}
+
+	$Query   = "select _titre, _texte, _anonyme, _result, _back, _level, _IDgrprd, _IDmat, _random, _mandatory, _page, _delay ";
+	$Query  .= "from quizz where _IDquizz = '$IDquizz'";
+
+	$result  = mysql_query($Query, $mysql_link);
+	$row     = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+	if ( mysql_affected_rows($mysql_link) ) {
+		// initialisation des champs de saisie
+		$title     = $row[0];
+		$texte     = $row[1];
+		$anonyme   = $row[2];
+		$resultat  = $row[3];
+		$back      = $row[4];
+		$level     = $row[5];
+		$group     = $row[6];
+		$IDdata    = $row[7];
+		$random    = $row[8];
+		$mandatory = $row[9];
+		$page      = $row[10];
+		$delay     = $row[11];
+		}
+	else
+		if ( !$error ) {
+			// réinitialisation des champs de saisie
+			$title     = "";
+			$texte     = "";
+			$anonyme   = "N";
+			$resultat  = "N";
+			$back      = "O";
+			$page      = "N";
+			$mandatory = "N";
+			$random    = "";
+			$delay     = "";
+			}
+
+	$result  = mysql_query("select _titre from campus_data where _IDmat = '$IDdata' AND _lang = '".$_SESSION["lang"]."' limit 1", $mysql_link);
+	$mat     = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+?>
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($QUIZZ_ONLINE)); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+
+	<form id="formulaire" action="index.php" method="post">
+	<?php
+		print("
+			<p class=\"hidden\"><input type=\"hidden\" name=\"item\"   value=\"$item\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"cmde\"   value=\"$cmde\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"IDsel\"  value=\"$IDsel\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"IDdata\" value=\"$IDdata\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"IDmat\"  value=\"$IDmat\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"IDroot\" value=\"$IDroot\" /></p>
+			");
+
+		if ( $IDquizz )
+			print("
+				<p class=\"hidden\"><input type=\"hidden\" name=\"IDquizz\" value=\"$IDquizz\" /></p>
+				<p class=\"hidden\"><input type=\"hidden\" name=\"submit\" value=\"Update\" /></p>
+				");
+		else
+			print("
+				<p class=\"hidden\"><input type=\"hidden\" name=\"submit\" value=\"Valider\" /></p>
+				");
+	?>
+
+	<table class="width100">
+	    <tr>
+	      <td style="width:15%;" class="align-right"><?php print($msg->read($QUIZZ_MATTER)); ?></td>
+	      <td style="width:35%;" colspan="2"><?php print("$mat[0]"); ?></td>
+	      <td style="width:50%;" class="align-right"><?php print($msg->read($QUIZZ_STATUS)." $status"); ?></td>
+	    </tr>
+
+	    <tr>
+	      <td class="align-right"><?php print($msg->read($QUIZZ_AUTHOR)); ?></td>
+	      <td colspan="2"><?php print($_SESSION["CnxName"]); ?></td>
+	    </tr>
+	</table>
+
+	<hr style="width:80%; text-align:center;" />
+
+	  <table class="width100">
+	   <tr>
+	     <td style="width:10%;"></td>
+	     <td style="width:80%;">
+
+		  <table class="width100">
+		  <?php
+		  // intitulé non renseigné
+		  if ( $error AND !strlen($title) )
+		  	print("
+			    <tr>
+			      <td colspan=\"2\">
+					<span style=\"color:#FF0000;\">". $msg->read($QUIZZ_WARNING) ."</span>
+			      </td>
+			    </tr>
+				");
+		  ?>
+	    
+		    <tr style="background-color:#eeeeee;">
+		      <td colspan="2">
+		        <?php print($msg->read($QUIZZ_IDENT)); ?>
+		      </td>
+		    </tr>
+	    
+		    <tr>
+		      <td colspan="2">
+		        <label for="title"><?php print("<input type=\"text\" id=\"title\" name=\"title\" size=\"45\" value=\"$title\" />"); ?></label>
+		      </td>
+		    </tr>
+	    
+		    <tr style="background-color:#eeeeee;">
+		      <td colspan="2">
+		        <?php print($msg->read($QUIZZ_DESCRIPTION)); ?>
+		      </td>
+		    </tr>
+	    
+		    <tr>
+		      <td colspan="2">
+		        <?php print("<label for=\"texte\"><textarea id=\"texte\" name=\"texte\" rows=\"4\" cols=\"35\">$texte</textarea></label>"); ?>
+		      </td>
+		    </tr>
+
+  		    <tr style="background-color:#eeeeee;">
+		      <td colspan="2">
+		        <?php print($msg->read($QUIZZ_PERM)); ?>
+		      </td>
+		    </tr>
+
+		    <tr>
+		      <td colspan="2">
+			<?php
+				$check = ( $anonyme == "O" ) ? "checked=\"checked\"" : "" ;
+				print("<label for=\"anonyme\"><input type=\"checkbox\" id=\"anonyme\" name=\"anonyme\" value=\"O\" $check />".$msg->read($QUIZZ_PERSONNAL)."</label><br/>");
+
+				$check = ( $page == "O" ) ? "checked=\"checked\"" : "" ;
+				print("<label for=\"page\"><input type=\"checkbox\" id=\"page\" name=\"page\" value=\"O\" $check />".$msg->read($QUIZZ_PAGE)."</label><br/>");
+
+				$check = ( $resultat == "O" ) ? "checked=\"checked\"" : "" ;
+				print("<label for=\"resultat\"><input type=\"checkbox\" id=\"resultat\" name=\"resultat\" value=\"O\" $check />".$msg->read($QUIZZ_SHOWRESULT)."</label><br/>");
+
+				$check = ( $back == "O" ) ? "checked=\"checked\"" : "" ;
+				print("<label for=\"back\"><input type=\"checkbox\" id=\"back\" name=\"back\" value=\"O\" $check />".$msg->read($QUIZZ_FRONTBACK)."</label><br/>");
+
+				$check = ( $mandatory == "O" ) ? "checked=\"checked\"" : "" ;
+				print("<label for=\"mandatory\"><input type=\"checkbox\" id=\"mandatory\" name=\"mandatory\" value=\"O\" $check />".$msg->read($QUIZZ_MANDATORINPUT)."</label>");
+			?>
+		      </td>
+		    </tr>
+
+  		    <tr style="background-color:#eeeeee;">
+		      <td>
+		        <?php print($msg->read($QUIZZ_PREFERENCES)); ?>
+		      </td>
+		      <td>
+		        <?php print($msg->read($QUIZZ_LEVEL)); ?>
+		      </td>
+		    </tr>
+
+		    <tr>
+		      <td>
+				<label for="random"><?php print("<input type=\"text\" id=\"random\" name=\"random\" size=\"2\" value=\"$random\" /> ". $msg->read($QUIZZ_RANDOM)); ?></label><br/>
+				<label for="delay"><?php print("<input type=\"text\" id=\"delay\" name=\"delay\" size=\"2\" value=\"$delay\" /> ". $msg->read($QUIZZ_DELAY)); ?></label>
+		      </td>
+		      <td>
+				<label for="level">
+				<select id="level" name="level">
+					<option <?php print(($level == 0) ? "selected=\"selected\"" : ""); ?> value="0">&nbsp;</option>
+					<option <?php print(($level == 1) ? "selected=\"selected\"" : ""); ?> value="1"><?php print($msg->read($QUIZZ_EASY)); ?></option>
+					<option <?php print(($level == 2) ? "selected=\"selected\"" : ""); ?> value="2"><?php print($msg->read($QUIZZ_MEAN)); ?></option>
+					<option <?php print(($level == 3) ? "selected=\"selected\"" : ""); ?> value="3"><?php print($msg->read($QUIZZ_HARD)); ?></option>
+				 </select>
+				 </label>
+		      </td>
+		    </tr>
+
+  		    <tr style="background-color:#eeeeee;">
+		      <td colspan="2">
+		        <?php print($msg->read($QUIZZ_SHARE)); ?>
+		      </td>
+		    </tr>
+
+		<?php
+			// affichage des groupes
+			$Query = "select _IDclass, _ident from campus_classe where _visible = 'O' order by _ident";
+
+			$result = mysql_query($Query, $mysql_link);
+			$grp    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+			$i = 0;
+			while ( $grp ) {
+				if ( $i++ % 2 == 0 )
+					print("<tr>");
+
+				if ( $IDquizz )
+					$check = ( in_array($grp[0], explode(" ", $group)) ) ? "checked=\"checked\"" : "" ;
+				else
+					$check = ( $IDsel )
+						? (( $IDsel == $grp[0] ) ? "checked=\"checked\"" : "")
+						: "checked=\"checked\"" ;
+
+				print("
+					<td style=\"width:50%;\">
+						<label for=\"group_$grp[0]\">
+						<input type=\"checkbox\" id=\"group_$grp[0]\" name=\"group[]\" value=\"$grp[0]\" $check /> $grp[1]
+						</label>
+					</td>
+					");
+
+				if ( $i % 2 == 0 )
+					print("</tr>");
+
+				$grp = remove_magic_quotes(mysql_fetch_row($result));
+				}
+
+			if ( $i % 2 )
+				print("
+					  <td style=\"width:50%;\"></td>
+					</tr>
+					");
+		?>
+	     </table>
+
+	     </td>
+	     <td style="width:10%;"></td>
+	   </tr>
+	  </table>
+
+	<hr style="width:80%; text-align:center;" />
+
+         <table class="width100">
+           <tr>
+              <td style="width:10%;" class="valign-middle align-center">
+              	<?php print("<input type=\"image\" src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/valid.gif\" name=\"valid\" alt=\"".$msg->read($QUIZZ_INPUTOK)."\" />"); ?>
+              </td>
+              <td class="valign-middle">
+			<?php print($IDquizz ? $msg->read($QUIZZ_UPDTEXERCICE) : $msg->read($QUIZZ_ADDEXERCICE)); ?>
+              </td>
+           </tr>
+           <tr>
+              <td class="valign-middle align-center">
+              	<?php print("<a href=\"".myurlencode("index.php?item=$item&IDsel=$IDsel&IDmat=$IDmat&IDdata=$IDdata&IDroot=$IDroot")."\">"); ?>
+              	<?php print("<img src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/cancel.gif\" title=\"\" alt=\"".$msg->read($QUIZZ_INPUTCANCEL)."\" />"); ?></a>
+              </td>
+              <td class="valign-middle">
+              	<?php print($msg->read($QUIZZ_BACK)); ?>
+              </td>
+           </tr>
+         </table>
+
+	</form>
+
+</div>

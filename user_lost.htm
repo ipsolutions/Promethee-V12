@@ -1,0 +1,121 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2007 by Dominique Laporte(C-E-D@wanadoo.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : user_lost.htm
+ *		projet   : la page de récupération des mots de passe oubliés
+ *
+ *		version  : 1.0
+ *		auteur   : laporte
+ *		creation : 18/04/07
+ *		modif    : 
+ */
+
+
+$ident  = trim(@$_POST["ident"]);	// ID de l'utilisateur
+
+$submit = @$_POST["valid_x"];		// bouton de validation
+?>
+
+<?php
+	// initialisation
+	$myret = "";
+
+	// traitement commande
+	if ( strlen($submit) )
+		if ( strlen($ident) ) {
+			require_once "lib/libmail.php";
+
+			$query  = "select _passwd, _email from user_id ";
+			$query .= "where _ident = '$ident' ";
+			$query .= "limit 1";
+
+			$result = mysql_query($query, $mysql_link);
+			$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+			if (  mysql_numrows($result) == 0 )
+				$myret  = $msg->read($USER_NOIDENTFOUND);
+			else
+				if ( strlen($row[1]) ) {
+					$mymail = new Mail(); 			// create the mail
+
+					// corps du message
+					$texte  = $msg->read($USER_BODY, Array($_SESSION["CfgWeb"], $row[0]));
+					$texte .= "\n--\n";
+					$texte .= $_SESSION["CfgAdr"] . "\n";
+					$texte .= $_SESSION["CfgWeb"];
+
+					$mymail->From("noreply@".$_SESSION["CfgWeb"]);
+					$mymail->To($row[1]);
+					$mymail->Subject($msg->read($USER_SENDPWD, $_SESSION["CfgWeb"]));	
+					$mymail->Body($texte, $CHARSET);	// set the body
+
+					$myret  = ( $mymail->Send() )		// send the mail
+						? $msg->read($USER_SENDMAILSUCCESS)
+						: $msg->read($USER_SENDMAILFAILED) ;
+					}
+				else
+					$myret  = $msg->read($USER_NOEMAILFOUND);
+
+			// retour à la page d'accueil de l'intranet
+//			print("<script type=\"text/javascript\"> window.location.replace('index.php', '_self'); </script>");
+			}
+?>
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($USER_LOSTPWD)); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+
+	<form id="formulaire" action="index.php?item=1" method="post">
+
+		<?php
+			if ( $myret )
+				print("<p style=\"text-align: center; font-weight: bold; color: red;\">$myret</p>");
+
+			print("<p>". $msg->read($USER_NOSOUCY) ."</p>");
+		?>
+
+		<table class="width100">
+		  <tr>
+		    <td style="width:50%;" class="align-right">
+			<?php print($msg->read($USER_USERID)); ?>
+		    </td>
+		    <td class="align-left">
+			<label for="ident"><input type="text" id="ident" name="ident" size="20" /></label>
+		    </td>
+		  </tr>
+		</table>
+
+		<hr style="width:80%;" />
+
+		<div style="text-align: right;">
+			<?php print($msg->read($USER_CLICKHERE)); ?>
+              	<?php print("<input type=\"image\" src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/valid.gif\" name=\"valid\" alt=\"".$msg->read($USER_INPUTOK)."\" />"); ?>
+		</div>
+
+	</form>
+
+</div>

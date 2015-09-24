@@ -1,0 +1,541 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2004-2008 by Dominique Laporte(C-E-D@wanadoo.fr)
+   Copyright (c) 2006 by FG (persofg@gmail.com)
+   Copyright (c) 2006 by Nordine Zetoutou (nordine.zetoutou@educagri.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : weblog_visu.htm
+ *		projet   : la page de visualisation des blogs persos
+ *
+ *		version  : 1.0
+ *		auteur   : laporte
+ *		creation : 26/09/04
+ *		modif    : 16/06/05 par FG
+ *                     migration -> PHP5 
+ * 		           17/07/06 - par Nordine Zetoutou
+ * 	                 migration des balises HTML en XHTML 1.0 strict
+ */
+
+
+$IDgroup = ( @$_POST["IDgroup"] )		// ID du e-goupe ou du e-campus
+	? (int) $_POST["IDgroup"] 
+	: (int) @$_GET["IDgroup"] ;
+$IDlog   = ( @ $_POST["IDlog"] )		// ID du weblog
+	? (int) $_POST["IDlog"]
+	: (int) @$_GET["IDlog"] ;
+$IDdata  = ( @ $_POST["IDdata"] )		// ID de la catégorie
+	? (int) $_POST["IDdata"]
+	: (int) @$_GET["IDdata"] ;
+$IDitem  = ( @ $_POST["IDitem"] )		// ID du message
+	? (int) $_POST["IDitem"]
+	: (int) @$_GET["IDitem"] ;
+$comment = ( @ $_POST["comment"] )		// visualiser les commentaires
+	? (int) $_POST["comment"]
+	: (int) @$_GET["comment"] ;
+$IDuser  = @$_GET["IDuser"];			// ID du rédacteur
+$year    = @$_GET["year"];			// année de l'archive
+$month   = @$_GET["month"];			// mois de l'archive
+$day     = @$_GET["day"];			// jour de l'archive
+
+$submit  = ( @$_POST["submit"] )		// bouton de validation
+	? $_POST["submit"]
+	: @$_GET["submit"] ;
+
+
+//---------------------------------------------------------------------------
+function menuAbout($IDlog, $IDmod)
+{
+	require "msg/weblog.php";
+
+	require_once "include/TMessage.php";
+
+	$msg  = new TMessage($_SESSION["ROOTDIR"]."/msg/".$_SESSION["lang"]."/weblog.php");
+
+	$menu = "" ;
+
+	if ( $_SESSION["CnxID"] == $IDmod ) {
+		$menu  = "<ul class=\"sousMenu\">";
+		$menu .= "<li class=\"x-small\"><a href=\"".myurlencode("index.php?item=36&cmde=visu&IDlog=$IDlog&submit=tuning")."\">". $msg->read($WEBLOG_EDIT) ."</a></li>";
+		$menu .= "<li class=\"x-small\"><a href=\"".myurlencode("index.php?item=36&cmde=gestion&IDlog=$IDlog&submit=tuning")."\">". $msg->read($WEBLOG_PREFERENCES) ."</a></li>";
+		$menu .= "</ul>";
+		}
+
+	return $menu;
+}
+//---------------------------------------------------------------------------
+function menuCategory($IDlog)
+{
+	global $mysql_link;
+
+	// lecture de la base de données
+	$Query  = "select _IDdata, _title from weblog_data ";
+	$Query .= "where _IDlog = '$IDlog' ";
+	$Query .= "order by _title";
+
+	$result = mysql_query($Query, $mysql_link);
+	$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+	$menu   = "" ;
+
+	if ( $row ) {
+		$menu  = "<ul class=\"sousMenu\">";
+
+		while ( $row ) {
+			// lecture de la base de données
+			$Query  = "select distinctrow weblog_items._IDitem ";
+			$Query .= "from weblog_items, weblog_data ";
+			$Query .= "where weblog_data._IDdata = '$row[0]' ";
+			$Query .= "AND weblog_data._IDdata = weblog_items._IDdata ";
+
+			$return = mysql_query($Query, $mysql_link);
+			$nbrow  = ( $return ) ? mysql_numrows($return) : 0 ;
+
+			// si pas d'article, on supprime la catégorie
+			if ( $nbrow == 0 )
+				mysql_query("delete from weblog_data where _IDdata = '$row[0]' limit 1", $mysql_link);
+
+			$menu  .= "<li class=\"x-small\"><a href=\"".myurlencode("index.php?item=36&cmde=visu&IDlog=$IDlog&IDdata=$row[0]")."\">» $row[1] ($nbrow)</a></li>";
+
+			$row    = remove_magic_quotes(mysql_fetch_row($result));
+			}
+
+		$menu .= "</ul>";
+		}
+
+	return $menu;
+}
+//---------------------------------------------------------------------------
+function menuArticle($IDlog, $IDmod, $IDgroup)
+{
+	require "globals.php";
+	require "msg/weblog.php";
+
+	require_once "include/TMessage.php";
+
+	$msg  = new TMessage($_SESSION["ROOTDIR"]."/msg/".$_SESSION["lang"]."/weblog.php");
+
+	// lecture de la base de données
+	$Query  = "select distinctrow weblog_items._IDitem, weblog_items._title ";
+	$Query .= "from weblog_items, weblog_data ";
+	$Query .= "where weblog_data._IDlog = '$IDlog' ";
+	$Query .= "AND weblog_data._IDdata = weblog_items._IDdata ";
+	$Query .= "order by weblog_items._IDitem desc ";
+	$Query .= "limit 10";
+
+	$result = mysql_query($Query, $mysql_link);
+	$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+	$menu   = "" ;
+
+	if ( $row OR $_SESSION["CnxID"] == $IDmod OR in_array($_SESSION["CnxID"], getAuthors($IDlog, $IDgroup)) ) {
+		$menu  = "<ul class=\"sousMenu\">";
+
+		if ( $_SESSION["CnxID"] == $IDmod OR in_array($_SESSION["CnxID"], getAuthors($IDlog, $IDgroup)) )
+			$menu .= "<li class=\"x-small\"><a href=\"".myurlencode("index.php?item=36&cmde=visu&IDlog=$IDlog&submit=post")."\">". $msg->read($WEBLOG_EDIT) ."</a></li>";
+
+		while ( $row ) {
+			$menu .= "<li class=\"x-small\"><a href=\"".myurlencode("index.php?item=36&cmde=visu&IDlog=$IDlog&IDitem=$row[0]")."\">» $row[1]</a></li>";
+
+			$row   = remove_magic_quotes(mysql_fetch_row($result));
+			}
+
+		$menu .= "</ul>";
+		}
+
+	return $menu;
+}
+//---------------------------------------------------------------------------
+function menuComment($IDlog)
+{
+	require "globals.php";
+	require "msg/weblog.php";
+
+	require_once "include/TMessage.php";
+
+	$msg  = new TMessage($_SESSION["ROOTDIR"]."/msg/".$_SESSION["lang"]."/weblog.php");
+
+	// lecture de la base de données
+	$Query  = "select distinctrow weblog_note._IDnote, weblog_note._title, weblog_note._IDitem ";
+	$Query .= "from weblog_note, weblog_items, weblog_data ";
+	$Query .= "where weblog_note._parent = '0' ";
+	$Query .= "AND weblog_data._IDlog = '$IDlog' ";
+	$Query .= "AND weblog_data._IDdata = weblog_items._IDdata ";
+	$Query .= "AND weblog_note._IDitem = weblog_items._IDitem ";
+	$Query .= "order by weblog_note._IDnote desc ";
+	$Query .= "limit 10";
+
+	$result = mysql_query($Query, $mysql_link);
+	$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+	$menu   = "" ;
+
+	if ( $row ) {
+		$menu  = "<ul class=\"sousMenu\">";
+
+		while ( $row ) {
+			$menu .= "<li class=\"x-small\"><a href=\"".myurlencode("index.php?item=36&cmde=visu&IDlog=$IDlog&IDitem=$row[2]&comment=1#comment_$row[0]")."\">» $row[1]</a></li>";
+
+			$row  = remove_magic_quotes(mysql_fetch_row($result));
+			}
+
+		$menu .= "</ul>";
+		}
+
+	return $menu;
+}
+//---------------------------------------------------------------------------
+function menuArchive($IDlog)
+{
+	require "globals.php";
+	require "msg/weblog.php";
+
+	require_once "include/TMessage.php";
+
+	$msg  = new TMessage($_SESSION["ROOTDIR"]."/msg/".$_SESSION["lang"]."/weblog.php");
+
+	// lecture de la base de données
+	$Query  = "select distinctrow min(weblog_items._date), max(weblog_items._date) ";
+	$Query .= "from weblog_items, weblog_data ";
+	$Query .= "where weblog_data._IDlog = '$IDlog' ";
+	$Query .= "AND weblog_data._IDdata = weblog_items._IDdata ";
+
+	$result = mysql_query($Query, $mysql_link);
+	$row    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+	$menu   = "" ;
+
+	if ( $row ) {
+		$min   = ( $row[0] ) ? substr($row[0], 0, 4) : date("Y") ;
+		$max   = ( $row[1] ) ? substr($row[1], 0, 4) : date("Y") ;
+
+		$mois  = explode(",", $msg->read($WEBLOG_MONTHFULL));
+
+		$menu  = "<ul class=\"sousMenu\">";
+
+		for ($i = $max; $i >= $min; $i--)
+			for ($m = 12; $m; $m--) {
+				$index  = $m - 1;
+
+				$Query  = "select distinctrow weblog_items._IDitem ";
+				$Query .= "from weblog_items, weblog_data ";
+				$Query .= "where weblog_data._IDlog = '$IDlog' ";
+				$Query .= "AND weblog_data._IDdata = weblog_items._IDdata ";
+				$Query .= "AND weblog_items._date >= '$i:$m:01' AND weblog_items._date <= '$i:$m:31' ";
+				$Query .= "AND weblog_items._parent = '0'";
+
+				$result = mysql_query($Query, $mysql_link);
+				$nbrows = ( $result ) ? mysql_numrows($result) : 0 ;
+
+				if ( $nbrows )
+					$menu .= "<li class=\"x-small\"><a href=\"".myurlencode("index.php?item=36&cmde=visu&IDlog=$IDlog&year=$i&month=$m")."\">» ".$mois[$index]." : $i ($nbrows)</a></li>";
+				}
+
+		$menu .= "</ul>";
+		}
+
+	return $menu;
+}
+//---------------------------------------------------------------------------
+function menuLink($IDlog, $IDgroup)
+{
+	require "globals.php";
+	require "msg/weblog.php";
+
+	require_once "include/TMessage.php";
+
+	$msg  = new TMessage($_SESSION["ROOTDIR"]."/msg/".$_SESSION["lang"]."/weblog.php");
+
+	// lecture paramètres du blog
+	$result  = mysql_query("select _ID from weblog where _IDlog = '$IDlog' limit 1", $mysql_link);
+	$auth    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+	// lecture de la base de données
+	$Query  = "select _title, _url from weblog_link ";
+	$Query .= "where _IDlog = '$IDlog' ";
+	$Query .= "order by _title";
+
+	$result = mysql_query($Query, $mysql_link);
+	$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+	$menu   = "" ;
+
+	if ( $row OR $_SESSION["CnxID"] == $auth[0] OR in_array($_SESSION["CnxID"], getAuthors($IDlog, $IDgroup)) ) {
+		$menu  = "<ul class=\"sousMenu\">";
+
+		if ( $_SESSION["CnxID"] == $auth[0] OR in_array($_SESSION["CnxID"], getAuthors($IDlog, $IDgroup)) )
+			$menu .= "<li class=\"x-small\"><a href=\"".myurlencode("index.php?item=36&cmde=visu&IDlog=$IDlog&submit=link")."\">". $msg->read($WEBLOG_EDIT) ."</a></li>";
+
+		while ( $row ) {
+			$menu .= "<li class=\"x-small\"><a href=\"$row[1]\" onclick=\"window.open(this.href, '_blank'); return false;\">» $row[0]</a></li>";
+
+			$row  = remove_magic_quotes(mysql_fetch_row($result));
+			}
+
+		$menu .= "</ul>";
+		}
+
+	return $menu;
+}
+//---------------------------------------------------------------------------
+function menuAuthor($IDlog)
+{
+	require "globals.php";
+	require "msg/weblog.php";
+
+	require_once "include/TMessage.php";
+
+	$msg  = new TMessage($_SESSION["ROOTDIR"]."/msg/".$_SESSION["lang"]."/weblog.php");
+
+	// lecture paramètres du blog
+	$result  = mysql_query("select _ID, _private from weblog where _IDlog = '$IDlog' limit 1", $mysql_link);
+	$auth    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+	// lecture de la base de données
+	$Query  = "select distinctrow weblog_items._ID ";
+	$Query .= "from weblog_items, weblog_data ";
+	$Query .= "where weblog_data._IDlog = '$IDlog' ";
+	$Query .= "AND weblog_data._IDdata = weblog_items._IDdata ";
+
+	$result = mysql_query($Query, $mysql_link);
+	$row    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+	$menu   = "" ;
+
+	if ( $row OR ($auth[0] == $_SESSION["CnxID"] AND $auth[1] == "O") ) {
+		$menu  = "<ul class=\"sousMenu\">";
+
+		if ( $auth[0] == $_SESSION["CnxID"] AND $auth[1] == "O" )
+			$menu .= "<li class=\"x-small\"><a href=\"".myurlencode("index.php?item=1&cmde=acl&ident=weblog&IDident=$IDlog")."\">". $msg->read($WEBLOG_EDIT) ."</a></li>";
+
+		while ( $row ) {
+			// lecture de la base de données
+			$Query  = "select weblog_items._ID ";
+			$Query .= "from weblog_items, weblog_data ";
+			$Query .= "where weblog_data._IDlog = '$IDlog' ";
+			$Query .= "AND weblog_data._IDdata = weblog_items._IDdata ";
+			$Query .= "AND weblog_items._ID = '$row[0]' ";
+
+			$return = mysql_query($Query, $mysql_link);
+			$nbrow  = ( $return ) ? mysql_numrows($return) : 0 ;
+
+			$menu  .= "<li class=\"x-small\"><a href=\"".myurlencode("index.php?item=36&cmde=visu&IDlog=$IDlog&IDuser=$row[0]")."\">» ".getUserName($row[0], false)." ($nbrow)</a></li>";
+
+			$row    = remove_magic_quotes(mysql_fetch_row($result));
+			}
+
+		$menu .= "</ul>";
+		}
+
+	return $menu;
+}
+//---------------------------------------------------------------------------
+function getAuthors($IDlog, $IDgroup)
+{
+	require "globals.php";
+
+	require_once "include/user.php";
+
+	$acl    = new user_acl("weblog");
+	$writer = Array();
+
+	// lecture des réacteurs du e-groupe
+	$Query  = "select distinctrow egroup_user._ID ";
+	$Query .= "from egroup_user, egroup_data ";
+	$Query .= "where egroup_data._IDdata = '$IDgroup' ";
+	$Query .= "AND egroup_user._IDdata = egroup_data._IDdata ";
+	$Query .= "AND egroup_user._access > 0 ";
+
+	$result = mysql_query($Query, $mysql_link);
+	$row    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+	while ( $row ) {
+		array_push($writer, $row[0]);
+
+		$row = mysql_fetch_row($result);
+		}
+
+	// lecture ACL
+	if ( $acl->isMember($IDlog, $_SESSION["CnxID"]) AND !in_array($_SESSION["CnxID"], $writer) )
+		array_push($writer, $_SESSION["CnxID"]);
+
+	return $writer;
+}
+//---------------------------------------------------------------------------
+?>
+
+
+<script type="text/javascript" src="script/edit.js"></script>
+
+
+<?php
+	// lecture paramètres du blog
+	$result  = mysql_query("select _ID, _IDgrprd from weblog where _IDlog = '$IDlog' limit 1", $mysql_link);
+	$auth    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+	// création du weblog s'il n'existe pas
+	if ( !$IDlog ) {
+		if ( $IDgroup ) {
+			// e-groupe ou e-campus
+			$query  = ( $IDgroup > 0 )
+				? "select _IDmod, _IDgrpwr, _IDgrprd from egroup_data where _IDdata = '$IDgroup' limit 1"
+				: "select _IDmod, _IDgrpwr, _IDgrprd from campus_data where _IDmat = abs($IDgroup) AND _lang = '".$_SESSION["lang"]."' limit 1" ;
+
+			$result = mysql_query($query, $mysql_link);
+			$row    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+			$idmod  = (int) $row[0];
+			$grpwr  = (int) $row[1];
+			$grprd  = (int) $row[2];
+			}
+		else {
+			// weblog personnel
+			$idmod  = $_SESSION["CnxID"];
+			$grpwr  = $_SESSION["CnxGrp"];
+			$grprd  = $_SESSION["CnxGrp"];
+			}
+
+		$result = mysql_query("select _IDlog from weblog where _IDgroup = '$IDgroup' AND _ID = '$idmod' limit 1", $mysql_link);
+		$row    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+		if ( mysql_numrows($result) )
+			$IDlog  = (int) $row[0];
+		else {
+			$Query  = "insert into weblog ";
+			$Query .= "values('', '$IDgroup', '$idmod', '".$_SESSION["CnxIP"]."', '$grpwr', '$grprd', '".date("Y-m-d H:i:s")."', '', 'N', 'O', 'N', 'O')";
+
+			if ( mysql_query($Query, $mysql_link) )
+				$IDlog  = mysql_insert_id();
+			}
+		}
+
+	// lecture paramètres du blog
+	$result  = mysql_query("select _ID, _IDgrprd, _IDgrpwr, _PJ, _comment, _IDgroup from weblog where _IDlog = '$IDlog' limit 1", $mysql_link);
+	$auth    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+	// vérification des autorisations
+	verifySessionAccess($auth[0], $auth[1]);
+
+	$IDgroup = $auth[5];
+
+	$title   = ( $IDgroup )
+		? $msg->read($WEBLOG_MYBLOG, $_SESSION["eGroupName"])
+		: $msg->read($WEBLOG_WELCOME, getUserName($auth[0])) ;
+?>
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($title); ?>
+	</div>
+</div>
+
+<?php
+	// le menu
+	print("
+		<div style=\"margin-bottom: 50px;\">
+		  <ul id=\"blogmenu\">
+			<li>
+				<a href=\"".myurlencode("index.php?item=$item&cmde=$cmde&IDlog=$IDlog&submit=about")."\" style=\"border: ".$_SESSION["CfgColor"]." solid 1px;\">". $msg->read($WEBLOG_ABOUT) ."</a>
+				". menuAbout($IDlog, $auth[0]) ."
+			</li>
+			<li>
+				<a href=\"#\" style=\"border: ".$_SESSION["CfgColor"]." solid 1px;\">". $msg->read($WEBLOG_CATEGORIES) ."</a>
+				". menuCategory($IDlog) ."
+			</li>
+			<li>
+				<a href=\"".myurlencode("index.php?item=$item&cmde=visu&IDlog=$IDlog")."\" style=\"border: ".$_SESSION["CfgColor"]." solid 1px;\">". $msg->read($WEBLOG_ARTICLES) ."</a>
+				". menuArticle($IDlog, $auth[0], $IDgroup) ."
+			</li>
+			<li>
+				<a href=\"#\" style=\"border: ".$_SESSION["CfgColor"]." solid 1px;\">". $msg->read($WEBLOG_COMMENTS) ."</a>
+				". menuComment($IDlog) ."
+			</li>
+			<li>
+				<a href=\"#\" style=\"border: ".$_SESSION["CfgColor"]." solid 1px;\">". $msg->read($WEBLOG_ARCHIVES) ."</a>
+				". menuArchive($IDlog) ."
+			</li>
+			<li>
+				<a href=\"#\" style=\"border: ".$_SESSION["CfgColor"]." solid 1px;\">". $msg->read($WEBLOG_LINKS) ."</a>
+				". menuLink($IDlog, $IDgroup) ."
+			</li>");
+
+	if ( $auth[2] & pow(2, $_SESSION["CnxGrp"] - 1) ) 
+		print("
+			<li>
+				<a href=\"#\" style=\"border: ".$_SESSION["CfgColor"]." solid 1px;\">". $msg->read($WEBLOG_AUTHORS) ."</a>
+				". menuAuthor($IDlog) ."
+			</li>");
+
+	print("
+		  </ul>
+		</div>");
+
+	// commande des utilisateurs
+	switch ( $submit ) {
+		case "about" :
+			require_once "weblog_about.php"; 
+			break;
+
+		case "tuning" :
+		case "tuning_ok" :
+			require_once "weblog_tuning.php"; 
+			break;
+
+		case "post" :
+		case "update" :
+		case "Valider" :
+			if ( $_SESSION["CnxID"] == $auth[0] OR in_array($_SESSION["CnxID"], getAuthors($IDlog, $IDgroup)) OR ($auth[2] & pow(2, $_SESSION["CnxGrp"] - 1)) )
+	         		require_once "weblog_post.php";
+			break;
+
+		case "link" :
+		case "link_ok" :
+			require_once "weblog_link.php"; 
+			break;
+
+		case "delpj" :
+		case "delete" :
+			if ( $_SESSION["CnxID"] == $auth[0] OR in_array($_SESSION["CnxID"], getAuthors($IDlog, $IDgroup)) OR ($auth[2] & pow(2, $_SESSION["CnxGrp"] - 1)) ) {
+				// lecture et suppression des PJ
+				$res = mysql_query("select _IDpj, _file from weblog_pj where _IDitem = '$IDitem'", $mysql_link);
+				$doc = ( $res ) ? remove_magic_quotes(mysql_fetch_row($res)) : 0 ;
+
+				while ( $doc ) {
+					if (  mysql_query("delete from weblog_pj where _IDpj = '$doc[0]' limit 1", $mysql_link) )
+						unlink("$DOWNLOAD/weblog/$IDitem-$doc[1]");
+
+					$doc = mysql_fetch_row($res);
+					}
+
+				// suppression message + réponse
+				if ( $submit == "delete" ) {
+					mysql_query("delete from weblog_items where _IDitem = '$IDitem'", $mysql_link);
+					mysql_query("delete from weblog_note where _IDitem = '$IDitem'", $mysql_link);
+					mysql_query("delete from weblog_pj where _IDitem = '$IDitem'", $mysql_link);
+					mysql_query("delete from weblog_vu where _IDitem = '$IDitem'", $mysql_link);
+					}
+				}
+			// et on enchaine...
+
+		default :
+			require_once "weblog_visu.php"; 
+			break;
+		}
+?>

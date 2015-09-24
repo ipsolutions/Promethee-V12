@@ -1,0 +1,5 @@
+Nous vous informons que votre enfant %1 %2
+a été signalé absent ce jour : %3
+et n'a pas assisté au cours : %4
+
+Cordialement.

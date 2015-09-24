@@ -1,0 +1,650 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2002-2007 by Dominique Laporte(C-E-D@wanadoo.fr)
+   Copyright (c) 2006 by Cyril Fresne (cyril.fresne@gmail.com)
+   Copyright (c) 2006 by Nordine Zetoutou (nordine.zetoutou@educagri.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : forum_post.htm
+ *		projet   : la page de saisie des messages du forum
+ *
+ *		version  : 1.6
+ *		auteur   : laporte
+ *		creation : 20/10/02
+ *		modif    : 21/05/03 - par D. Laporte
+ *                     ajout des smileys et du menu d'édition
+ *
+ *		           25/09/03 - par D. Laporte
+ *                     insertion de PJ dans un message
+ *
+ *		           11/11/03 - par D. Laporte
+ *                     modification d'un message
+ *
+ *		           8/04/04 - par D. Laporte
+ *                     implémentation de l'éditeur HTML
+ *
+ *		           12/04/05 - par D. Laporte
+ *                     validation automatique des messages
+ *                     
+ *                     15/06/06 - par cyril fresne
+ *                     migration PHP5
+ *
+ *		           17/07/06 - Nordine Zetoutou
+ * 	                 migration des balises HTML en XHTML 1.0 strict
+ */
+ 
+
+$IDgroup = ( @$_POST["IDgroup"] )		// identifiant du e-groupe
+	? (int) $_POST["IDgroup"]
+	: (int) @$_GET["IDgroup"] ;
+$IDroot  = ( @$_POST["IDroot"] ) 		// ID du répertoire racine
+	? (int) $_POST["IDroot"]
+	: (int) @$_GET["IDroot"] ;
+$IDforum = ( @$_POST["IDforum"] ) 		// ID du forum
+	? (int) $_POST["IDforum"]
+	: (int) @$_GET["IDforum"] ;
+$IDmsg   = ( @$_POST["IDmsg"] ) 		// ID du message
+	? (int) $_POST["IDmsg"]
+	: (int) @$_GET["IDmsg"] ;
+$msgid   = ( @$_POST["msgid"] ) 		// ID du message
+	? (int) $_POST["msgid"]
+	: (int) @$_GET["msgid"] ;
+$thread  = ( @$_POST["thread"] ) 		// ID du fil de discussion
+	? (int) $_POST["thread"]
+	: (int) @$_GET["thread"] ;
+$parent  = ( @$_POST["parent"] ) 		// ID du message parent
+	? (int) $_POST["parent"]
+	: (int) @$_GET["parent"] ;
+$visu    = ( @$_POST["visu"] ) 	      // commentaire
+	? $_POST["visu"]
+	: @$_GET["visu"] ;
+$deploy  = ( @$_POST["deploy"] ) 	      // déployer
+	? $_POST["deploy"]
+	: @$_GET["deploy"] ;
+
+$subject = ( @$_POST["subject"] ) 	      // sujet du message
+	? $_POST["subject"]
+	: @$_GET["subject"] ;
+$texte   = ( @$_POST["texte"] ) 	      // texte du message
+	? $_POST["texte"]
+	: @$_GET["texte"] ;
+$IDsmile = ( @$_POST["IDsmile"] )		// emoticon du mesage
+	? (int) @$_POST["IDsmile"]
+	: 1 ;
+$rb      = ( @$_POST["rb"] ) 	      	// commentaire
+	? $_POST["rb"]
+	: "M" ;
+$sign    = ( @$_POST["sign"] ) 	      // signature
+	? $_POST["sign"]
+	: "O" ;
+
+$submit  = ( @$_POST["submit"] )		// bouton de validation
+	? $_POST["submit"]
+	: @$_GET["submit"] ;
+?>
+
+
+<script type="text/javascript" src="script/edit.js"></script>
+
+<?php
+//---------------------------------------------------------------------------
+function attachment($IDmsg)
+{
+/*
+ * fonction :	enregistrement des PJ
+ * in :		$IDmsg : ID du message
+ * out :		tableau du path des différentes PJ
+ */
+
+	require "globals.php";
+
+	// transfert d'une Pièce Jointe
+	$file = @$_FILES["UploadPJ"]["tmp_name"];
+	$pj   = Array();
+
+	for ($j = 0; $j < count($file); $j++)
+		if (  @$file[$j] AND authfile(@$_FILES["UploadPJ"]["name"][$j]) ) {
+			// extension du fichier en PJ
+			$ext    = extension(@$_FILES["UploadPJ"]["name"][$j]);
+			$pjdesc = addslashes(trim(@$_POST["PJdesc"][$j]));
+
+			$Query  = "INSERT INTO forum_pj ";
+			$Query .= "values('', '$IDmsg', '$pjdesc', '$ext', '".@$_FILES["UploadPJ"]["size"][$j]."')";
+
+			if ( !mysql_query($Query, $mysql_link) )
+				sql_error($mysql_link);
+			else {
+				// fichier destination
+				$dest   = "$DOWNLOAD/forum/". mysql_insert_id() .".$ext";
+				$pj[$j] = $dest;
+
+				// copie du fichier temporaire -> répertoire de stockage
+				if ( move_uploaded_file($file[$j], $dest) )
+					mychmod($dest, $CHMOD);
+				}
+			}
+
+	return $pj;
+}
+//---------------------------------------------------------------------------
+
+	// lecture de la base de données des forums
+	$query  = "select _title, _IDmod, _PJ, _update, _autoval, _IDgrpwr, _image, _mailcp, _rss from forum_data ";
+	$query .= "where _IDforum = '$IDforum' ";
+	$query .= "limit 1";
+
+	$result = mysql_query($query, $mysql_link);
+	$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+	// vérification des autorisations
+	verifySessionAccess($row[1], $row[5]);
+
+	// autorisation de la saisie des PJ et de la modif du post
+	$is_pj   = $row[2];
+	$is_updt = $row[3];
+	$mailcp  = $row[7];
+	$is_rss  = $row[8];
+
+	// Attention aux forums modérés sans validation automatique
+	if ( $row[1] AND $row[4] == "N" )
+		// le Big Chef OU un modérateur valide directement son post dans le forum
+		$valid = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $row[1] ) ? "O" : "N" ;
+	else
+		// Attention : on ne valide aucun message des élèves (sauf validation automatique)
+		$valid = ( getAccess() == 2 OR $row[4] == "O" ) ? "O" : "N" ;
+?>
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($FORUM_MYFORUM, $row[0])); ?><br/>
+		<?php print($msg->read($FORUM_FORMPOST)); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+
+<?php
+	// nettoyage des caractères spéciaux
+	$subject = addslashes(trim($subject));
+	$texte   = addslashes(trim($texte));
+
+	// on revient sur le forum ou sur la liste des messages
+	$retour  = ( !$IDmsg )
+		? myurlencode("index.php?item=$item&IDgroup=$IDgroup&IDforum=$IDforum&IDroot=$IDroot&cmde=visu")
+		: myurlencode("index.php?item=$item&IDgroup=$IDgroup&IDforum=$IDforum&IDroot=$IDroot&IDmsg=$IDmsg&visu=$visu&deploy=$deploy&cmde=show") ;
+
+	// image hosting
+	$hostimg = ( strlen($row[6]) )
+		? "[<a href=\"$row[6]\" onclick=\"window.open(this.href, '_blank'); return false;\">".$msg->read($FORUM_IMPORT)."</a>]"
+		: "" ;
+
+	$error_subject = $error_texte = 0;
+
+	// commande de l'utilisateur
+	switch ( $submit ) {
+		case "Valider" :	// l'utilisateur a posté son message
+			// test de la saisie
+			$error_subject = ( strlen($subject) ) ? 0 : 1 ;
+			$error_texte   = ( strlen($texte) )   ? 0 : 1 ;
+
+			if ( !$error_subject AND !$error_texte ) {
+				// date de création du message
+				$date    = date("Y-m-d H:i:s");
+
+				// seul le modérateur du forum peut envoyer un post
+				$rb      = ( $_SESSION["CnxAdm"] & 4 ) ? $rb : "M" ;
+
+				$sign    = ( isset($sign) ) ? $sign : "N" ;
+
+				if ( $msgid ) {
+					// mise à jour du message
+					$Query  = "update forum_items ";
+					$Query .= "set _title = '$subject', _IDsmile = '$IDsmile', _texte = '$texte', _update = '$date', _type = '$rb', _sign = '$sign', _censor = 'N' ";
+					$Query .= "where _IDmsg = '$msgid' ";
+					$Query .= "limit 1";
+					}
+				else {
+					// nouveau message
+					$Query  = "insert into forum_items ";
+					$Query .= "values('', '$IDforum', '".$_SESSION["CnxID"]."', '".$_SESSION["CnxIP"]."', '$date', '$date', '$date', '$thread', '$IDmsg', '$subject', '$IDsmile', '$texte', '0', '$rb', '$sign', 'N', '$valid')";
+
+					if ( !$thread ) {
+						if ( mysql_query($Query, $mysql_link) )
+							$thread = mysql_insert_id();
+
+						$msgid  = $thread;
+
+						// mise à jour du fil de discussion
+						$Query  = "update forum_items ";
+						$Query .= "set _thread = '$thread' ";
+						$Query .= "where _IDmsg = '$thread' ";
+						$Query .= "limit 1";
+						}
+					}
+
+				if ( !mysql_query($Query, $mysql_link) )
+					sql_error($mysql_link);
+				else {
+					// transfert d'une Pièce Jointe
+					$dest = attachment($msgid ? $msgid : mysql_insert_id());
+
+					// alimentation flux rss
+					if ( $is_rss == "O" ) {
+						$query  = "insert into rss_items ";
+						$query .= "values('', '0', '$subject', '', '$texte', '".addslashes(getUserName($_SESSION["CnxID"], false))."', '".addslashes($msg->read($FORUM_MYFORUM))."', '".date("Y-m-d H:i:s", time())."', '".$_SESSION["lang"]."')";
+
+						mysql_query($query, $mysql_link);
+						}
+
+					// mise à jour de la date de dépôt du dernier message
+					mysql_query("update forum_data set _access = '$date' where _IDforum = '$IDforum' limit 1", $mysql_link);
+
+					// mise à jour de la date du dernier post dans le fil de discussion
+					mysql_query("update forum_items set _access = '$date' where _IDmsg = '$parent' limit 1", $mysql_link);
+
+					// mise à jour des logs réponse
+					if ( !$msgid ) {
+						// pour le message fils
+						if ( !mysql_query("update forum_items set _post = _post + 1 where _IDmsg = '$IDmsg' limit 1", $mysql_link) )
+							sql_error($mysql_link);
+						
+						// pour le message parent (s'il est différent)
+						if ( $IDmsg != $parent )
+							if ( !mysql_query("update forum_items set _post = _post + 1 where _IDmsg = '$parent' limit 1", $mysql_link) )
+								sql_error($mysql_link);
+						}
+
+					// mise à jour des logs d'activité
+					if ( !mysql_query("update user_id set _msg = _msg + 1 where _ID = '".$_SESSION["CnxID"]."' limit 1", $mysql_link) )
+						sql_error($mysql_link);
+
+					// envoie par email
+					if ( $mailcp == "O" AND $valid == "O" ) {
+						require_once "lib/libmail.php";
+
+						// entête du message
+						$subject = "[$row[0]] " . stripslashes($subject);
+
+						// entête du corps du message
+						$texte   = $msg->read($FORUM_WROTE, getUserName($_SESSION["CnxID"], false)) ."\n\n". stripslashes($texte);
+
+						// pied de page du corps du message
+						$texte  .= "\n--\n";
+						$texte  .= $_SESSION["CfgAdr"] . "\n";
+						$texte  .= $_SESSION["CfgWeb"];
+
+						$Query   = "select _ID from forum_list ";
+						$Query  .= "where _IDforum = '$IDforum' AND _visible = 'O'";
+
+						$result  = mysql_query($Query, $mysql_link);
+						$row     = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+						while ( $row ) {
+							$mymail = new Mail(); // create the mail
+
+							$Query  = "select _email from user_id ";
+							$Query .= "where _ID = '$row[0]' ";
+							$Query .= "limit 1";
+
+							$return = mysql_query($Query, $mysql_link);
+							$myrow  = ( $return ) ? mysql_fetch_row($return) : 0 ;
+
+							if ( $myrow[0] ) {
+								$mymail->From("noreply@".$_SESSION["CfgWeb"]);
+								$mymail->To($myrow[0]);
+								$mymail->Subject(stripslashes($subject));	
+								$mymail->Body(stripslashes($texte), $CHARSET);	// set the body
+
+								// pièces jointes
+								for ($i = 0; $i < count($dest); $i++)
+									$mymail->Attach($dest[$i], "", "attachment");
+
+								$mymail->Send();	// send the mail
+								}
+
+							$row    = mysql_fetch_row($result);
+							}
+						}
+
+					// message de remerciement
+					$visible = ( $valid == "N" )
+      					? $msg->read($FORUM_WARNING) ."<br/>"
+	      				: "" ;
+
+					print("
+						<p style=\"text-align:center;\">
+							". $msg->read($FORUM_SENDOK) ."<br/>
+      						$visible
+      						". $msg->read($FORUM_THANX) ."<br/>
+						      [".$msg->read($FORUM_BACKTOFORUM, $retour)."]
+						</p>
+						");
+					}
+				}
+			break;
+
+		case "reply" :	// l'utilisateur répond à un post
+		case "quote" :	//  l'utilisateur répond à un post en citant
+			// intialisation du message
+			$result  = mysql_query("select _title, _texte from forum_items where _IDmsg = '".@$_GET["msgid"]."' limit 1", $mysql_link);
+			$row     = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+			$subject = $msg->read($FORUM_RE, $row[0]);
+			$texte   = ( $submit == "quote" ) ? ">". str_replace("\n", "\n>", $row[1]) : "" ;
+			$IDsmile = 1;
+			$rb      = "M";
+			$sign    = "O";
+
+			$msgid   = 0;
+			break;
+
+		case "update" :	// l'utilisateur modifie son post
+			$msgid  = (int) @$_GET["msgid"];
+
+			// lecture du propriétaire du message
+			$result = mysql_query("select _ID from forum_items where _IDmsg = '$msgid' limit 1", $mysql_link);
+			$who    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+			if ( $_SESSION["CnxAdm"] == 255 OR ($is_updt == "O" AND $_SESSION["CnxID"] == $who[0]) ) {
+				// lecture du message
+				$result  = mysql_query("select _title, _IDsmile, _texte, _type, _sign from forum_items where _IDmsg = '$msgid' limit 1", $mysql_link);
+				$row     = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+				// initialisation des champs de saisie
+				$subject = $row[0];
+				$IDsmile = $row[1];
+				$texte   = $row[2];
+				$rb      = $row[3];
+				$sign    = $row[4];
+				}
+			break;
+
+		case "delpj" :	// l'utilisateur eface la pièce jointe
+			$IDpj   = (int) @$_GET["IDpj"];
+
+			// lecture du propriétaire du message
+			$query  = "select distinctrow forum_items._ID, forum_pj._ext from forum_items, forum_pj ";
+			$query .= "where forum_pj._IDpj = '$IDpj' ";
+			$query .= "AND forum_pj._IDmsg = forum_items._IDmsg ";
+			$query .= "limit 1";
+
+			$result = mysql_query($query, $mysql_link);
+			$row    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+			if ( $_SESSION["CnxAdm"] == 255 OR ($is_updt == "O" AND $_SESSION["CnxID"] == $row[0]) )
+				if ( mysql_query("delete from forum_pj where _IDpj = '$IDpj' limit 1", $mysql_link) )
+					unlink("$DOWNLOAD/forum/$IDpj.$row[1]");
+			break;
+
+		default :
+			break;
+		}
+
+	// saisie du formulaire si
+	// - l'utilisateur n'a pas validé OU
+	// - il y a une erreur de saisie => on redemande de compléter le formulaire
+	if ( $submit != "Valider" OR $error_subject OR $error_texte ) {
+
+		print("    
+		<form id=\"formulaire\" action=\"index.php\" method=\"post\" enctype=\"multipart/form-data\">
+			<p class=\"hidden\"><input type=\"hidden\" name=\"item\"    value=\"$item\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"IDgroup\" value=\"$IDgroup\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"IDforum\" value=\"$IDforum\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"IDmsg\"   value=\"$IDmsg\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"IDroot\"  value=\"$IDroot\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"thread\"  value=\"$thread\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"parent\"  value=\"$parent\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"msgid\"   value=\"$msgid\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"visu\"    value=\"$visu\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"deploy\"  value=\"$deploy\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"cmde\"    value=\"post\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"submit\"  value=\"Valider\" /></p>
+
+		  <table class=\"width100\">
+			  <tr>
+			    <td style=\"width:19%;\" class=\"valign-middle align-right\">".$msg->read($FORUM_AUTHOR)."</td>
+			    <td style=\"width:81%;\" class=\"valign-middle\">".$_SESSION["CnxName"]."</td>
+			  </tr>
+			");
+
+		// saisie du sujet
+		if ( $error_subject )
+			print("    
+			    <tr>
+			   	   <td style=\"width:100%;\" class=\"valign-middle align-left\" colspan=\"2\">
+				        <span style=\"color:#FF0000;\">". $msg->read($FORUM_ERRSUBJECT) ."</span>
+			      </td>
+			    </tr>
+			    	");
+    
+	    	print("
+		    <tr>
+	      	<td class=\"valign-middle align-right\">". $msg->read($FORUM_SUBJECT) ."</td>
+		      <td><label for=\"subject\"><input type=\"text\" id=\"subject\" name=\"subject\" size=\"50\" value=\"$subject\" /></label></td>
+		    </tr>
+		    	");
+
+		// affichage des smileys du sujet
+    		print("
+		    <tr>
+		      <td class=\"valign-middle align-right\">". $msg->read($FORUM_HUMEUR) ."</td>
+		      <td>
+		    	");
+
+		$res   = mysql_query("select _IDsmile, _ident from smileys where _type = 'H'", $mysql_link);
+		$smile = ( $res ) ? mysql_fetch_row($res) : 0 ;
+
+		while ( $smile ) {
+			$check = ( $smile[0] == $IDsmile ) ? "checked=\"checked\"" : "" ;
+
+			print("
+				<label for=\"smile_$smile[0]\">
+				<input type=\"radio\" id=\"smile_$smile[0]\" name=\"IDsmile\" value=\"$smile[0]\" $check /><img src=\"".$_SESSION["ROOTDIR"]."/images/smiley/forum/$smile[1].gif\" title=\"".$smile[1]."\" alt=\"".$smile[1]."\" />
+				</label>");
+
+			$smile = ( $res ) ? mysql_fetch_row($res) : 0 ;
+			}
+
+	    	print("
+		      </td>
+		    </tr>
+		    	");
+
+	// saisie du message à poster
+	if ( $error_texte )
+		print("    
+		    <tr>
+		   	   <td style=\"width:100%;\" class=\"valign-middle align-left\" colspan=\"2\">
+				<span style=\"color:#FF0000;\">". $msg->read($FORUM_ERRMESSAGE) ."</span>
+		      </td>
+		    </tr>
+		    	");
+
+    	print("
+		    <tr>
+		      <td class=\"align-right valign-top\">
+				<strong>".$msg->read($FORUM_MESSAGE)."</strong> <a href=\"#\" onclick=\"popWin('".$_SESSION["ROOTDIR"]."/spip_typo.php?lang=".$_SESSION["lang"]."', '450', '350'); return false;\">
+				<img src=\"".$_SESSION["ROOTDIR"]."/images/spip/aide.gif\" title=\"".$msg->read($FORUM_HELP)."\" alt=\"".$msg->read($FORUM_HELP)."\" /></a> :<br/>$hostimg
+		      </td>
+		      <td>
+		        <label for=\"texte\"><textarea id=\"texte\" name=\"texte\" rows=\"10\" cols=\"50\">$texte</textarea></label>
+		      </td>
+		    </tr>
+		    	");
+
+	// affichage des smileys d'édition
+    	print("
+		    <tr>
+		      <td class=\"valign-middle align-right\"><strong>Smileys :</strong></td>
+		      <td>
+			");
+
+		$res   = mysql_query("select _code, _ident from smileys where _type = 'T'", $mysql_link);
+		$smile = ( $res ) ? mysql_fetch_row($res) : 0 ;
+
+		while ( $smile ) {
+			print("
+				<img src=\"".$_SESSION["ROOTDIR"]."/images/smiley/forum/$smile[1].gif\" title=\" code: $smile[0] \"  alt=\" code: $smile[0] \" 
+				onclick=\"Javacript:ajoutsmile('$smile[0]')\" style=\"cursor: hand;\" />
+				");
+				
+			$smile = ( $res ) ? mysql_fetch_row($res) : 0 ;
+			}
+
+    	print("
+		      </td>
+		    </tr>
+		    	");
+
+	// lecture des Pièces Jointes
+	$res = mysql_query("select _IDpj, _ext, _size, _title from forum_pj where _IDmsg = '$msgid'", $mysql_link);
+	$row = ( $res ) ? mysql_fetch_row($res) : 0 ;
+
+	if ( $row AND $submit != "reply" AND $submit != "quote" ) {
+	    	print("
+		    <tr>
+		      <td class=\"valign-middle align-right\"><img src=\"".$_SESSION["ROOTDIR"]."/images/pj.gif\" title=\"\" alt=\"\" /></td>
+		      <td>
+			");
+
+		while ( $row ) {
+			// description de la pièce jointe
+			$desc = $msg->read($FORUM_SIZE, $row[2]) ."<br/>". $row[3];
+			$del  = "index.php?item=$item&IDgroup=$IDgroup&IDforum=$IDforum&IDroot=$IDroot&IDmsg=$IDmsg&parent=$parent&msgid=$msgid&cmde=post&IDpj=$row[0]&submit=delpj";
+
+			print("
+				<img src=\"".$_SESSION["ROOTDIR"]."/images/mime/$row[1].gif\" title=\"$row[1]\" alt=\"$row[1]\" />
+				". $msg->read($FORUM_DOC, Array("#", str_replace("'", "\'", $desc), "")) ."
+				<a href=\"".myurlencode($del)."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/corb.gif\" title=\"\" alt=\"\" /></a><br />
+				");
+
+			$row  = mysql_fetch_row($res);
+			}
+
+	    	print("
+		      </td>
+		    </tr>
+		    	");
+		}
+
+	// saisie Pièce Jointe sur un message
+	if ( $is_pj ) {
+		$addpj = ( $is_pj > 1 )
+			? "<span style=\"cursor: pointer;\" onclick=\"$('more')._display.toggle(); return false;\"><img src=\"".$_SESSION["ROOTDIR"]."/images/ajouter.gif\" title=\"\" alt=\"\" /></span>"
+			: "" ;
+
+	    	print("
+		    <tr>
+		      <td class=\"align-right valign-top\">
+				<strong>". $msg->read($FORUM_ATTACHMENT) ." :</strong><br />
+				$addpj
+			</td>
+			<td>");
+
+		print("
+			<fieldset style=\"width:80%; border:#cccccc solid 1px;\">
+			<legend>". $msg->read($FORUM_ATTACHMENT) ." 1</legend>
+				<p class=\"hidden\"><input type=\"hidden\" name=\"MAX_FILE_SIZE\" value=\"$FILESIZE\" /></p>
+				<input type=\"file\" name=\"UploadPJ[]\" size=\"50\" style=\"font-size:9px; margin-bottom:5px;\" /><br />
+				<label for=\"PJdesc_1\"><input type=\"text\" id=\"PJdesc_1\" name=\"PJdesc[]\" size=\"50\" /> ". $msg->read($FORUM_ATTDESCRIPTION) ."</label>
+			</fieldset>");
+
+		print("<div id=\"more\" style=\"display:none;\">");
+
+		for ($i = 2; $i <= $is_pj; $i++)
+			print("
+				<fieldset style=\"width:80%; border:#cccccc solid 1px;\">
+				<legend>". $msg->read($FORUM_ATTACHMENT) ." $i</legend>
+					<p class=\"hidden\"><input type=\"hidden\" name=\"MAX_FILE_SIZE\" value=\"$FILESIZE\" /></p>
+					<input type=\"file\" name=\"UploadPJ[]\" size=\"50\" style=\"font-size:9px; margin-bottom:5px;\" /><br />
+					<label for=\"PJdesc_$i\"><input type=\"text\" id=\"PJdesc_$i\" name=\"PJdesc[]\" size=\"50\" /> ". $msg->read($FORUM_ATTDESCRIPTION) ."</label>
+				</fieldset>");
+
+		print("</div>");
+
+		print("
+		      </td>
+		    </tr>");
+		}
+
+	// seuls les modérateurs
+	// OU le big chef ont accès aux Annonces ou aux Post-it
+	if ( $_SESSION["CnxAdm"] & 4 ) {
+		$check1 = ( $rb == "M" ) ? "checked=\"checked\"" : "" ;
+		$check2 = ( $rb == "P" ) ? "checked=\"checked\"" : "" ;
+
+	    	print("
+		    <tr>
+		      <td class=\"align-right valign-top\">". $msg->read($FORUM_POSTER) ."</td>
+		      <td>
+	      	  <table style=\"width: 200px\">
+			    <tr>
+			      <td style=\"width:50%;\" class=\"valign-top\"><label for=\"rb_M\"><input type=\"radio\" id=\"rb_M\" name=\"rb\" value=\"M\" $check1 />". $msg->read($FORUM_MESSAGE) ."</label></td>
+			      <td style=\"width:50%;\" class=\"valign-top\"><label for=\"rb_P\"><input type=\"radio\" id=\"rb_P\" name=\"rb\" value=\"P\" $check2 />". $msg->read($FORUM_ANNOUNCE) ."</label></td>
+			    </tr>
+			  </table>
+		      </td>
+		    </tr>
+		    ");
+		}
+
+	// la signature
+	// pour ceux qui peuvent accéder à leur compte
+	if ( getAccess() == 2 ) {
+		$check = ( $sign == "O" ) ? "checked=\"checked\"" : "" ;
+
+	    	print("
+		    <tr>
+		      <td class=\"align-right valign-top\">". $msg->read($FORUM_INCLUDE) ."</td>
+		      <td class=\"valign-top\"><label for=\"sign\"><input type=\"checkbox\" id=\"sign\" name=\"sign\" value=\"O\" $check />". $msg->read($FORUM_SIGNATURE) ."</label></td>
+		    </tr>
+		    	");
+	    }
+
+    	print("
+		  </table>
+
+         <table class=\"width100\">
+           <tr>
+              <td style=\"width:100%;\" colspan=\"2\"><hr style=\"width:80%;\" /></td>
+           </tr>
+           <tr>
+              <td style=\"width:19%;\" class=\"valign-middle align-right\">
+              	<input type=\"image\" src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/valid.gif\" name=\"valid\" alt=\"".$msg->read($FORUM_INPUTOK)."\" />
+              </td>
+              <td class= \"valign-middle\">". $msg->read($FORUM_SENDMESSAGE) ."</td>
+           </tr>
+           <tr>
+              <td class=\"valign-middle align-right\">
+              	<a href=\"$retour\"><img src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/cancel.gif\" title=\"\" alt=\"".$msg->read($FORUM_INPUTCANCEL)."\" /></a>
+              </td>
+              <td class= \"valign-middle\">
+			".$msg->read($FORUM_BACKTOLIST)."
+              </td>
+           </tr>
+         </table>
+
+		</form>
+			");
+		}
+?>
+
+</div>

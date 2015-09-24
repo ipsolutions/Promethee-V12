@@ -1,0 +1,246 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2009 by Dominique Laporte(C-E-D@wanadoo.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : support_post.htm
+ *		projet   : la page de saisie du RIT
+ *
+ *		version  : 1.0
+ *		auteur   : laporte
+ *		creation : 25/01/09
+ *		modif    : 
+ */
+
+
+$IDcentre = ( @$_POST["IDcentre"] ) 	// ID du centre
+	? (int) $_POST["IDcentre"]
+	: (int) $_SESSION["CnxCentre"] ;
+
+$IDdata   = (int) @$_POST["IDdata"];	// type d'incident
+$subject  = @$_POST["subject"];	 	// sujet du message
+$texte    = @$_POST["texte"];	 		// texte du message
+$danger   = @$_POST["danger"];		// danger grave et imminent
+
+$submit   = @$_POST["valid_x"];	 	// bouton de validation
+?>
+
+
+<script type="text/javascript" src="script/edit.js"></script>
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($SUPPORT_FORMPOST)); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+
+<?php
+	// lecture du droit d'écriture
+	$Query  = "select _IDgrpwr, _IDgrprd, _IDmod, _warnmodo from support ";
+	$Query .= "where _IDcentre = '$IDcentre' ";
+	$Query .= "limit 1";
+
+	$result = mysql_query($Query, $mysql_link);
+	$auth   = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+	// vérification des autorisations
+	verifySessionAccess($auth[2], $auth[0]);
+
+	// nettoyage des caractères spéciaux
+	$subject = stripslashes($subject);
+
+	$error_subject = $error_texte = 0;
+
+	// l'utilisateur a validé son message
+	if ( strlen($submit) ) {
+		// test de la saisie
+		$error_subject = ( strlen(trim($subject)) ) ? 0 : 1 ;
+		$error_texte   = ( strlen(trim($texte)) )   ? 0 : 1 ;
+
+		if ( !$error_subject AND !$error_texte ) {
+			$date   = date("Y-m-d H:i:s");
+
+			$Query  = "INSERT INTO support_items ";
+			$Query .= "values('', '$IDcentre', '$IDdata', '".$_SESSION["CnxID"]."', '".$_SESSION["CnxIP"]."', '$date', '". addslashes($subject) ."', '". addslashes($texte) ."', '', '', '$date', '', '', '$danger')";
+
+			if ( !mysql_query($Query, $mysql_link) )
+				$text = sql_error($mysql_link);
+			else {
+				$text = $msg->read($SUPPORT_THANX);
+
+				// on avertit le modérateur du post de l'utilisateur
+				if ( $auth[3] == "O" ) {
+					$Query  = "select user_id._email from user_id ";
+					$Query .= "where _ID = '$auth[2]' ";
+					$Query .= "limit 1";
+
+					$result = mysql_query($Query, $mysql_link);
+					$row    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+					// le post-it est prioritaire
+					if ( canRead($auth[2]) )
+						sendMessage($auth[2], "$subject", "$texte");
+					else
+						// sinon le mél
+						if ( strlen($row[0]) ) {
+							$mymail = new Mail(); 			// create the mail
+
+							$mymail->From(getUserName($_SESSION["CnxID"], false));
+							$mymail->To($row[0]);
+							$mymail->Subject("[". $msg->read($SUPPORT_RHS) ."] $subject");	
+							$mymail->Body("$texte", $CHARSET);
+
+							$mymail->Send();				// send the mail
+							}
+					}
+				}
+
+			print("
+				<p class=\"center\">
+      				$text<br/>
+				      [<a href=\"index.php?item=$item\">".$msg->read($SUPPORT_GOBACK)."</a>]
+				</p>
+				");
+			}
+		}
+
+	// saisie du formulaire si
+	// - l'utilisateur n'a pas validé OU
+	// - il y a une erreur de saisie => on redemande de compléter le formulaire
+	if ( !strlen($submit) OR $error_subject OR $error_texte ) {
+
+	    	print("
+		<form id=\"formulaire\" action=\"index.php\" method=\"post\">
+			<p class=\"hidden\"><input type=\"hidden\" name=\"item\"     value=\"$item\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"IDcentre\" value=\"$IDcentre\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"cmde\"     value=\"$cmde\" /></p>
+			");
+
+		print("
+		  <table class=\"width100\">
+		    <tr>
+		      <td style=\"width:20%;\" class=\"valign-middle align-right\">". $msg->read($SUPPORT_HITCH) ."</td>
+		      <td style=\"width:80%;\" class=\"valign-middle\">
+				<label for=\"IDdata\">
+			  	<select id=\"IDdata\" name=\"IDdata\">");
+
+					// lecture des types d'incident
+					$query  = "select _IDdata, _title from support_data ";
+					$query .= "where _lang = '".$_SESSION["lang"]."' ";
+					$query .= "order by _title";
+
+					$result = mysql_query($query, $mysql_link);
+					$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+					while ( $row ) {			
+						printf("<option value=\"$row[0]\" %s>$row[1]</option>", ($IDdata == $row[0]) ? "selected=\"selected\"" : "");
+
+						$row = remove_magic_quotes(mysql_fetch_row($result));
+						}				
+
+		print("
+				</select>
+				</label>
+			</td>
+		    </tr>
+		    <tr>
+			<td class=\"valign-middle align-right\">". $msg->read($SUPPORT_DATE) ."</td>
+			<td class= \"valign-middle\">".date2longfmt(date("Y-m-d H:i:s"))."</td>
+		    </tr>
+		    	");
+
+		// saisie du sujet
+		if ( $error_subject )
+			print("    
+			    <tr>
+			   	   <td style=\"width:100%;\" class=\"valign-middle align-justify\" colspan=\"2\">
+			   	     <span style=\"color:#FF0000;\">". $msg->read($SUPPORT_WARNING) ."
+			   	     ". $msg->read($SUPPORT_ERRSUBJECT) ."</span>
+				   </td>
+			    </tr>
+			    	");
+
+		print("    
+		    <tr>
+		      <td class=\"valign-middle align-right\">". $msg->read($SUPPORT_SUBJECT) ."</td>
+		      <td><label for=\"subject\"><input type=\"text\" id=\"subject\" name=\"subject\" size=\"45\" value=\"$subject\" /></label></td>
+		    </tr>
+		    	");
+
+		// saisie du message à poster
+		if ( $error_texte )
+			print("    
+			    <tr>
+			   	   <td style=\"width:100%;\" class=\"valign-middle align-justify\" colspan=\"2\">
+			   	     <span style=\"color:#FF0000;\">". $msg->read($SUPPORT_WARNING) ."". $msg->read($SUPPORT_ERRMSG) ."</span>
+				   </td>
+			    </tr>
+			    	");
+
+	    	print("
+		    <tr>
+		      <td class=\"align-right valign-top\">
+		        ".$msg->read($SUPPORT_MESSAGE)." <a href=\"#\" onclick=\"popWin('".$_SESSION["ROOTDIR"]."/spip_typo.php?lang=".$_SESSION["lang"]."', '450', '350'); return false;\">
+		        <img src=\"".$_SESSION["ROOTDIR"]."/images/spip/aide.gif\" title=\"".$msg->read($SUPPORT_HELP)."\" alt=\"".$msg->read($SUPPORT_HELP)."\" /></a> :<br/>
+			  ". $msg->read($SUPPORT_SUGGEST) ."
+		      </td>
+		      <td><label for=\"texte\"><textarea id=\"texte\" name=\"texte\" rows=\"10\" cols=\"39\">$texte</textarea></label></td>
+		    </tr>
+		    	");
+
+	    	print("
+		    <tr>
+		      <td class=\"align-right valign-top\">
+		        ". $msg->read($SUPPORT_PRIORITY) ."
+		      </td>
+		      <td>
+			  <label for=\"danger\"><input type=\"checkbox\" id=\"danger\" name=\"danger\" value=\"O\" /></label>
+		      </td>
+		    </tr>
+		  </table>
+		    	");
+
+	    	print("
+	         <table class=\"width100\">
+	           <tr>
+	              <td style=\"width:100%;\" colspan=\"2\"><hr style=\"width:80%;\" /></td>
+	           </tr>
+	           <tr>
+	              <td style=\"width:20%;\" class=\"valign-middle align-right\">
+	              	<input type=\"image\" src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/valid.gif\" name=\"valid\" alt=\"".$msg->read($SUPPORT_INPUTOK)."\" />
+	              </td>
+	              <td class=\"valign-middle align-left\">". $msg->read($SUPPORT_SENDNOTE) ."</td>
+	           </tr>
+	           <tr>
+	              <td class=\"valign-middle align-right\">
+	              	<a href=\"index.php?item=$item\"><img src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/cancel.gif\" title=\"\" alt=\"".$msg->read($SUPPORT_INPUTCANCEL)."\" /></a>
+	              </td>
+	              <td class=\"valign-middle align-left\">". $msg->read($SUPPORT_QUIT) ."</td>
+	           </tr>
+	         </table>
+
+		</form>
+			");
+		}
+?>
+</div>

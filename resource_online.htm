@@ -1,0 +1,396 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2007 by Dominique Laporte(C-E-D@wanadoo.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : resource_online.htm
+ *		projet   : la page des ressources en ligne
+ *
+ *		version  : 1.0
+ *		auteur   : laporte
+ *		creation : 4/02/07
+ *		modif    : 
+ */
+
+
+$IDres   = ( strlen(@$_POST["IDres"]) )		// identifiant de la ressource
+	? (int) $_POST["IDres"]
+	: (int) @$_GET["IDres"] ;
+$IDcat   = ( strlen(@$_POST["IDcat"]) )		// identifiant de la catégorie
+	? (int) $_POST["IDcat"]
+	: (int) @$_GET["IDcat"] ;
+$IDsel   = ( strlen(@$_POST["IDsel"]) )		// identifiant de la classe
+	? (int) $_POST["IDsel"]
+	: (int) (@$_GET["IDsel"] ? $_GET["IDsel"] : $_SESSION["CnxClass"]) ;
+$IDtype  = ( strlen(@$_POST["IDtype"]) )		// type de ressource
+	? (int) $_POST["IDtype"]
+	: (int) @$_GET["IDtype"] ;
+$IDitem  = ( @$_POST["IDitem"] )			// ID de la ressource
+	? (int) $_POST["IDitem"]
+	: (int) @$_GET["IDitem"] ;
+$words   = ( @$_POST["words"] )			// liste des mots-clef
+	? $_POST["words"]
+	: @$_GET["words"] ;
+
+$skpage  = ( @$_GET["skpage"] )			// n° de la page affichée
+	? (int) $_GET["skpage"]
+	: 1 ;
+$skshow  = ( @$_GET["skshow"] )			// n° du flash info
+	? (int) $_GET["skshow"]
+	: 1 ;
+
+$submit = ( @$_POST["submit"] )			// bouton de validation
+	? $_POST["submit"]
+	: @$_GET["submit"] ;
+?>
+
+
+<?php
+	// recherche de la catégorie de la ressource
+	$query   = "select _IDmod, _IDgrpwr, _IDgrprd, _nom from resource ";
+	$query  .= "where _IDres = '$IDres' AND _lang = '".$_SESSION["lang"]."' ";
+	$query  .= "limit 1";
+
+	$result = mysql_query($query, $mysql_link);
+	$auth   = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+	// vérification des autorisations
+	verifySessionAccess($auth[0], $auth[2]);
+
+	// initialisation
+	$IDmod  = $auth[0];
+	$grpwr  = $auth[1];
+	$grprd  = $auth[2];
+
+     	// seuls le big chef, le modérateur ou le propriétaire
+	// peuvent supprimer une ressource
+	switch ( $submit ) {
+		case "del" :	// on efface la ressource
+			$query  = "delete from resource_online ";
+			$query .= "where _IDitem = '$IDitem' ";
+			$query .= ( $_SESSION["CnxAdm"] == 255 ) ? "" : "AND _ID = '".$_SESSION["CnxID"]."' " ;
+			$query .= "limit 1";
+
+			if ( !mysql_query($query, $mysql_link) )
+				mysql_error($mysql_link);
+			break;
+
+		default :
+			break;
+		}
+
+// initialisation
+$href = "index.php?item=$item&IDres=$IDres&IDcat=$IDcat&IDsel=$IDsel&IDtype=$IDtype";
+?>
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($RESOURCE_ONLINE)); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+
+	<form id="formulaire" action="index.php?item=31&amp;IDres=<?php echo $IDres; ?>&amp;cmde=online" method="post">
+
+		<p style="margin:0px; text-align:justify">
+		<?php print($msg->read($RESOURCE_ONLINEDBA)); ?>
+		</p>
+
+		      <hr style="width:80%; text-align:center;" />
+
+			<table class="width100">
+			  <tr>
+			    <td style="width:50%;" class="align-right">
+			    	<?php print($msg->read($RESOURCE_CHOOSERES)); ?> 
+			    </td>
+			    <td style="width:50%;">
+				<label for="IDcat">
+			  	<select id="IDcat" name="IDcat" onchange="document.forms.formulaire.submit()">
+				  <option value="0"><?php print($msg->read($RESOURCE_ALLRESOURCE)); ?></option>
+					<?php
+						// affichage des catégories
+						$query  = "select _IDmat, _titre from campus_data ";
+						$query .= "where _visible = 'O' AND _lang = '".$_SESSION["lang"]."' ";
+						$query .= "order by _titre";
+
+						$result = mysql_query($query, $mysql_link);
+						$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+						while ( $row ) {			
+							if ( $IDcat == $row[0] )
+								print("<option selected=\"selected\" value=\"$row[0]\">$row[1]</option>");
+							else
+								print("<option value=\"$row[0]\">$row[1]</option>");
+
+							$row = remove_magic_quotes(mysql_fetch_row($result));
+							}	// endwhile catégorie
+					?>
+				</select> <img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/document.gif" title="" alt="" />
+				</label>
+			    </td>
+			  </tr>
+
+			  <tr>
+			    <td class="align-right">
+				<?php print($msg->read($RESOURCE_CHOOSELEVEL)); ?>
+			    </td>
+			    <td>
+				<label for="IDsel">
+			  	<select id="IDsel" name="IDsel" onchange="document.forms.formulaire.submit()">
+				  <option value="0"><?php print($msg->read($RESOURCE_ALLLEVEL)); ?></option>
+					<?php
+						// affichage des niveaux
+						$query  = "select _IDlevel, _ident from campus_level ";
+						$query .= "where _visible = 'O' AND _lang = '".$_SESSION["lang"]."' ";
+						$query .= "order by _IDlevel";
+
+						$result = mysql_query($query, $mysql_link);
+						$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+						while ( $row ) {			
+							if ( $IDsel == $row[0] )
+								print("<option selected=\"selected\" value=\"$row[0]\">$row[1]</option>");
+							else
+								print("<option value=\"$row[0]\">$row[1]</option>");
+
+							$row = remove_magic_quotes(mysql_fetch_row($result));
+							}
+					?>
+					</select> <img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/group.gif" title="" alt="" />
+					</label>
+			    </td>
+			  </tr>
+			</table>
+
+			<hr style="width:80%; text-align:center;" />
+
+		<?php
+	    		print("
+		            <table class=\"width100\">
+		              <tr>");
+
+	         	if ( $_SESSION["CnxAdm"] == 255 OR $IDmod == $_SESSION["CnxID"] OR ($grpwr & pow(2, $_SESSION["CnxGrp"] - 1)) )
+		    		print("
+					<td style=\"width:10%;\" class=\"valign-middle\">
+						<a href=\"".myurlencode("$href&cmde=new")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/post.gif\" title=\"\" alt=\"\" /></a>
+					</td>
+					<td class=\"valign-middle align-left\">". $msg->read($RESOURCE_ADDRESOURCE) ."</td>
+					");
+
+			$search = "
+				<input style=\"font-size: 11px; color: #000000; font-family: Arial\" 
+				onblur=\"if ( this.value == '' ) this.value = '".$msg->read($RESOURCE_KEYWORD)."';\" 
+				onfocus=\"if ( this.value == '".$msg->read($RESOURCE_KEYWORD)."' ) this.value = '';\" 
+				size=\"30\" value=\"". $msg->read($RESOURCE_KEYWORD) ."\" name=\"words\" />
+				<input type=\"image\" src=\"".$_SESSION["ROOTDIR"]."/images/go.gif\" title=\"". $msg->read($RESOURCE_LUNCHSEARCH) ."\" alt=\"". $msg->read($RESOURCE_LUNCHSEARCH) ."\" />";
+
+			print("
+			          <td class=\"align-right\">$search</td>
+		              </tr>
+		            </table>");
+
+			// sélection du type de contenu des ressources
+			$query   = "select _IDtype, _ident from resource_type ";
+			$query  .= "where _visible = 'O' AND _lang = '".$_SESSION["lang"]."' ";
+			$query  .= "order by _IDtype";
+
+			$result  = mysql_query($query, $mysql_link);
+			$row     = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+			$select  = "<label for=\"IDtype\">";
+			$select .= "<select id=\"IDtype\" name=\"IDtype\" onchange=\"document.forms.formulaire.submit()\">";
+
+			$select .= "<option value=\"0\">". $msg->read($RESOURCE_ALLCONTENT) ."</option>";
+			while ( $row ) {
+				$select .= ( $IDtype == $row[0] )
+					? "<option selected=\"selected\" value=\"$row[0]\">$row[1]</option>"
+					: "<option value=\"$row[0]\">$row[1]</option>" ;
+
+				$row = remove_magic_quotes(mysql_fetch_row($result));
+				}
+
+			$select .= "</select>";
+			$select .= "</label>";
+
+			print("
+				<div id=\"divDescription\"></div>
+
+		            <table class=\"width100\">
+		              <tr style=\"background-color:#C0C0C0;\">
+		                <td class=\"align-left\" style=\"width:90%;\" colspan=\"2\">$select</td>
+		                <td class=\"align-center\" style=\"width:10%;\">". $msg->read($RESOURCE_HIT) ."</td>
+		              </tr>
+		              ");
+
+			// les mots clefs
+			$kword  = "";
+			if ( $words != $msg->read($RESOURCE_KEYWORD) ) {
+				$list   = explode(" ", str_replace(Array(';', ','), Array(' ', ' '), $words));
+				if ( count($list) AND @strlen($list[0]) ) {
+					$kword .= "(_tags like '% $list[0] %'";
+					for ($i = 1; $i < count($list); $i++)
+						$kword .= " OR _tags like '% ".$list[$i]." %'";
+					$kword .= ")";
+					}
+				}
+
+			//---- lecture de la base de données ----
+			$Query  = "select _IDitem, _title, _texte, _url, _lang, _count, _break, _ID, _IP, _IDlicense, _date, _update ";
+			$Query .= "from resource_online ";
+			$Query .= "where _visible = 'O' " ;
+			$Query .= ( $IDsel )  ? "AND _IDgrprd like '% $IDsel %' " : "" ;
+			$Query .= ( $IDtype ) ? "AND _IDtype like '% $IDtype %' " : "" ;
+//			$Query .= ( $IDfunc ) ? "AND _IDfunc like '% $IDfunc %' " : "" ;
+			$Query .= ( $IDcat )  ? "AND _IDcat like '% $IDcat %' " : "" ;
+			$Query .= ( $kword )  ? "AND $kword " : "" ;
+			$Query .= "order by _IDitem desc";
+
+			// détermination du nombre de pages
+			$result = mysql_query($Query, $mysql_link);
+			$nbelem = ( $result ) ? mysql_affected_rows($mysql_link) : 0 ;
+
+			$page   = $nbelem;
+			$show   = 1;
+
+			if ( $nbelem ) {
+				$page  = ( $page % $MAXPAGE )
+					? (int) ($page / $MAXPAGE) + 1
+					: (int) ($page / $MAXPAGE) ;
+
+				$show  = ( $page % $MAXSHOW )
+					? (int) ($page / $MAXSHOW) + 1
+					: (int) ($page / $MAXSHOW) ;
+
+				// initialisation
+				$i     = 1;
+				$first = 1 + (($skpage - 1) * $MAXPAGE);
+				
+				// se positionne sur la page ad hoc
+				mysql_data_seek($result, $first - 1);
+				$row   = remove_magic_quotes(mysql_fetch_row($result));
+
+				while ( $row AND $i <= $MAXPAGE ) {
+					$bgcol = ( $i % 2 ) ? "item" : "menu" ;
+
+					// langue de la ressource
+					$img   = "spip/langues/$row[4]";
+
+					// texte descriptif de la ressource
+					$texte  = substr($row[2], 0, 80) . "... ";
+					$texte .= "[<a href=\"".myurlencode("$href&cmde=visu&IDitem=$row[0]")."\">". $msg->read($RESOURCE_MORE) ."</a>]";
+
+					// lecture de l'auteur de la ressource
+					$desc  = $msg->read($RESOURCE_AUTHOR) ." "; 
+					$desc .= ( $row[7] ) ? getUserName($row[7], false) : "Michèle Dreschler" ;
+
+					// lecture de l'adresse IP
+					$desc .= " " . _getHostName($row[8], false) . "<br/>" ;
+
+					// lecture de la license
+					$res   = mysql_query("select _texte from resource_license where _IDlicense = '$row[9]' AND _lang = '".$_SESSION["lang"]."' limit 1", $mysql_link);
+					$lic   = ( $res ) ? remove_magic_quotes(mysql_fetch_row($res)) : 0 ;
+
+					$desc .= $msg->read($RESOURCE_LICENSE) ." $lic[0]<br/>";
+
+					// dates création, modification
+					$desc .= $msg->read($RESOURCE_CREATBY) ." $row[10]";
+					$desc .= ( $row[11] == "0000-00-00 00:00:00" ) ? "" : "<br/>".$msg->read($RESOURCE_UPDTBY)." $row[11]" ;
+
+					// suppression des ressources
+					$req   = $msg->read($RESOURCE_ERASE);
+					$del   = ( $_SESSION["CnxAdm"] == 255 OR $row[7] == $_SESSION["CnxID"] )
+						? "<a href=\"".myurlencode("$href&cmde=online&IDitem=$row[0]&submit=del")."\" onclick=\"return confirmLink(this, '$req');\"><img src=\"".$_SESSION["ROOTDIR"]."/images/corb.gif\" title=\"$req\" alt=\"$req\" /></a>"
+						: "" ;
+
+					// modification des ressources
+					$maj   = ( $_SESSION["CnxAdm"] == 255 OR $row[7] == $_SESSION["CnxID"] )
+						? "<a href=\"".myurlencode("$href&cmde=new&IDitem=$row[0]")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/stats/post.gif\" title=\"". $msg->read($RESOURCE_RESMODIFY) ."\" alt=\"". $msg->read($RESOURCE_RESMODIFY) ."\" /></a>"
+						: "" ;
+
+					// on filtre les caractères spéciaux
+					$lien  = myurlencode("index.php?file=$row[3]");
+
+					// lecture du compteur des téléchargements
+					$res   = mysql_query("select _IDdown, _count from download_data where _file = '$row[3]'", $mysql_link);
+					$down  = ( $res ) ? mysql_fetch_row($res) : 0 ;
+
+					$link  = ( $down[0] )
+						? "<a href=\"#\" onclick=\"popWin('".$_SESSION["ROOTDIR"]."/user_list.php?sid=".$_SESSION["sessID"]."&amp;IDdown=$down[0]&amp;cmde=dwload&amp;lang=".$_SESSION["lang"]."', '450', '200'); return false;\">$down[1]</a>"
+						: "0" ;
+
+					print("
+						<tr class=\"$bgcol\">
+   		   			        <td style=\"width:1%;\"><img src=\"".$_SESSION["ROOTDIR"]."/images/$img\" title=\"$row[0]\" alt=\"$row[0]\" /></td>
+	      		    		  <td style=\"width:89%;\">
+      		    		  		<a href=\"$lien\" class=\"overlib\" onclick=\"window.open(this.href, '_blank'); return false;\">$row[1]<span>$desc</span></a> $maj $del<br/>
+      		    		  		<span class=\"x-small\">$texte</span>
+	      		    		  </td>
+			       	        <td class=\"align-center\">[$link]</td>
+						</tr>
+       					");
+
+					$i++;
+					$row = remove_magic_quotes(mysql_fetch_row($result));
+					}	// endwhile ressource
+				}	// endif nbelem
+					
+			print("
+           			</table>
+				");
+
+			// bouton précédent
+			$where = $skshow - 1;
+
+			if ( $skshow == 1 )
+				$prev = "";
+			else {
+				$skpg = 1 + (($skshow - 2) * $MAXSHOW);
+				$prev = "[<a href=\"".myurlencode("$href&cmde=online&skpage=$skpg&skshow=$where")."\">". $msg->read($RESOURCE_PREV) ."</a>]";
+				}
+
+			// liens directs sur n° de page
+			$start = 1 + (($skshow - 1) * $MAXSHOW);
+			$end   = $skshow * $MAXSHOW;
+
+			$choix = ( $skpage == $start )
+				? "<img src=\"".$_SESSION["ROOTDIR"]."/images/nav_left.gif\" title=\"«\" alt=\"«\" /><strong>$start</strong><img src=\"".$_SESSION["ROOTDIR"]."/images/nav_right.gif\" title=\"»\" alt=\"»\" />"
+				: "<a href=\"".myurlencode("$href&cmde=online&skpage=$start&skshow=$skshow")."\">$start</a>" ;
+
+			for ($j = $start + 1; $j <= $end AND $j <= $page; $j++)
+				$choix .= ( $skpage == $j )
+					? "|<img src=\"".$_SESSION["ROOTDIR"]."/images/nav_left.gif\" title=\"«\" alt=\"«\" /><strong>$j</strong><img src=\"".$_SESSION["ROOTDIR"]."/images/nav_right.gif\" title=\"»\" alt=\"»\" />"
+					: "|<a href=\"".myurlencode("$href&cmde=online&skpage=$j&skshow=$skshow")."\">$j</a>" ;
+
+			// bouton suivant
+			$where = $skshow + 1;
+			$next  = ( $skshow == $show )
+				? ""
+				: "[<a href=\"".myurlencode("$href&cmde=online&skpage=$j&skshow=$where")."\">". $msg->read($RESOURCE_NEXT) ."</a>]" ;
+		?>
+
+		<hr/>
+
+		<?php if ( $nbelem ) print("<div style=\"text-align:center;\">$prev $choix $next</div>"); ?>
+
+	</form>
+
+</div>

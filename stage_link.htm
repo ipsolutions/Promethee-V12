@@ -1,0 +1,338 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2003-2007 by Dominique Laporte(C-E-D@wanadoo.fr)
+   Copyright (c) 2006 by FG (persofg@gmail.com)
+   Copyright (c) 2006 by Nordine Zetoutou (nordine.zetoutou@educagri.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : stage_link.htm
+ *		projet   : la page de la fiche de liaison des stages
+ *
+ *		version  : 1.0
+ *		auteur   : laporte
+ *		creation : 17/02/03
+ *		modif    : 20/06/05 par FG
+ *                     migration -> PHP5
+ * 		           17/07/06 - par Nordine Zetoutou
+ * 	                 migration des balises HTML en XHTML 1.0 strict
+ */
+
+
+$IDstage   = ( @$_POST["IDstage"] )
+	? (int) $_POST["IDstage"]
+	: (int) @$_GET["IDstage"];
+$IDeleve   = ( @$_POST["IDeleve"] )
+	? (int) $_POST["IDeleve"]
+	: (int) (@$_GET["IDeleve"] ? $_GET["IDeleve"] : @$IDeleve) ;
+$visu      = (int) (@$_GET["visu"] ? $_GET["visu"] : @$visu) ;
+
+$travaux   = @$_POST["travaux"];
+$commstage = @$_POST["commstage"];
+$commeleve = @$_POST["commeleve"];
+$commlieu  = @$_POST["commlieu"];
+$problem   = @$_POST["problem"];
+$mode      = @$_POST["mode"];
+$idper     = @$_POST["idper"];
+
+$submit    = ( @$_POST["submit"] )
+	? $_POST["submit"]
+	: @$_GET["submit"] ;
+?>
+
+
+<?php
+	//---- accés protégé ----
+	$Query  = "select _IDgrprd, _IDgrpwr, _IDmod from stage_data ";
+	$Query .= "where _visible = 'O' AND _mod = '$cmde' ";
+	$Query .= "limit 1";
+
+	$result = mysql_query($Query, $mysql_link);
+	$row    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+	$grprd  = $row[0];
+	$grpwr  = $row[1];
+	$idmod  = $row[2];
+
+	// vérification des autorisations
+	verifySessionAccess($idmod, $grpwr);
+	//-----------------------
+
+	// action sur un lien
+	switch ( $submit ) {
+		case "next" :	// stage suivant
+		case "prev" :	// stage précédent
+			$Query   = "select _IDlieu, _travaux, _problem, _commstage, _commeleve, _IDstage from stage ";
+			$Query  .= "where _IDstage ". (( $submit == "next" ) ? ">" : "<") ." '$IDstage' ";
+			$Query  .= "AND _IDeleve = '$IDeleve' ";
+			$Query  .= "order by _IDstage ". (( $submit == "next" ) ? "asc" : "desc") ." limit 1";
+
+			$result  = mysql_query($Query, $mysql_link);
+			$stage   = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+			// initialisation
+			if ( mysql_affected_rows($mysql_link) )
+				$IDstage = $stage[5];
+			else {
+				$Query   = "select _IDlieu, _travaux, _problem, _commstage, _commeleve, _IDstage from stage ";
+				$Query  .= "where _IDstage = '$IDstage' ";
+
+				$result  = mysql_query($Query, $mysql_link);
+				$stage   = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+				}
+			break;
+
+		case "Valider" :	// l'utilisateur a validé
+			// mise à jour du stage
+			$Query  = "update stage ";
+			$Query .= "set _travaux = '$travaux', _problem = '$problem', _commstage = '$commstage', _commeleve = '$commeleve' ";
+			$Query .= "where _IDstage = '$IDstage' ";
+
+			mysql_query($Query, $mysql_link);
+
+			// mise à jour des périodes de stage
+			$Query  = "select _IDperiode from stage_periode ";
+			$Query .= "where _IDstage = '$IDstage' ";
+			$Query .= "order by _IDperiode desc";
+
+			$result = mysql_query($Query, $mysql_link);
+			$nbrec  = ( $result ) ? mysql_affected_rows($mysql_link) : 0 ;
+
+			for ($i = 0; $i < $nbrec; $i++)
+				if ( @$idper[$i] ) {
+					$Query  = "update stage_periode ";
+					$Query .= "set _mode = '$mode[$i]', _commlieu = '$commlieu[$i]' ";
+					$Query .= "where _IDperiode = '$idper[$i]' ";
+
+					mysql_query($Query, $mysql_link);
+					}
+//			break;
+
+		default :	// initialisation des champs
+			if ( $IDstage ) {
+				// lecture du stage
+				$Query   = "select _IDlieu, _travaux, _problem, _commstage, _commeleve from stage ";
+				$Query  .= "where _IDstage = '$IDstage' ";
+
+				$result  = mysql_query($Query, $mysql_link);
+				$stage   = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+				}
+			else {
+				// recherche des stages
+				$Query   = "select _IDlieu, _travaux, _problem, _commstage, _commeleve, _IDstage from stage ";
+				$Query  .= "where _IDeleve = '$IDeleve' ";
+				$Query  .= "order by _IDstage desc";
+
+				$result  = mysql_query($Query, $mysql_link);
+				$stage   = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+				// initialisation
+				$IDstage = $stage[5];
+				}
+			break;
+		}
+
+	//---- lecture lieu de stage
+	$Query  = "select _societe from stage_lieu ";
+	$Query .= "where _IDlieu = '$stage[0]' ";
+
+	$result = mysql_query($Query, $mysql_link);
+	$where  = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+	if ( $IDeleve ) {
+		//---- lecture élève
+		$Query  = "select _name, _fname, _IDclass from user_id ";
+		$Query .= "where _ID = '$IDeleve' AND _IDgrp = '1' ";
+		$Query .= "limit 1";
+
+		$result = mysql_query($Query, $mysql_link);
+		$eleve  = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+		//---- lecture de la classe
+		$Query  = "select _ident from campus_classe ";
+		$Query .= "where _IDclass = '$eleve[2]' ";
+		$Query .= "limit 1";
+
+		$result = mysql_query($Query, $mysql_link);
+		$classe = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+		//---- lecture des périodes de stage
+		$Query  = "select _debut, _fin, _ID, _mode, _commlieu, _IDperiode from stage_periode ";
+		$Query .= "where _IDstage = '$IDstage' ";
+		$Query .= "order by _IDperiode desc";
+
+		$result = mysql_query($Query, $mysql_link);
+		$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+		}
+?>
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($STAGE_LINK)); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+
+	<form action="index.php" method="post">
+	<?php
+		print("
+			<p class=\"hidden\"><input type=\"hidden\" name=\"item\"    value=\"$item\"/>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"cmde\"    value=\"$cmde\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"IDstage\" value=\"$IDstage\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"IDeleve\" value=\"$IDeleve\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"submit\"  value=\"Valider\" /></p>
+			");
+	?>
+
+        <table class="width100">
+          <tr>
+            <td style="width:30%;" class="align-right">
+              <?php print($msg->read($STAGE_NAME)); ?>
+            </td>
+            <td style="width:70%;"><?php print("$eleve[0] $eleve[1] ($classe[0])"); ?></td>
+          </tr>
+
+          <tr>
+            <td class="align-right valign-middle">
+              <?php 
+			// initialisation bouton suivant/précédent
+			$prev = "<a href=\"index.php?item=$item&amp;cmde=$cmde&amp;IDstage=$IDstage&amp;IDeleve=$IDeleve&amp;submit=prev\"><img src=\"".$_SESSION["ROOTDIR"]."/images/prev.gif\" title=\"". $msg->read($STAGE_PREV) ."\" alt=\"\" /></a>";
+			$next = "<a href=\"index.php?item=$item&amp;cmde=$cmde&amp;IDstage=$IDstage&amp;IDeleve=$IDeleve&amp;submit=next\"><img src=\"".$_SESSION["ROOTDIR"]."/images/next.gif\" title=\"". $msg->read($STAGE_NEXT) ."\" alt=\"\" /></a>";
+
+              	print("$prev | $next"); 
+              ?>
+              <?php print($msg->read($STAGE_MYCOMPANY)); ?>
+            </td>
+            <td class="valign-middle"><?php echo $where[0]; ?></td>
+          </tr>
+        </table>
+
+        <table class="width100">
+          <tr>
+            <td style="width:100%;" class="align-center" colspan="2">
+              <hr style="width:80%;" />
+            </td>
+          </tr>
+
+          <tr>
+            <td style="width:30%;" class="align-right">&nbsp;</td>
+            <td  style="width:70%;">
+            	<?php print($msg->read($STAGE_WORKDONE)); ?><br/>
+            	<?php
+            		print("
+					<p style=\"margin-top: 0; margin-bottom: 0\">
+					<label for=\"travaux\"><textarea id=\"travaux\" name=\"travaux\" rows=\"4\" cols=\"40\">$stage[1]</textarea></label>
+					</p>
+					");
+			?>
+            </td>
+          </tr>
+
+          <tr>
+            <td class="align-right"></td>
+            <td>
+            	<?php print($msg->read($STAGE_COMMENT2)); ?><br/>
+            	<?php
+            		print("
+					<p style=\"margin-top: 0; margin-bottom: 0\">
+					<label for=\"commstage\"><textarea ID=\"commstage\" name=\"commstage\" rows=\"4\" cols=\"40\">$stage[3]</textarea></label>
+					</p>
+					");
+			?>
+            </td>
+          </tr>
+
+          <tr>
+            <td class="align-right"></td>
+            <td>
+            	<?php
+            		print("
+					". $msg->read($STAGE_COMMENT3, $eleve[0]) ."<br/>
+					<p style=\"margin-top: 0; margin-bottom: 0\">
+					<label for=\"commeleve\"><textarea id=\"commeleve\" name=\"commeleve\" rows=\"4\" cols=\"40\">$stage[4]</textarea></label>
+					</p>
+					");
+			?>
+            </td>
+          </tr>
+
+	<?php
+		$i = 0;
+		while ( $row ) {
+			// seul le prof qui a effectué la visite peut modifier le commentaire
+			$texte  = (@$_SESSION["CnxID"] == $row[2] )
+				? "<label for=\"commlieu_$i\"><textarea id=\"commlieu_$i\" name=\"commlieu[$i]\" rows=\"4\" cols=\"40\">$row[4]</textarea></label>"
+				: "<table  class=\"width100\" style=\"background-color:#eeeeee;border-color:#eeeeee;\" >
+					  <tr>
+					    <td style=\"width:100%\">$row[4]</td>
+					  </tr>
+					</table>" ;
+
+			$rb[0]  = ( $row[3] == "D" ) ? "checked=\"checked\"" : "" ;
+			$rb[1]  = ( $row[3] == "T" ) ? "checked=\"checked\"" : "" ;
+
+			$suivi  = (@$_SESSION["CnxID"] == $row[2] )
+				? $msg->read($STAGE_RDV)."<label for=\"mode_D$i\"><input type=\"radio\" id=\"mode_D$i\" name=\"mode[$i]\" value=\"D\" $rb[0] /></label><br/>".$msg->read($STAGE_PHONE)."<label for=\"mode_T$i\"><input type=\"radio\" id=\"mode_T$i\" name=\"mode[$i]\" value=\"T\" $rb[1] /></label>"
+				: "(". $msg->read($STAGE_VISITEDBY) ." " . ($row[2] == "D" ? $msg->read($STAGE_RDV) : $msg->read($STAGE_PHONE)) . ")" ;
+
+			print("
+		          <tr>
+		            <td class=\"align-right valign-top\">". $msg->read($STAGE_FROMTO, Array($row[0], $row[1])) ."<br/>$suivi</td>
+		            <td>
+		            	". $msg->read($STAGE_COMMENT) ." ". getUserName($row[2]) ."<br/>
+					<p style=\"margin-top: 0; margin-bottom: 0\">$texte</p>
+					<p class=\"hidden\"><input type=\"hidden\" name=\"idper[$i]\" value=\"$row[5]\" /></p>
+		            </td>
+		          </tr>
+				");
+
+			$row = remove_magic_quotes(mysql_fetch_row($result));
+			$i++;
+			}
+	?>
+
+        </table>
+
+	<hr style="width:80%;" />
+
+        <table class="width100">
+	<?php
+		if ( $visu != 1 )
+        		print("
+		          <tr>
+				<td style=\"width:20%;\" class=\"valign-middle align-right\"><input type=\"image\" src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/valid.gif\" name=\"valid\" alt=\"".$msg->read($STAGE_INPUTOK)."\" /></td>
+				<td class= \"valign-middle\">". $msg->read($STAGE_VALID) ."</td>
+		          </tr>
+		       	");
+	?>
+
+	       <tr>
+			<td style="width:20%;" class="valign-middle align-right">
+				<?php print("<a href=\"index.php?item=$item&amp;cmde=visit&amp;IDclass=$eleve[2]\">"); ?>
+	             	<?php print("<img src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/cancel.gif\" title=\"\" alt=\"".$msg->read($STAGE_INPUTCANCEL)."\" />"); ?></a>
+			</td>
+			<td class="valign-middle"><?php print($msg->read($STAGE_QUIT)); ?></td>
+	       </tr>
+	     </table>
+
+      </form>
+
+</div>

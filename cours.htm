@@ -1,0 +1,464 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2005-2009 by Dominique Laporte(C-E-D@wanadoo.fr)
+   Copyright (c) 2006 by frédéric poyet(frederic.poyet@free.fr)
+   Copyright (c) 2006 by Nordine Zetoutou (nordine.zetoutou@educagri.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : cours.htm
+ *		projet   : la page des cours en ligne
+ *
+ *		version  : 1.1
+ *		auteur   : laporte
+ *		creation : 15/06/05
+ *		modif    : 11/06/06 - par Fred POYET
+ *                     migration php5
+ *		           17/07/06 - Nordine Zetoutou
+ * 	                 migration des balises HTML en XHTML 1.0 strict
+ */
+
+
+$IDcours = (int) @$_GET["IDcours"];			// ID du cours
+$IDsel   = ( strlen(@$_POST["IDsel"]) )		// Identifiant de la classe sélectionnée
+	? $_POST["IDsel"]
+	: (@$_GET["IDsel"] ? $_GET["IDsel"] : $_SESSION["CnxClass"]) ;
+$IDres   = ( @$_POST["IDres"] )			// Identifiant du type de ressource
+	? (int) $_POST["IDres"]
+	: (int) @$_GET["IDres"] ;
+$IDmat   = ( @$_POST["IDmat"] )			// Identifiant de la matière/formation
+	? (int) $_POST["IDmat"]
+	: (int) @$_GET["IDmat"] ;
+$IDdata  = ( @$_POST["IDdata"] )			// Identifiant de la matière
+	? (int) $_POST["IDdata"]
+	: (int) @$_GET["IDdata"] ;
+$IDcentre = ( strlen(@$_POST["IDcentre"]) )	// identifiant du centre
+	? (int) $_POST["IDcentre"]
+	: (int) (strlen(@$_GET["IDcentre"]) ? $_GET["IDcentre"] : $_SESSION["CnxCentre"]) ;
+
+$skpage  = ( @$_GET["skpage"] )			// n° de la page affichée
+	? (int) $_GET["skpage"]
+	: 1 ;
+$skshow  = ( @$_GET["skshow"] )			// n° du flash info
+	? (int) $_GET["skshow"]
+	: 1 ;
+?>
+
+
+<?php
+	//---------------------------------------------------------------------------
+	function in_my_array($array1, $array2)
+	{
+	/*
+	 * fonction :	compare 2 tableaux
+	 * in :		$array1 : tableau 1, $array2 : tableau 2
+	 * out :		true si une valeur a été trouvée, false sinon
+	 */
+
+		for ($i=0; $i < count($array1); $i++)
+			if ( in_array($array1[$i], $array2) )
+				return true;
+
+		return false;
+	}
+	//---------------------------------------------------------------------------
+
+
+	// on sélectionne la matière pédagogique ou la formation des campus
+	if ( $IDmat < 0 ) {
+		$Query  = "select _IDmod, _IDgrpwr, _IDgrprd from campus_classe ";
+		$Query .= "where _IDclass = abs($IDmat) ";
+		$Query .= "AND _visible = 'O' ";
+		$Query .= "limit 1";
+		}
+	else {
+		$Query  = "select _IDmod, _IDgrpwr, _IDgrprd from campus_data ";
+		$Query .= "where _IDmat = '$IDmat' ";
+		$Query .= "AND _visible = 'O' AND _lang = '".$_SESSION["lang"]."' ";
+		$Query .= "limit 1";
+		}
+
+	$result = mysql_query($Query, $mysql_link);
+	$row    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+	// vérification des autorisations
+	verifySessionAccess($row[0], $row[2]);
+
+	// initialisation
+	$IDmod  = $row[0];
+	$grpwr  = $row[1];
+	$IDdata = ( $IDmat < 0 ) ? $IDdata : $IDmat ;
+
+	// initialisation
+	if ( @$_GET["show"] ) {
+		$query  = "update cours ";
+		$query .= ( (int) $_GET["show"] > 1 ) ? "set _visible = 'O' " : "set _visible = 'N' " ;
+		$query .= "where _IDcours = '$IDcours' ";
+		$query .= ( $_SESSION["CnxAdm"] == 255 ) ? "" : "AND _IDmod = '".$_SESSION["CnxID"]."'";
+
+		mysql_query($query, $mysql_link);
+		}
+
+	// lecture de la base de données
+	if ( @$_GET["submit"] == "del" ) {
+		$query  = "delete from cours ";
+		$query .= "where _IDcours = '$IDcours' ";
+		$query .= "limit 1";
+
+		mysql_query($query, $mysql_link);
+		}
+?>
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($COURS_MYCOURSE, $_SESSION["CampusName"])); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+
+	<p><?php print($msg->read($COURS_DISCLAIMER)); ?></p>
+
+	<form id="formulaire" action="" method="post">
+
+	      <hr style="width:80%;" />
+
+		<table class="width100">
+		  <tr>
+		    <td style="width:50%;" class="align-right">
+		    	<?php print($msg->read($COURS_CHOOSEMATTER)); ?> 
+		    </td>
+		    <td style="width:50%;">
+			<label for="IDdata">
+		  	<select id="IDdata" name="IDdata" onchange="document.forms.formulaire.submit()">
+			  <option value="-1"><?php print($msg->read($COURS_ALLMATTER)); ?></option>
+				<?php
+					// affichage des catégories
+					$query  = "select _IDmat, _titre from campus_data ";
+					$query .= "where _visible = 'O' AND _lang = '".$_SESSION["lang"]."' ";
+					$query .= ( $_SESSION["CnxAdm"] == 255 ) ? "" : "AND (_IDgrprd & ". pow(2, $_SESSION["CnxGrp"] - 1) .") " ;
+					$query .= ( $IDmat > 0 ) ? "AND _IDmat = '$IDmat' " : "" ;
+					$query .= "order by _titre asc";
+
+					$result = mysql_query($query, $mysql_link);
+					$row    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+					while ( $row ) {
+						//-- détermination du nombre de cours / matière
+						$Query  = "select _IDcours from cours ";
+						$Query .= "where _IDmat = '$row[0]'";
+
+						$return = mysql_query($Query, $mysql_link);
+						$nbfile = ( $return ) ? mysql_numrows($return) : 0 ;
+
+						$select = ( $IDdata == $row[0] OR $_SESSION["CampusName"] == $row[1] ) ? "selected=\"selected\"" : "" ;
+
+			         		if ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $IDmod OR ($grpwr & pow(2, $_SESSION["CnxGrp"] - 1))
+							OR $nbfile )
+							print("<option value=\"$row[0]\" $select>$row[1] ($nbfile)</option>");
+
+						$row    = mysql_fetch_row($result);
+						}	// endwhile catégorie
+				?>
+			</select> <img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/document.gif" title="" alt="" />
+			</label>
+		    </td>
+		  </tr>
+
+		  <tr>
+		    <td class="align-right">
+				<?php print($msg->read($COURS_CHOOSECLASS)); ?>
+		    </td>
+		    <td>
+			<label for="IDsel">
+		  	<select id="IDsel" name="IDsel" onchange="document.forms.formulaire.submit()">
+				<option value="0"><?php print($msg->read($COURS_ALLCLASS)); ?></option>
+				<?php
+					$_class = Array();
+	
+					// affichage des classes
+					$query  = "select _IDclass, _ident from campus_classe ";
+					$query .= "where _visible = 'O' AND _IDcentre = '$IDcentre' ";
+					$query .= ( strlen($_SESSION["CampusName"]) AND $IDmat < 0 ) ? "AND _ident = '".$_SESSION["CampusName"]."' " : "" ;
+					$query .= "order by _ident";
+
+					$result = mysql_query($query, $mysql_link);
+					$grp    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+					while ( $grp ) {
+						array_push($_class, $grp[0]);
+
+						//-- détermination du nombre de cours / matière
+						$Query  = "select _IDcours from cours ";
+						$Query .= "where _IDgrp like '% $grp[0] %'";
+
+						$return = mysql_query($Query, $mysql_link);
+						$nbfile = ( $return ) ? mysql_numrows($return) : 0 ;
+
+						$select = ( $IDsel == $grp[0] OR $_SESSION["CampusName"] == $grp[1] )
+							? "selected=\"selected\""
+							: "" ;
+
+						print("<option value=\"$grp[0]\" $select>$grp[1] ($nbfile)</option>");
+
+						$grp    = mysql_fetch_row($result);
+						}
+				?>
+			</select> <img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/group.gif" title="" alt="" />
+			</label>
+		    </td>
+		  </tr>
+		</table>
+
+		<hr style="width:80%;" />
+
+		</form>
+
+		<?php
+			require_once "include/user.php";
+
+			if ( $IDmat > 0 OR $IDdata > 0 ) {
+				// vérification de l'accès en écriture
+				$link = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $IDmod OR ($grpwr & pow(2, $_SESSION["CnxGrp"] - 1)) )
+					? "<a href=\"".myurlencode("index.php?item=$item&IDsel=$IDsel&IDmat=$IDmat&IDdata=$IDdata&cmde=new")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/post.gif\" title=\"\" alt=\"\" /></a>"
+					: "" ;
+
+				$text = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $IDmod OR ($grpwr & pow(2, $_SESSION["CnxGrp"] - 1)) )
+					? $msg->read($COURS_ADDCOURSE)
+					: "" ;
+				}
+			else
+				$link = $text = "";
+
+			print("
+		            <table class=\"width100\">
+		              <tr>
+		                <td style=\"width:10%;\" class=\"valign-middle\">$link</td>
+		                <td style=\"width:40%;\" class=\"valign-middle\">$text &nbsp;</td>
+		                <td class=\"valign-middle align-right\">
+					". $msg->read($COURS_NEXTPREV) ."
+		                </td>
+		              </tr>
+		            </table>
+				");
+
+			print("
+		            <table class=\"width100\">
+		              <tr style=\"background-color:#c0c0c0;\">
+		                <td style=\"width:65%;\" class=\"align-center\" colspan=\"2\">". $msg->read($COURS_IDENT) ."</td>
+		                <td style=\"width:20%;\" class=\"align-center\">". $msg->read($COURS_DOCUMENT) ."</td>
+		                <td style=\"width:15%;\" class=\"align-center\">". $msg->read($COURS_LENGTH) ."</td>
+		              </tr>
+				");
+
+			// pour les cours privés (gestion par ACL)
+			$acl = new user_acl("course");
+
+			// lecture de la base de données
+			$Query  = "select _titre, _texte, _date, _IDmod, _IP, _visible, _IDcours, _private, _IDgrprd, _IDgrp from cours ";
+			$Query .= ( $IDdata > 0 ) ? "where _IDmat = '$IDdata' " : "where _IDmat " ;
+			$Query .= ( $_SESSION["CnxAdm"] == 255 ) ? "" : "AND (_IDmod = '".$_SESSION["CnxID"]."' OR _visible = 'O') ";
+			$Query .= ( $IDsel ) ? "AND _IDgrp like '% $IDsel %' " : "" ;
+			$Query .= "order by _titre asc";
+
+			// détermination du nombre de pages
+			$result = mysql_query($Query, $mysql_link);
+			$nbelem = ( $result ) ? mysql_numrows($result) : 0 ;
+
+			$page   = $nbelem;
+			$show   = 0;
+
+			$date   = date("Y-m-d H:i:s");
+
+			if ( $nbelem ) {
+				$page  = ( $page % $MAXPAGE )
+					? (int) ($page / $MAXPAGE) + 1
+					: (int) ($page / $MAXPAGE) ;
+
+				$show  = ( $page % $MAXSHOW )
+					? (int) ($page / $MAXSHOW) + 1
+					: (int) ($page / $MAXSHOW) ;
+
+				// initialisation
+				$i     = 1;
+				$first = 1 + (($skpage - 1) * $MAXPAGE);
+
+				// se positionne sur la page ad hoc
+				mysql_data_seek($result, $first - 1);
+				$row   = remove_magic_quotes(mysql_fetch_row($result));
+
+				while ( $row AND $i <= $MAXPAGE AND in_my_array($_class, explode(" ", $row[9])) ) {
+					$bgcol = ( $i++ % 2 ) ? "item" : "menu" ;
+
+		             	// ouverture/fermeture de cours
+					$icone = ( $row[5] == "O" )
+						? "<img src=\"".$_SESSION["ROOTDIR"]."/images/file.gif\" title=\"".$msg->read($COURS_CLOSECOURSE)."\" alt=\"".$msg->read($COURS_CLOSECOURSE)."\" />"
+						: "<img src=\"".$_SESSION["ROOTDIR"]."/images/lock.gif\" title=\"".$msg->read($COURS_OPENCOURSE)."\" alt=\"".$msg->read($COURS_OPENCOURSE)."\" />" ;
+
+					if ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $row[3] )
+						$image = ( $row[5] == "O" )
+							? "<a href=\"".myurlencode("index.php?item=$item&IDmat=$IDmat&IDdata=$IDdata&IDsel=$IDsel&IDcours=$row[6]&show=1")."\">$icone</a>"
+							: "<a href=\"".myurlencode("index.php?item=$item&IDmat=$IDmat&IDdata=$IDdata&IDsel=$IDsel&IDcours=$row[6]&show=2")."\">$icone</a>" ;
+					else
+						$image = $icone;
+
+		             	// lien des cours
+					$lien  = ( $row[5] == "O" )
+						? "index.php?item=$item&IDmat=$IDmat&IDdata=$IDdata&IDcours=$row[6]&cmde=visu"
+						: ( ($_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $row[3])
+							? "index.php?item=$item&IDmat=$IDmat&IDdata=$IDdata&IDcours=$row[6]&cmde=visu"
+							: "*" );
+
+					// texte descriptif du cours
+					$texte = ( strlen($row[1]) > 35 )
+						? substr($row[1], 0, 35) . "..."
+						: $row[1] ;
+					$texte = str_replace("<br/>", " ", $texte);
+
+					// lecture du modérateur du cours
+					$desc  = $msg->read($COURS_MODO) ." ". getUserName($row[3], false);
+
+					// lecture de l'adresse IP
+					$desc .=  " " . _getHostName($row[4], false) . "<br/>";
+
+					// date de création
+					$desc .= $msg->read($COURS_CREATEBY, $row[2]);
+
+					// le cours est-il privé ?
+					if ( $row[7] == "O" ) {
+						$link = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $row[3] OR $acl->isMember($row[6], $_SESSION["CnxID"]) )
+							? "<a href=\"".myurlencode($lien)."\" class=\"overlib\">$row[0]<span>$desc</span></a>"
+							: $row[0] ;
+
+						$priv = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $row[3] )
+							? "<a href=\"".myurlencode("index.php?item=1&cmde=acl&ident=course&IDident=$row[6]")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/invisible.gif\" title=\"".$msg->read($COURS_PRIVATE)."\" alt=\"".$msg->read($COURS_PRIVATE)."\"/></a>"
+							: "<img src=\"".$_SESSION["ROOTDIR"]."/images/invisible.gif\" title=\"". $msg->read($COURS_PRIVATE) ."\" alt=\"". $msg->read($COURS_PRIVATE) ."\" />" ;
+						}
+					else {
+						$link = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $row[3] OR ($row[8] & pow(2, $_SESSION["CnxGrp"] - 1)) )
+							? "<a href=\"".myurlencode($lien)."\" class=\"overlib\">$row[0]<span>$desc</span></a>"
+							: $row[0] ;
+
+						$priv = "";
+						}
+
+					// modification du cours
+					$maj    = ( $_SESSION["CnxAdm"] == 255 OR $row[3] == $_SESSION["CnxID"] )
+						? "<a href=\"".myurlencode("index.php?item=$item&IDcours=$row[6]&IDmat=$IDmat&IDdata=$IDdata&cmde=new")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/stats/post.gif\" title=\"". $msg->read($COURS_MODIFY) ."\" alt=\"". $msg->read($COURS_MODIFY) ."\"/></a>"
+						: "" ;
+
+					// backoffice du cours
+					$back   = ( $_SESSION["CnxAdm"] == 255 OR $row[3] == $_SESSION["CnxID"] )
+						? "<a href=\"".myurlencode("index.php?item=$item&IDcours=$row[6]&IDmat=$IDmat&IDdata=$IDdata&cmde=gestion")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/tools.gif\" title=\"". $msg->read($COURS_CONFIGURE) ."\" alt=\"". $msg->read($COURS_CONFIGURE) ."\" /></a>"
+						: "" ;
+
+					// détermination du nombre de dossiers
+					$query  = "select _IDdata from cours_data ";
+					$query .= "where _IDcours = '$row[6]' ";
+					$query .= ( $_SESSION["CnxAdm"] == 255 ) ? "" : "AND (_ID = '".$_SESSION["CnxID"]."' OR _visible = 'O') ";
+					$query .= ( $_SESSION["CnxAdm"] == 255 ) ? "" : "AND (_ID = '".$_SESSION["CnxID"]."' OR _open <= '$date') ";
+
+					$return = mysql_query($query, $mysql_link);
+					$nbdir  = ( $return ) ? mysql_numrows($return) : 0 ;
+
+					$msg->isPlural = (bool) ( $nbdir > 1 );
+					$mytxt  = $msg->read($COURS_NBDIR, "$nbdir") ."<br/>";
+
+					// détermination du nombre de fichiers
+					$query  = "select COUNT(_IDitem), SEC_TO_TIME(SUM(TIME_TO_SEC(_time))) from cours_items ";
+					$query .= "where _IDcours = '$row[6]' ";
+					$query .= ( $_SESSION["CnxAdm"] == 255 ) ? "" : "AND (_ID = '".$_SESSION["CnxID"]."' OR _visible = 'O') ";
+					$query .= ( $_SESSION["CnxAdm"] == 255 ) ? "" : "AND (_ID = '".$_SESSION["CnxID"]."' OR _open <= '$date') ";
+
+					$return = mysql_query($query, $mysql_link);
+					$myrow  = ( $return ) ? mysql_fetch_row($return) : 0 ;
+					$nbfile = (int) @$myrow[0];
+
+					$msg->isPlural = (bool) ( $nbfile > 1 );
+					$mytxt .= $msg->read($COURS_NBFILE, "$nbfile");
+
+					// suppression du cours
+					$delete = ( ($_SESSION["CnxAdm"] == 255 OR $row[3] == $_SESSION["CnxID"]) AND !$nbdir AND !$nbfile )
+						? "<a href=\"".myurlencode("index.php?item=$item&IDmat=$IDmat&IDcours=$row[6]&submit=del")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/corb.gif\" title=\"". $msg->read($COURS_DELETECOURSE) ."\" alt=\"". $msg->read($COURS_DELETECOURSE) ."\" /></a>"
+						: "" ;
+
+					// durée
+					$time   = ( $myrow[1] != "00:00:00" )
+						? str_replace(":", $msg->read($COURS_HOUR), substr($myrow[1], 0, 5))
+						: "" ;
+
+					print("
+						<tr class=\"$bgcol\">
+   		   			        <td style=\"width:1%;\">$image</td>
+	      		    		  <td>
+      		    		  		$link $priv $maj $back $delete<br/>
+      		    		  		<span class=\"x-small\">". $msg->read($COURS_DESCRIPTION) ." $texte</span>
+	      		    		  </td>
+			       	        <td class=\"align-center\">$mytxt</td>
+	      		    		  <td class=\"align-center\">$time</td>
+						</tr>
+       					");
+
+					$row = remove_magic_quotes(mysql_fetch_row($result));
+					}	// endwhile ressource
+				}	// endif nbelem
+					
+			print("</table>");
+		?>
+
+		<?php
+			// bouton précédent
+			$where = $skshow - 1;
+			if ( $skshow == 1 )
+				$prev = "";
+			else {
+				$skpg = 1 + (($skshow - 2) * $MAXSHOW);
+				$prev = "[<a href=\"".myurlencode("index.php?item=$item&IDres=$IDres&IDmat=$IDmat&IDdata=$IDdata&skpage=$skpg&skshow=$where")."\">". $msg->read($COURS_PREV) ."</a>";
+				}
+
+			// liens directs sur n° de page
+			$start = 1 + (($skshow - 1) * $MAXSHOW);
+			$end   = $skshow * $MAXSHOW;
+
+			$choix = ( $skpage == $start )
+				? "<img src=\"".$_SESSION["ROOTDIR"]."/images/nav_left.gif\" title=\"«\" alt=\"«\" /><strong>$start</strong><img src=\"".$_SESSION["ROOTDIR"]."/images/nav_right.gif\" title=\"»\" alt=\"»\" />"
+				: "<a href=\"".myurlencode("index.php?item=$item&IDres=$IDres&IDmat=$IDmat&IDdata=$IDdata&skpage=$start&skshow=$skshow")."\">$start</a>" ;
+
+			for ($j = $start + 1; $j <= $end AND $j <= $page; $j++)
+				$choix .= ( $skpage == $j )
+					? "|<img src=\"".$_SESSION["ROOTDIR"]."/images/nav_left.gif\" title=\"«\" alt=\"«\" /><strong>$j</strong><img src=\"".$_SESSION["ROOTDIR"]."/images/nav_right.gif\" title=\"»\" alt=\"»\" />"
+					: "|<a href=\"".myurlencode("index.php?item=$item&IDres=$IDres&IDmat=$IDmat&IDdata=$IDdata&skpage=$j&skshow=$skshow")."\">$j</a>" ;
+
+			// bouton suivant
+			$where = $skshow + 1;
+			$next = ( $skshow == $show )
+				? ""
+				: $msg->read($COURS_NEXT) ;
+		?>
+
+	      <hr/>
+			<?php if ( $nbelem ) print("<div style=\"text-align:center;\">$prev $choix $next</div>"); ?>
+	      <hr/>
+            
+		<!-- recherche d'un cours dans les archives -->
+	      <img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/search.gif" title="" alt="" />
+		<?php print($msg->read($COURS_SEARCHCOURSE, myurlencode("index.php?item=91&IDmat=$IDmat&IDdata=$IDdata&cmde=search&rub=9"))); ?>
+
+</div>

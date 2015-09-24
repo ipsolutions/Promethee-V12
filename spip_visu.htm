@@ -1,0 +1,308 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2003-2007 by Dominique Laporte(C-E-D@wanadoo.fr)
+   Copyright (c) 2006 by Didier Roy (miraceti@free.fr)
+   Copyright (c) 2006 by Nordine Zetoutou (nordine.zetoutou@educagri.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : spip_visu.htm
+ *		projet   : la page de visualisation des publications par Internet
+ *
+ *		version  : 1.1
+ *		auteur   : laporte
+ *		creation : 6/09/03
+ *		modif    : 20/06/06 - par Didier Roy
+ * 		           migration PHP5
+ *		           17/07/06 - Nordine Zetoutou
+ * 	                 migration des balises HTML en XHTML 1.0 strict
+ */
+?>
+
+
+	<?php
+		require_once "include/smileys.php";
+		require_once "include/spip.php";
+
+	    	// lecture de la publi
+		$Query  = "select _template, _title, _align, _IDmod, _lock from flash ";
+		$Query .= "where _IDflash = '$IDflash' ";
+		$Query .= "limit 1";
+
+		$result = mysql_query($Query, $mysql_link);
+		$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+		if ( $row ) {
+			// initialisation
+			if ( $IDinfos == 0 ) {
+			    	// lecture de la 1ère info de la publi
+			    	// NB : une fois l'accès en écriture verrouillé, seules les publis valides sont visualisables
+				$Query   = "select _IDinfos from flash_data ";
+				$Query  .= "where _IDflash = '$IDflash' ";
+				$Query  .= ( $row[4] == "O" ) ? "AND _visible = 'O' " : "" ;
+				$Query  .= "order by _IDinfos asc ";
+				$Query  .= "limit 1";
+
+				$result  = mysql_query($Query, $mysql_link);
+				$info    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+				$IDinfos = $info[0];
+				}
+
+			// on charge le modèle
+			$file   = "download/spip/templates/".$_SESSION["lang"]."/$row[0]";
+
+			if ( ($fp = fopen($file, "r")) != 0 ) {
+			    	// log des clicks sur l'info de la publi
+				mysql_query("update flash_data set _hit = _hit + 1 where _IDinfos = '$IDinfos' limit 1", $mysql_link);
+
+			    	// lecture de l'info de la publi
+				$Query   = "select _title, _align, _color, _snd, _repeat, _img, _date, _modif, _ID, _IP, _hit from flash_data ";
+				$Query  .= "where _IDinfos = '$IDinfos' ";
+				$Query  .= "limit 1";
+
+				$result  = mysql_query($Query, $mysql_link);
+				$info    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+			    	// création de l'en-tête de l'info
+				// seul le modérateur a les infos complètes concernant l'en-tête
+				$header  = "";
+
+				if ( $info ) {
+				    	$header .= "<span class=\"x-small\">";
+					if ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == '$row[3]' ) {
+					    	$header .= $msg->read($SPIP_CREATBY) ." $info[6]<br/>";
+					    	$header .= ( $info[6] != $info[7] ) ? $msg->read($SPIP_UPDTBY) ." $info[7]<br/>" : "" ;
+					    	$header .= $msg->read($SPIP_ADDBY) ." ".getUserName($info[8])." "._getHostName($info[9])."<br/>";
+						}
+				    	$header .= $msg->read($SPIP_HITBY) ." $info[10]";
+				    	$header .= "</span>";
+					}
+
+			    	// lecture des articles de la publi
+				$Query   = "select _title, _texte, _color, _img, _IDitem, _ID, _IP, _date, _r, _e, _c, _modif from flash_items ";
+				$Query  .= "where _IDinfos = '$IDinfos' ";
+				$Query  .= ( $row[4] == "O" ) ? "AND _visible = 'O' " : "" ;
+				$Query  .= "order by _IDitem asc";
+
+				$result  = mysql_query($Query, $mysql_link);
+				$article = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+				// intitialisation structure de controle
+				$loop    = false;
+
+				// lecture du modèle
+				while ( !feof($fp) ) {
+					// lecture du modèle
+					$line = fgets($fp, 512);
+
+					// traitement du code
+					switch ( find_meta($line) ) {
+						case "##TITLE PUBLICATION##" :
+							switch ( $row[2] ) {
+								case 'D' : $align = "<span style=\"text-align:right;\">$row[1]</span>";  break;
+								case 'C' : $align = "<span style=\"text-align:center;\">$row[1]</span>"; break;
+								default  : $align = "<span style=\"text-align:left;\">$row[1]</span>";   break;
+								}
+
+							print("
+								<table class=\"width100\">
+								  <tr>
+								    <td style=\"width:100%;\">
+									<a name=\"spip_anchor\"></a>". str_replace("##TITLE PUBLICATION##", $align, $line) ."
+								    </td>
+								  </tr>
+								</table>
+								");
+							break;
+
+						case "##TITLE INFO##" :
+							$align = "<span class=\"xx-large\">$info[0]</span>";
+
+							switch ( $info[1] ) {
+								case 'D' : $align = "<span style=\"text-align:right;\">$align<br/>$header</span>";  break;
+								case 'C' : $align = "<span style=\"text-align:center;\">$align<br/>$header</span>"; break;
+								default  : $align = "<span style=\"text-align:left;\">$align<br/>$header</span>";   break;
+								}
+
+							$bkc   = ( $info[2] ) ? "background-color:$info[2];" : "" ;
+							$bkg   = ( $info[5] ) ? "background-image: url('$DOWNLOAD/spip/img/bg-$IDinfos.$info[5]');background-repeat: repeat;" : "" ;
+
+							print("
+								<table class=\"width100\">
+								  <tr>
+								    <td style=\"width:100%; $bkc $bkg\">
+									<a name=\"info_anchor\"></a>". str_replace("##TITLE INFO##", $align, $line) ."
+								    </td>
+								  </tr>
+								</table>
+								");
+
+							// fichier son
+							if ( $info[3] ) {
+								$mkup = "bgsound";
+								$loop = ( $info[4] == "O" ) ? -1 : 1 ;
+
+								print("<$mkup src=\"$DOWNLOAD/spip/snd/bg-$IDinfos.$info[3]\" loop=$loop>");
+								}
+							break;
+
+						case "#TOP_ANCHOR" :
+							if ( $loop )
+								$temp .= str_replace(
+										array("#TOP_ANCHOR", "##TEXT TOP##"),
+										array(myurlencode("index.php?item=6&cmde=visu&IDflash=$IDflash&IDinfos=$IDinfos#info_anchor"), $msg->read($SPIP_TOPARTICLE)),
+										$line);
+							else
+								print(
+									str_replace(
+										array("#TOP_ANCHOR", "##TEXT TOP##"),
+										array(myurlencode("index.php?item=6&cmde=visu&IDflash=$IDflash&IDinfos=$IDinfos#info_anchor"), $msg->read($SPIP_TOPARTICLE)),
+										$line)
+									);
+							break;
+
+						case "##LOOP##" :
+							$temp = "";
+							$loop = true;
+							break;
+
+						case "#TITLE_ANCHOR" :
+							if ( $loop )
+								$temp .= $line;
+							else
+								print( str_replace("#TITLE_ANCHOR", "item$IDinfos.$article[4]", $line) );
+							break;
+
+						case "##TITLE ARTICLE##" :
+						    	// création de l'en-tête de l'article
+							// infos concernant l'en-tête
+						    	$header  = "<span class=\"x-small\">";
+						    	$header .= $msg->read($SPIP_CREATBY) ." $article[7]<br/>";
+						    	$header .= ( $article[7] != $article[11] ) ? $msg->read($SPIP_UPDTBY) ." $article[11]<br/>" : "" ;
+						    	$header .= $msg->read($SPIP_ADDBY) ." ".getUserName($article[5])." "._getHostName($article[6]);
+							$header .= "</span>";
+
+							$align   = "<span class=\"large\">##TITLE ARTICLE##</span><br/>$header";
+
+							$line = "
+								<table class=\"width100\">
+								  <tr>
+								    <td style=\"background-color:$article[2];width:100%\">". str_replace("##TITLE ARTICLE##", $align, $line) ."</td>
+								  </tr>
+								</table>
+								";
+
+							if ( $loop )
+								$temp .= $line;
+							else
+								print( str_replace("##TITLE ARTICLE##", $article[0], $line) );
+							break;
+
+						case "##TEXT ARTICLE##" :
+							// image de fond
+							$bkg  = ( $article[3] ) ? "background=$DOWNLOAD/spip/img/bg-$IDinfos-$article[4].$article[3]" : "" ;
+
+							$line = "
+								<table class=\"width100\">
+								  <tr>
+								    <td style=\"width:100%\" ". $bkg .">". $line ."</td>
+								  </tr>
+								</table>
+								";
+
+							if ( $loop )
+								$temp .= $line;
+							else {
+								$header  = ( $article[9] == "ON" )
+									? "<table class=\"width100\" style=\"border-color:#FFFFFF; border: 1px solid black\"><tr>"
+									: "<table class=\"width100\"><tr>" ;
+								$header .= ( $article[10] == "ON" )
+									? "<td style=\"width:100%\" class=\"align-center\">"
+									: "<td>" ;
+								$header .= ( $article[8] == "ON" )
+									? "<div style=\"color:#FF0000;\">"
+									: "<div style=\"color:#000000;\">" ;
+
+								$footer  = "</div></td></tr></table>";
+
+								$note    = "";
+
+//								$new_string = $header . find_image(find_typo($article[1], $note)) . $footer;
+								$new_string = $header . find_image(find_typo($article[1], $note)) . $footer;
+								print( str_replace("##TEXT ARTICLE##", replace_smile($new_string), $line) );
+
+								// notes de bas de page
+								if ( strlen($note) )
+									print("<hr style=\"width:30%; text-align:left;\" /><p class=\"x-small\" style=\"margin-top:0px;\">$note</p>");
+
+								// les pièces jointes
+								find_pj($article[4]);
+								}
+							break;
+
+						case "##ENDLOOP##" :
+							while ( $article ) {
+								$header  = ( $article[9] == "ON" )
+									? "<table class=\"width100\" style=\"border-color:#FFFFFF; border: 1px solid black\"><tr>"
+									: "<table class=\"width100\"><tr>" ;
+								$header .= ( $article[10] == "ON" )
+									? "<td style=\"width:100%\" class=\"align-center\">"
+									: "<td>" ;
+								$header .= ( $article[8] == "ON" )
+									? "<div style=\"color:#FF0000;\">"
+									: "<div style=\"color:#000000;\">" ;
+
+								$footer  = "</div></td></tr></table>";
+
+								$note    = "";
+
+								$new_string = $header . find_image(find_typo($article[1], $note)) . $footer;
+								print(
+									str_replace("#TITLE_ANCHOR", "item$IDinfos.$article[4]",
+									str_replace("##TITLE ARTICLE##", $article[0], 
+									str_replace("##TEXT ARTICLE##", replace_smile($new_string), $temp)))
+									);
+
+								// notes de bas de page
+								if ( strlen($note) )
+									print("<hr style=\"width:30%; text-align:left;\" /><p class=\"x-small\" style=\"margin-top:0px;\">$note</p>");
+
+								// les pièces jointes
+								find_pj($article[4]);
+
+								$article = remove_magic_quotes(mysql_fetch_row($result));
+								}
+
+							$loop = false;
+							break;
+
+						default :
+							if ( $loop )
+								$temp .= $line;
+							else
+								print("$line");
+							break;
+						}
+					}
+
+				fclose($fp);
+				}
+			}
+		?>

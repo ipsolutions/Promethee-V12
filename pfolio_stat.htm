@@ -1,0 +1,281 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2008-2009 by Dominique Laporte(C-E-D@wanadoo.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : pfolio_stat.htm
+ *		projet   : la page de visualisation des statistiques du portfolio
+ *
+ *		version  : 1.0
+ *		auteur   : laporte
+ *		creation : 12/02/08
+ *		modif    :
+ */
+
+
+$IDcentre = ( @$_POST["IDcentre"] )			// Identifiant du centre
+	? (int) $_POST["IDcentre"]
+	: (int) $_SESSION["CnxCentre"] ;
+$IDclass  = ( @$_POST["IDclass"] )			// Identifiant de la classe
+	? (int) $_POST["IDclass"]
+	: (int) @$_GET["IDclass"] ;
+$niveau   = (int) @$_POST["niveau"];		// niveau du domaine de compétences
+?>
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<strong><?php print($msg->read($PFOLIO_MYSKILL) ."::". $msg->read($PFOLIO_STATS)); ?></strong>
+	</div>
+</div>
+
+<div class="maincontent">
+
+	<form id="formulaire" action="" method="post">
+
+		<table class="width100">
+		  <tr>
+			<td style="width:50%;" class="align-right">
+				<?php print($msg->read($PFOLIO_CHOOSECENTER)); ?>
+			</td>
+			<td style="width:50%;">
+				<label for="IDcentre">
+			  	<select id="IDcentre" name="IDcentre" onchange="document.forms.formulaire.submit()">
+				<?php
+					// lecture des centres constitutifs
+					$query  = "select _IDcentre, _ident from config_centre ";
+					$query .= "where _visible = 'O' AND _lang = '".$_SESSION["lang"]."' ";
+					$query .= "order by _IDcentre";
+
+					$result = mysql_query($query, $mysql_link);
+					$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+					while ( $row ) {			
+						printf("<option value=\"$row[0]\" %s>$row[1]</option>", ($IDcentre == $row[0]) ? "selected=\"selected\"" : "");
+
+						$row = remove_magic_quotes(mysql_fetch_row($result));
+						}				
+				?>
+				</select> <img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/home.gif" title="" alt="" />
+				</label>
+			</td>
+		  </tr>
+
+		  <tr>
+			<td class="align-right">
+			  <?php print($msg->read($PFOLIO_CHOOSECLASS)); ?>
+			</td>
+			<td>
+				<label for="IDclass">
+			  	<select id="IDclass" name="IDclass" onchange="document.forms.formulaire.submit()">
+				<?php
+					// intialisation
+					$Query  = "select _IDclass, _ident from campus_classe ";
+					$Query .= "where _visible = 'O' AND _IDcentre = '$IDcentre'";
+
+					// affichage des classes
+					$result = mysql_query($Query, $mysql_link);
+					$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+					print("<option value=\"0\">&nbsp;</option>");
+							
+					while ( $row ) {
+						// recherche de la formation
+						$query  = "select _IDform from pfolio_uv ";
+						$query .= "where _lang = '".$_SESSION["lang"]."' ";
+						$query .= "AND _IDgrp like '% $row[0] %' ";
+
+						$return = mysql_query($query, $mysql_link);
+						$nbitem = ( $return ) ? mysql_affected_rows($mysql_link) : 0 ;
+
+						if ( $nbitem )
+							printf("<option value=\"$row[0]\" %s>$row[1] ($nbitem)</option>", ($IDclass == $row[0]) ? "selected=\"selected\"" : "");
+
+						$row = remove_magic_quotes(mysql_fetch_row($result));
+						}	// endwhile classes
+				?>
+				</select> <img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/group.gif" alt="" title="" />
+				</label>
+			</td>
+		  </tr>
+		</table>
+
+		<hr style="width:80%;" />
+
+	<?php
+		// sélection des niveaux
+		$select  = "<label for=\"niveau\">";
+		$select .= "<select id=\"niveau\" name=\"niveau\" onchange=\"document.forms.formulaire.submit()\" style=\"font-size:9px;\">";
+
+		$query  = "select distinctrow pfolio_uv._IDuv, pfolio_uv._ident, pfolio_uv._IDeval, pfolio_uv._scale, ";
+		$query .= "pfolio_uv._IDmod, pfolio_uv._IDgrprd, pfolio_uv._IDgrpwr, pfolio_uv._min ";
+		$query .= "from pfolio_uv, pfolio_formation ";
+		$query .= "where pfolio_uv._lang = '".$_SESSION["lang"]."' ";
+		$query .= "AND pfolio_formation._IDform = pfolio_uv._IDform ";
+		$query .= "AND pfolio_uv._IDgrp like '% $IDclass %' ";
+		$query .= "order by _IDuv";
+
+		$result = mysql_query($query, $mysql_link);
+		$level  = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+		// initialisation
+		if ( !$niveau )
+			$niveau = $level[0];
+		$getuv  = $level[7];
+
+		while ( $level ) {			
+			$getuv   = ( $niveau == $level[0] ) ? $level[7] : $getuv ;
+
+			$select .= ( $niveau == $level[0] )
+				? "<option selected=\"selected\" value=\"$level[0]\">$level[1]</option>"
+				: "<option value=\"$level[0]\">$level[1]</option>" ;
+
+			$level = remove_magic_quotes(mysql_fetch_row($result));
+			}
+
+		$select .= "</select>";
+		$select .= "</label>";
+
+		// lecture des domaines de compétences
+		$query  = "select _IDskill, _ident, _min, _order from pfolio ";
+		$query .= "where _IDuv = '$niveau' AND _visible = 'O' ";
+		$query .= "order by _IDskill";
+
+		$result = mysql_query($query, $mysql_link);
+		$domain = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+		$label  = Array();
+
+		while ( $domain ) {
+			// lecture des compétences
+			$Query  = "select _IDdata, _texte, _order from pfolio_data ";
+			$Query .= "where  _IDskill = '$domain[0]' AND _visible = 'O' ";
+			$Query .= "order by _IDdata";
+
+			$return = mysql_query($Query, $mysql_link);
+			$row    = ( $return ) ? remove_magic_quotes(mysql_fetch_row($return)) : 0 ;
+
+			while ( $row ) {
+				$label = $label + Array($row[0] => "<strong>$domain[3].$row[2]. $domain[1]</strong><br/>$row[1]");
+
+				$row   = remove_magic_quotes(mysql_fetch_row($return));
+				}
+
+			$domain = remove_magic_quotes(mysql_fetch_row($result));
+			}
+
+		// lecture des élèves
+		$Query  = "select distinctrow user_id._ID, user_id._name, user_id._fname ";
+		$Query .= "from user_id, pfolio_items ";
+		$Query .= "where user_id._IDgrp = '1' ";
+		$Query .= ( $_SESSION["CnxClass"] )
+			? "AND user_id._IDclass = '".$_SESSION["CnxClass"]."' "
+			: "AND user_id._IDclass = '$IDclass' " ;
+		$Query .= "order by user_id._name, user_id._fname";
+
+		$return = mysql_query($Query, $mysql_link);
+		$nbuser = ( $return ) ? mysql_affected_rows($mysql_link) : 0 ;
+		$myrow  = ( $return ) ? remove_magic_quotes(mysql_fetch_row($return)) : 0 ;
+
+		$table  = "";
+		$count  = $i = 0;
+		while ( $myrow ) {
+			$bgcolor = ( $i++ % 2 ) ? "item" : "menu" ;
+
+			// lecture compétence
+			$td      = "";
+			$total   = 0;
+			foreach ($label as $clef => $valeur) {
+				$query  = "select pfolio_items._date, pfolio_items._IDlevel, pfolio_data._IDskill ";
+				$query .= "from pfolio_items, pfolio_data ";
+				$query .= "where pfolio_items._ID = '$myrow[0]' AND pfolio_data._IDdata = '$clef' ";
+				$query .= "AND pfolio_items._IDdata = pfolio_data._IDdata ";
+				$query .= "order by pfolio_items._IDlevel ";
+				$query .= "limit 1";
+
+				$res    = mysql_query($query, $mysql_link);
+				$sql    = ( $res ) ? mysql_fetch_row($res) : 0 ;
+
+				$isok   = ( $sql )
+					? ($sql[1] == 1
+						? "<img src=\"".$_SESSION["ROOTDIR"]."/images/setup/check_on.png\" title=\"$row[0]\" alt=\"$row[0]\" />"
+						: "<img src=\"".$_SESSION["ROOTDIR"]."/images/setup/check_wrn.png\" title=\"$row[0]\" alt=\"$row[0]\" />")
+					: "" ;
+
+				if ( $sql[1] == 1 )
+					$total++;
+
+      	      	$td    .= "<td class=\"align-center\">";
+      	      	$td    .= "<a href=\"".myurlencode("index.php?item=$item&niveau=$niveau&IDdomain=$sql[2]&IDeleve=$myrow[0]&IDclass=$IDclass")."\">$isok</a>";
+				$td    .= "</td>";
+				}
+
+			$percent = (int) (($total * 100) / count($label));
+			$isok    = ( $percent < $getuv ) ? "off" : "on" ;
+			$count  += ( $isok == "on" ) ? 1 : 0 ;
+			$percent = ( $percent ) ? "<span class=\"x-small\">$percent%</span>" : "" ;
+
+			$table  .= "
+				<tr class=\"$bgcolor\">
+				  <td class=\"align-center\"><img src=\"".$_SESSION["ROOTDIR"]."/images/setup/check_$isok.png\" alt=\"\" title=\"\" /><br/>$percent</td>
+				  <td>$myrow[1] $myrow[2]</td>
+				  $td
+				</tr>";
+
+			$myrow = remove_magic_quotes(mysql_fetch_row($return));
+			}
+
+		$percent = (int) ( $nbuser ) ? (($count * 100) / $nbuser) : 0 ;
+		$percent = "<span class=\"x-small\">$percent%</span>";
+
+		// affichage tableau
+		print("
+			<table class=\"width100\">
+	              <tr style=\"background-color:#C0C0C0;\">
+	                <td class=\"align-center\" style=\"width:1%;\"><strong>$percent</strong></td>
+	                <td style=\"width:15%;\">$select</td>");
+
+		$j = 1;
+		foreach ($label as $clef => $valeur)
+            	print("<td class=\"align-center\" onmouseover=\"style.backgroundColor='#FF9900';\" onmouseout=\"style.backgroundColor='#C0C0C0';\"><a href=\"#\" class=\"overlib\">".$j++."<span>$valeur</span></a></td>");
+
+		print("</tr>
+				$table
+			</table>");
+	?>
+
+		<hr />
+
+	<?php
+	    	print("
+	         <table class=\"width100\">
+	           <tr>
+	              <td style=\"width:10%;\" class=\"valign-middle align-center\">
+	              	<a href=\"".myurlencode("index.php?item=$item&IDcentre=$IDcentre&IDsel=$IDclass&cmde=visu")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/cancel.gif\" title=\"\" alt=\"".$msg->read($PFOLIO_INPUTCANCEL)."\" /></a>
+	              </td>
+	              <td class= \"valign-middle\">". $msg->read($PFOLIO_GOBACK) ."</td>
+	           </tr>
+	         </table>
+			");
+	?>
+
+	</form>
+
+</div>

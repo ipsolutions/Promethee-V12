@@ -1,0 +1,289 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2007 by Dominique Laporte(C-E-D@wanadoo.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : stage_demande.htm
+ *		projet   : la page de visualisation des CV
+ *
+ *		version  : 1.0
+ *		auteur   : laporte
+ *		creation : 2/08/07
+ *		modif    : 
+ */
+
+
+$IDcv  = (int) @$_GET["IDcv"];		// n° du CV
+?>
+
+<?php
+	//---- lecture de la base de données ----
+	$Query  = "select _date, _IDcontrat, _IDposte, _IDregion, _texte, _dispo, _titre, _salaire, _lieu, _divers, _IDlevel ";
+	$Query .= "from cv ";
+	$Query .= "where _IDcv  = '$IDcv' ";
+	$Query .= "limit 1 ";
+
+	// détermination du nombre de pages
+	$result = mysql_query($Query, $mysql_link);
+	$cv     = ( $result ) ? mysql_fetch_row($result) : 0 ;
+?>
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($STAGE_CVNUMBER, Array(strval($IDcv), date2longfmt($cv[0])))); ?>
+	</div>
+</div>
+
+	<div class="maincontent">
+
+	<?php
+		// log de lecture des offres
+		mysql_query("update cv set _vus = _vus + 1 where _IDcv = '$IDcv' limit 1", $mysql_link);
+
+		mysql_query("insert into cv_vu values('$IDcv', '".$_SESSION["CnxID"]."', '".$_SESSION["CnxIP"]."', '".date("Y-m-d H:i:s", time())."')", $mysql_link);
+
+		//----- coordonnées
+		$query  = "select _sexe, _name, _born, _adr, _cp, _city, _tel, _email, _fname from user_id ";
+		$query .= "where _ID = '".$_SESSION["CnxID"]."' ";
+		$query .= "limit 1";
+
+		$result = mysql_query($query, $mysql_link);
+		$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+		$list   = explode(",", $msg->read($STAGE_SEX));
+		$genre  = ( $row[0] == "H" ) ? $list[0] : $list[1] ;
+
+		$year   = date("Y", time());
+
+		$tel    = ( $row[6] != "" ) ? "<img src=\"".$_SESSION["ROOTDIR"]."/images/spip/tel.gif\" title=\"\" alt=\"\"> $row[6]<br/>" : "" ;
+
+		$texte  = ( $row[3] != "" ) ? "$row[3]<br/>" : "" ;
+		$texte .= ( $row[5] != "" )
+			? ($row[4] ? "$row[4] $row[5]<br/>" : "$row[5]<br/>")
+			: "" ;
+
+		// on vérifie si la photo existe
+		$path   = "$DOWNLOAD/photo/cv/".$_SESSION["CnxID"].".gif";
+         	$photo  = ( file_exists($path) ) ? $path : $_SESSION["ROOTDIR"]."/css/themes/".$_SESSION["CfgTheme"]."/images/0.gif" ;
+
+		print("
+			<table class=\"width100\">
+		          <tr>
+		            <td style=\"width:1%;\" class=\"valign-top align-center\">
+					<img src=\"$photo\" title=\"$photo\" alt=\"$photo\" />
+		            </td>
+		            <td class=\"valign-top\" style=\"border:#cccccc solid 1px; padding:4px;\">
+					<a href=\"mailto:$row[7]\">$genre ".formatUserName($row[1], $row[8])."</a> ". $msg->read($STAGE_HOWOLD, strval($year - $row[2])) ."<br/>
+					$texte
+					$tel
+				</td>
+		          </tr>
+		        </table>
+			");
+
+		//----- poste recherché
+		$query  = "select _ident from cv_poste ";
+		$query .= "where _IDposte = '$cv[2]' ";
+		$query .= "AND _lang = '".$_SESSION["lang"]."' ";
+		$query .= "limit 1";
+
+		$return = mysql_query($query, $mysql_link);
+		$row    = ( $return ) ? remove_magic_quotes(mysql_fetch_row($return)) : 0 ;
+
+		$ident  = "<strong>: ". trim(str_replace("-", "", $row[0])) ."</strong>";
+		$ident .= ( $cv[6] != "" ) ? ", $cv[6]" : "" ;
+
+		print("<p style=\"margin-bottom:0px;\">". $msg->read($STAGE_POSITION) ." $ident</p><hr/>");
+
+		// lecture du contrat
+		$query  = "select _ident from cv_contrat ";
+		$query .= "where _IDcontrat = '$cv[1]' ";
+		$query .= "AND _lang = '".$_SESSION["lang"]."' ";
+		$query .= "limit 1";
+
+		$return = mysql_query($query, $mysql_link);
+		$row    = ( $return ) ? remove_magic_quotes(mysql_fetch_row($return)) : 0 ;
+
+		$contrat = $msg->read($STAGE_CONTRACT) ." ". $row[0];
+
+		// lecture de la région
+		$query  = "select _ident from cv_region ";
+		$query .= "where _IDregion = '$cv[3]' ";
+		$query .= "AND _lang = '".$_SESSION["lang"]."' ";
+		$query .= "limit 1";
+
+		$return = mysql_query($query, $mysql_link);
+		$row    = ( $return ) ? remove_magic_quotes(mysql_fetch_row($return)) : 0 ;
+
+		$region  = $msg->read($STAGE_REGION);
+		$region .= " <strong>". trim(str_replace("-", "", $row[0])) ."</strong>";
+		$region .= ( $cv[8] != "" ) ? ", $cv[8]" : "" ;
+
+		$salaire = ( $cv[7] != "" )
+			? $msg->read($STAGE_SALARY) ." $cv[7]<br/>"
+			: "" ;
+
+		$dispo   = ( $cv[5] != "" )
+			? $msg->read($STAGE_AVAILIBILITY) ." $cv[5]<br/>"
+			: "" ;
+
+		$texte   = ( $cv[4] != "" ) ? $cv[4] : "" ;
+
+		print("
+			<p style=\"margin-top:0px;\">
+			$contrat<br/>
+			$region<br/>
+			$salaire
+			$dispo
+			$texte
+			</p>
+			");
+
+		//----- expérience
+		$query  = "select _ident from cv_level ";
+		$query .= "where _IDlevel = '$cv[10]' AND _lang = '".$_SESSION["lang"]."' ";
+		$query .= "limit 1";
+
+		$result = mysql_query($query, $mysql_link);
+		$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+		print("<p style=\"margin-bottom:0px;\"><strong>. </strong>". $msg->read($STAGE_EXP) ." $row[0]</p><hr/>");
+
+		$query  = "select _IDexp, _IDposte, _ident, _text, _start, _end from cv_exp ";
+		$query .= "where _IDcv = '$IDcv' ";
+		$query .= "order by _start desc";
+
+		$result = mysql_query($query, $mysql_link);
+		$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+		print("<div>");
+
+		while ( $row ) {
+			$from   = ( $row[5] == "9999-00-00" )
+				? $msg->read($STAGE_SINCE)
+				: date2longfmt($row[4], "ma") ;
+			$from  .= ( $row[5] == "9999-00-00" )
+				? " " . date2longfmt($row[4], "ma")
+				: " - " . date2longfmt($row[5], "ma") ;
+
+			// poste occupé
+			$query  = "select _ident from cv_poste ";
+			$query .= "where _IDposte = '$row[1]' ";
+			$query .= "AND _lang = '".$_SESSION["lang"]."' ";
+			$query .= "limit 1";
+
+			$return = mysql_query($query, $mysql_link);
+			$myrow  = ( $return ) ? remove_magic_quotes(mysql_fetch_row($return)) : 0 ;
+
+			print("$from : <strong>". trim(str_replace("-", "", $myrow[0])) .", $row[2]</strong><br/>");
+
+			// détails
+			if ( $row[3] != "" )
+				print("<p style=\"margin:0px 0px 0px 50px;\">". find_typo($row[3], $note) ."</p>");
+
+			$row = remove_magic_quotes(mysql_fetch_row($result));
+			}
+
+		print("</div>");
+
+		//----- diplômes
+		print("<p><strong>. </strong>". $msg->read($STAGE_DIPLOMA) ."</p><hr/>");
+
+		$query  = "select _IDdegree, _year, _IDlevel, _text from cv_form ";
+		$query .= "where _IDcv = '$IDcv' ";
+		$query .= "order by _year desc";
+
+		$result = mysql_query($query, $mysql_link);
+		$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+		print("<div>");
+
+		while ( $row ) {
+			// qualification
+			$query  = "select _ident from cv_degree ";
+			$query .= "where _IDdegree = '$row[2]' ";
+			$query .= "AND _lang = '".$_SESSION["lang"]."' ";
+			$query .= "limit 1";
+
+			$return = mysql_query($query, $mysql_link);
+			$myrow  = ( $return ) ? remove_magic_quotes(mysql_fetch_row($return)) : 0 ;
+
+			$texte  = "$row[1] : <strong>$myrow[0]</strong>";
+			$texte .= ( $row[3] != "" ) ? ", $row[3]" : "" ;
+
+			print("$texte<br/>");
+
+			$row = remove_magic_quotes(mysql_fetch_row($result));
+			}
+
+		print("</div>");
+
+		//----- langues étrangères
+		print("<p style=\"margin-bottom:0px;\"><strong>. </strong>". $msg->read($STAGE_LANG) ."</p><hr/>");
+
+		$query  = "select _IDlang, _IDtype, _IDlevel from cv_lang ";
+		$query .= "where _IDcv = '$IDcv' ";
+		$query .= "order by _IDlevel desc";
+
+		$result = mysql_query($query, $mysql_link);
+		$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+		print("<div>");
+
+		while ( $row ) {
+			// langue
+			$query  = "select _ident from cv_langtype ";
+			$query .= "where _IDtype = '$row[1]' ";
+			$query .= "AND _lang = '".$_SESSION["lang"]."' ";
+			$query .= "limit 1";
+
+			$return = mysql_query($query, $mysql_link);
+			$myrow  = ( $return ) ? remove_magic_quotes(mysql_fetch_row($return)) : 0 ;
+
+			$texte  = $myrow[0];
+
+			// langue
+			$query  = "select _ident from cv_langlevel ";
+			$query .= "where _IDlevel = '$row[2]' ";
+			$query .= "AND _lang = '".$_SESSION["lang"]."' ";
+			$query .= "limit 1";
+
+			$return = mysql_query($query, $mysql_link);
+			$myrow  = ( $return ) ? remove_magic_quotes(mysql_fetch_row($return)) : 0 ;
+
+			$texte .= " : $myrow[0]";
+
+			print("$texte");
+
+			$row = remove_magic_quotes(mysql_fetch_row($result));
+			}
+
+		print("</div>");
+
+		//----- divers
+		print("<p style=\"margin-bottom:0px;\"><strong>. </strong>". $msg->read($STAGE_OTHER) ."</p><hr/>");
+
+		if ( $cv[9] != "" )
+			print("<div>". find_typo($cv[9], $note) ."</div>");
+
+		print("<p style=\"margin-bottom:0px;\">[ <a href=\"index.php?item=$item&amp;cmde=cv\">". $msg->read($STAGE_BACKTOLIST) ."</a> ]</p>");
+	?>
+
+	</div>

@@ -1,0 +1,196 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2002-2007 by Dominique Laporte(C-E-D@wanadoo.fr)
+   Copyright (c) 2006 by Nordine Zetoutou (nordine.zetoutou@educagri.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : page_top.htm
+ *		projet   : le bandeau du haut avec le logo de l'établissement
+ *
+ *		version  : 1.2
+ *		auteur   : laporte
+ *		creation : 20/10/02
+ *		modif    : 20/03/03 - par D. Laporte
+ *		           log de déconnexion
+ *                     18/10/03 - par D.Laporte
+ *                     mise en place des post-it
+ *		           17/07/06 - Nordine Zetoutou
+ * 	                 migration des balises HTML en XHTML 1.0 strict
+ */
+?>
+
+
+<?php
+	require_once "include/gallery.php";
+
+	// initialisation
+	$my_logo = $height = "";
+
+	// taille du logo par défaut
+	imageSize("images/download/".$_SESSION["CfgIdent"]."/logo01.jpg", $srcWidth, $srcHeight);
+
+	// images défilantes ou logo fixe
+	$result  = mysql_query("select _IDlogo from config_logo where _visible = 'O'", $mysql_link);
+
+	if ( $_SESSION["CfgLogo1"] == "O" ) {
+		$height = "height:".$srcHeight."px;";
+
+		if ( mysql_numrows($result) )	{
+			$my_logo = "
+				<div id=\"header\" style=\"width:".$srcWidth."px;\">
+					<div id=\"blendimage\" style=\"height:".$srcHeight."px;\">
+					<ul id=\"navheader\" style=\"position: absolute;\"><li style=\"list-style-type: none;\">&nbsp;</li></ul>
+					</div>
+				</div>";
+			}
+		else {
+			$file = $_SESSION["ROOTDIR"]."/download/logos/".$_SESSION["CfgIdent"]."/logo01.jpg";
+
+			if ( file_exists($file) )
+				$my_logo = "
+					<a href=\"index.php\">
+						<img src=\"".$_SESSION["ROOTDIR"]."/download/logos/". rawurlencode($_SESSION["CfgIdent"]) ."/logo01.jpg\" title=\"\" alt=\"$file\"/>
+					</a>";
+			}
+		}
+
+	$style   =  ( strlen($_SESSION["CfgTdcolor"]) )
+		? "style=\"background-color:#".$_SESSION["CfgTdcolor"].";\""
+		: "" ;
+
+	print("<div $style>");
+		$my_text  = ( $_SESSION["CfgText"] )
+			? "<span style=\"color:".$_SESSION["CfgColor"]."\" class=\"large\"><strong>".$_SESSION["CfgText"]."</strong></span>"
+			: "" ;
+		$my_text .= ( $my_text AND $my_logo ) ? "<br/>" : "" ;
+
+		switch ( $_SESSION["CfgAlign"] ) {
+			case "G" :
+				if ( $my_logo )
+					print("<div style=\"float:left; margin-right:10px;\">$my_logo</div>");
+				if ( $my_text )
+					print("<div style=\"text-align:left;$height\">$my_text</div>");
+				break;
+			case "D" :
+				if ( $my_logo )
+					print("<div style=\"float:right; margin-left:10px;\">$my_logo</div>");
+				if ( $my_text )
+					print("<div style=\"text-align:right;$height\">$my_text</div>");
+				break;
+			default :
+				print("<div style=\"text-align:center; margin-left:auto; margin-right:auto; width:".$srcWidth."px;\">");
+				if ( $my_text )
+					print($my_text);
+				if ( $my_logo )
+					print("$my_logo");
+				print("</div>");
+				break;
+				}
+	print("</div>");
+
+	// la session est valide
+	if ( @$_SESSION["sessID"] ) {
+		// lecture des paramètres de personnalisation des utilisateurs
+		$query  = "select _menu, _puce, _fond, _header, _service ";
+		$query .= "from user_config ";
+		$query .= "where _IDconf = '". @$_SESSION["CnxID"] ."' ";
+		$query .= "limit 1";
+
+		$result = mysql_query($query, $mysql_link);
+		$myrow  = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+		if ( $myrow ) {
+			$MENUSKIN               = $myrow[0];
+			$_SESSION["CfgPuce"]    = $_SESSION["ROOTDIR"]."/css/themes/puce/$myrow[1]";
+			$_SESSION["CfgFond"]    = $_SESSION["ROOTDIR"]."/css/themes/fond/$myrow[2]";
+			$_SESSION["CfgHeader"]  = $_SESSION["ROOTDIR"]."/css/themes/header/$myrow[3]";
+			$_SESSION["CfgService"] = $myrow[4];
+			}
+
+		// lecture de la dernière connexion de l'utilisateur
+		$result = mysql_query("select _name, _fname, _sexe, _lastcnx from user_id where _ID = '".$_SESSION["CnxID"]."' limit 1", $mysql_link);
+		$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+		if ( $row ) {
+			// quel jour est-il Madame Persil ?
+			$mois = explode(",", $message->read($PAGE_MONTHFULL));
+			$date = date("d") . " " . @$mois[date("n") - 1] . " " . date("Y");
+
+			// forme de politesse
+			switch ( $row[2] ) {
+				case "F" : $_titre = $message->read($PAGE_TITLE1)." "; break;
+				case "H" : $_titre = $message->read($PAGE_TITLE2)." "; break;
+				default  : $_titre = ""; break;
+				}
+
+			// les utilisateurs anonymes ne peuvent devenir des fanômes
+			$ghost  = ( $_titre != "" )
+				? ( isSessionVisible($_SESSION["sessID"])
+					? "<a href=\"index.php?ghost=1\"><img src=\"".$_SESSION["ROOTDIR"]."/images/visible.gif\" title=\"".$message->read($PAGE_INVISIBLE)."\" alt=\"".$message->read($PAGE_INVISIBLE)."\" /></a>"
+					: "<a href=\"index.php?ghost=0\"><img src=\"".$_SESSION["ROOTDIR"]."/images/invisible.gif\" title=\"".$message->read($PAGE_VISIBLE)."\" alt=\"".$message->read($PAGE_VISIBLE)."\" /></a>"
+				  )
+          			: "<img src=\"".$_SESSION["CfgPuce"]."\" title=\"".$_SESSION["CfgPuce"]."\" alt=\"".$_SESSION["CfgPuce"]."\" />" ;
+
+			// lecture de la dernière connexion de l'utilisateur
+			$return = mysql_query("select _ident from config_centre where _IDcentre = '".$_SESSION["CnxCentre"]."' AND _lang = '".$_SESSION["lang"]."' limit 1", $mysql_link);
+			$myrow  = ( $return ) ? remove_magic_quotes(mysql_fetch_row($return)) : 0 ;
+
+			print("
+			      <table class=\"bannertitle width100\" style=\"background-image: url('".$_SESSION["CfgHeader"]."'); background-repeat:repeat;\">
+				  <tr>
+				    <td style=\"width:1%;\" class=\"valign-middle\">
+					$ghost
+				    </td>
+
+				    <td class= \"valign-middle\">
+					<span class=\"x-small\">
+					". $message->read($PAGE_LASTCNX, Array($_titre, formatUserName($row[0], $row[1]), $myrow[0], str_replace(" ", " ".$message->read($PAGE_AT)." ", $row[3]))) ."
+					</span>
+				    </td>");
+
+			// si login automatique : on donne la possibilité de s'identifier et/ou de créer un compte
+			if ( strlen($AUTOLOGIN) )
+				print("
+				    <td class= \"valign-middle\">
+					<span class=\"x-small\">
+					<a href=\"index.php?item=100\">". $message->read($PAGE_ACCOUNT) ."</a> | <a href=\"index.php?item=1&amp;cmde=lost\">". $message->read($PAGE_PWDLOST) ."</a>
+					</span>
+				    </td>");
+
+			print("
+				    <td class=\"valign-middle align-right\">
+					<span class=\"x-small\">
+					<strong>$date</strong> |");
+
+			$message->languageBanner("msg");
+
+			print("
+					| <a href=\"index.php?item=31&amp;cmde=bag\"><img src=\"".$_SESSION["ROOTDIR"]."/images/bag.png\" title=\"". $message->read($PAGE_SCHOOLBAG) ."\" alt=\"". $message->read($PAGE_SCHOOLBAG) ."\" /></a>
+					| <a href=\"index.php?item=-1\"><img src=\"".$_SESSION["ROOTDIR"]."/images/logout.png\" title=\"". $message->read($PAGE_LOGOUT) ."\" alt=\"". $message->read($PAGE_LOGOUT) ."\" /></a>
+					</span>
+				    </td>
+				  </tr>
+				</table>
+				");
+			}	// endif row
+		}	// endif session
+
+	print("<div style=\"clear:both; margin-bottom:".$HDRSPACING."px;\"></div>");
+?>

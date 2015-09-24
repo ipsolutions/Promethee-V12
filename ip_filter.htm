@@ -1,0 +1,223 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2007 by Dominique Laporte(C-E-D@wanadoo.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : ip_filter.htm
+ *		projet   : la page de gestion du filtrage IP
+ *
+ *		version  : 1.0
+ *		auteur   : laporte
+ *		creation : 11/11/07
+ *		modif    : 
+ */
+
+
+$IDcentre = ( @$_GET["IDcentre"] )		// identification du centre
+	? (int) $_GET["IDcentre"]
+	: (int) (@$_POST["IDcentre"] ? $_POST["IDcentre"] : $_SESSION["CnxCentre"]) ;
+
+$idx      = @$_POST["idx"];			// ID des IP
+$del      = @$_POST["del"];			// IP supprimé
+$cnx      = @$_POST["cnx"];			// connexion autorisée
+$ip       = @$_POST["ip"];			// @ IP
+$ident    = @$_POST["ident"];			// intitulé IP
+
+$submit   = ( @$_POST["valid_x"] )		// bouton validation
+	? "update"
+	: @$_GET["submit"] ;
+?>
+
+
+<?php
+	// initialisation
+	$status = "-";
+
+	// commande de l'utilisateur
+	if ( $submit == "update" AND $_SESSION["CnxAdm"] == 255 )
+		// ajout @ IP
+		if ( $idx[0] == 0 AND strlen($ip[0]) ) {
+			$status  = $msg->read($IP_ADD) . " ";
+
+			$Query   = "insert into ip ";
+     			$Query  .= "values('', '$IDcentre', '$ip[0]', '$ident[0]', 'O')";
+
+			$status .= ( mysql_query($Query, $mysql_link) )
+				? "<img src=\"".$_SESSION["ROOTDIR"]."/images/ok.gif\" title=\"\" alt=\"\" />"
+				: "<img src=\"".$_SESSION["ROOTDIR"]."/images/bad.gif\" title=\"\" alt=\"\" />" ;
+			}
+		// suppression / modification des IP
+		else {
+			$ret    = 0;
+			$status = $msg->read($IP_MODIFY) . " ";
+
+			for ($i = 0; $i < count($idx); $i++)
+				// suppression
+				if ( @$del[$i] == "O" ) {
+					$Query  = "delete from ip ";
+					$Query .= "where _IP = '". $idx[$i]. "' " ;
+					$Query .= "limit 1";
+
+					$ret += (int) mysql_query($Query, $mysql_link);
+					}
+				// mise à jour
+				else {
+	     		      	$Query  = "update ip ";
+      				$Query .= ( @$cnx[$i] == "O" ) ? "set _visible = 'O', " : "set _visible = 'N', " ;
+		      		$Query .= ( @$ip[$i] != "" ) ? "_IPv6 = '". $ip[$i] ."', " : "" ;
+      				$Query .= "_host = '". $ident[$i] ."' ";
+     					$Query .= "where _IP = '". $idx[$i] ."' ";
+		       		$Query .= "limit 1";
+
+					$ret += mysql_query($Query, $mysql_link);
+					}
+
+			$status .= ( $ret == count($idx) )
+				? "<img src=\"".$_SESSION["ROOTDIR"]."/images/ok.gif\" title=\"\" alt=\"\" />"
+				: "<img src=\"".$_SESSION["ROOTDIR"]."/images/bad.gif\" title=\"\" alt=\"\" />" ;
+			}
+?>
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($IP_CONFIG)); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+
+	<p><?php print($msg->read($IP_STATUS) . " $status"); ?></p>
+
+	<form id="selection" action="index.php" method="post">
+	<?php
+		print("
+			<p class=\"hidden\"><input type=\"hidden\" name=\"item\"      value=\"$item\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"cmde\"      value=\"$cmde\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"IDcentre\"  value=\"$IDcentre\" /></p>");
+	?>
+
+	<?php
+		// on classe par ordre alphabétique
+		$Query  = "select _IP, _IPv6, _host, _visible from ip ";
+		$Query .= "where _IDcentre = '$IDcentre' ";
+		$Query .= "order by _IPv6";
+
+		$result = mysql_query($Query, $mysql_link);
+		$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+		print("
+			<table class=\"width100\">
+			  <tr style=\"background-color:#c0c0c0;\">
+	                <td style=\"width:1%;\" class=\"align-center\"><img src=\"".$_SESSION["ROOTDIR"]."/images/corb.gif\" title=\"\" alt=\"\" /></td>
+	                <td style=\"width:1%;\" class=\"align-center\"><img src=\"".$_SESSION["ROOTDIR"]."/images/visible.gif\" title=\"\" alt=\"\" /></td>
+	                <td style=\"width:40%;\">
+			  	<label for=\"IDcentre\">
+			  	<select id=\"IDcentre\" name=\"IDcentre\" onchange=\"document.forms.selection.submit()\" style=\"font-size:9px;\">");
+
+				$Query  = "select _IDcentre, _ident from config_centre ";
+				$Query .= "where _visible = 'O' AND _lang = '".$_SESSION["lang"]."' ";
+				$Query .= "order by _ident";
+
+				$return = mysql_query($Query, $mysql_link);
+				$myrow  = ( $return ) ? remove_magic_quotes(mysql_fetch_row($return)) : 0 ;
+
+				while ( $myrow ) {
+					$sql   = mysql_query("select _IP from ip where _IDcentre = '$myrow[0]'", $mysql_link);
+					$nbrow = ( $sql ) ? mysql_affected_rows($mysql_link) : 0 ;
+
+					if ( $IDcentre == $myrow[0] )
+						print("<option value=\"$myrow[0]\" selected=\"selected\">$myrow[1] ($nbrow)</option>");
+					else
+						print("<option value=\"$myrow[0]\">$myrow[1] ($nbrow)</option>");
+
+					$myrow = remove_magic_quotes(mysql_fetch_row($return));
+					}
+
+		print("
+			  	</select>
+			  	</label>
+				<a href=\"".myurlencode("index.php?item=$item&cmde=filter&IDcentre=$IDcentre&submit=add")."\">
+				<img src=\"".$_SESSION["ROOTDIR"]."/images/addrecord.gif\" title=\"". $msg->read($IP_ADD) ."\" alt=\"". $msg->read($IP_ADD) ."\" />
+				</a>
+	                </td>
+	                <td style=\"width:60%;\">". $msg->read($IP_HOST) ."</td>
+			  </tr>
+			");
+
+		// ajout @ IP
+		if ( $submit == "add" )
+			print("
+				<tr>
+		                <td class=\"align-center\"><label for=\"del_\"><input type=\"checkbox\" id=\"del_\" name=\"del[0]\" value=\"O\" disabled=\"disabled\" /></label></td>
+		                <td class=\"align-center\"><label for=\"cnx_\"><input type=\"checkbox\" id=\"cnx_\" name=\"cnx[0]\" value=\"O\" disabled=\"disabled\" /></label></td>
+		                <td><label for=\"del_\"><input type=\"text\" id=\"ip_\" name=\"ip[0]\" size=\"20\" /></label></td>
+		                <td>
+					<label for=\"ident_\"><input type=\"text\" id=\"ident_\" name=\"ident[0]\" size=\"40\" /></label>
+					<input type=\"hidden\" name=\"idx[0]\" value=\"0\" />
+		                </td>
+				  </tr>
+				");
+		// liste des IP
+		else {
+			$i = 0;
+			while ( $row ) {
+				$bgcol  = ( $i % 2 ) ? "item" : "menu" ;
+
+				$chkcnx = ( $row[3] == "O" ) ? "checked=\"checked\"" : "" ;
+
+				print("
+					<tr class=\"$bgcol\">
+			                <td class=\"align-center\"><label for=\"del_$i\"><input type=\"checkbox\" id=\"del_$i\" name=\"del[$i]\" value=\"O\" /></label></td>
+			                <td class=\"align-center\"><label for=\"cnx_$i\"><input type=\"checkbox\" id=\"cnx_$i\" name=\"cnx[$i]\" value=\"O\" $chkcnx /></label></td>
+			                <td><input type=\"text\" name=\"ip[$i]\" size=\"20\" value=\"$row[1]\" /></td>
+			                <td>
+						<label for=\"ident_$i\"><input type=\"text\" id=\"ident_$i\" name=\"ident[$i]\" size=\"40\" value=\"$row[2]\" /></label>
+						<input type=\"hidden\" name=\"idx[$i]\" value=\"$row[0]\" />
+			                </td>
+					  </tr>
+					");
+
+				$i++;
+				$row = remove_magic_quotes(mysql_fetch_row($result));
+				}
+			}
+
+		print("</table>");
+
+		print("<hr />");
+
+		print("
+			<table class=\"width100\">
+			  <tr>
+	                <td style=\"width:10%;\" class=\"valign-middle align-center\">
+				<input type=\"image\" src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/valid.gif\" name=\"valid\" alt=\"".$msg->read($IP_INPUTOK)."\" />
+	                </td>
+	                <td class= \"valign-middle\">
+				". $msg->read($IP_VALIDATE) ."
+	                </td>
+			  </tr>
+	            </table>
+			");
+	?>
+
+	</form>
+
+</div>

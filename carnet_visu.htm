@@ -1,0 +1,204 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2007 by Dominique Laporte(C-E-D@wanadoo.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : carnet_visu.htm
+ *		projet   : la page de visualisation des détails du carnet à points
+ *
+ *		version  : 1.0
+ *		auteur   : laporte
+ *		creation : 10/02/07
+ *		modif    : 
+ */
+
+
+$IDcentre = (int) @$_GET["IDcentre"];	// Identifiant du centre
+$IDclass  = (int) @$_GET["IDclass"];	// Identifiant de la classe
+$IDtype   = (int) @$_GET["IDtype"];		// type de sanction
+$name     = @$_GET["name"];			// nom alpha
+$IDeleve  = ( @$_GET["IDeleve"] )		// ID de l'élève
+	? (int) @$_GET["IDeleve"]
+	: $IDeleve ;
+
+$submit   = @$_GET["submit"];			// bouton de validation
+?>
+
+
+<?php
+	// lecture des droits
+	$Query  = "select _IDmod, _IDgrprd from carnet ";
+	$Query .= "where _IDcentre = '".$_SESSION["CnxCentre"]."' ";
+	$Query .= "limit 1";
+
+	$result = mysql_query($Query, $mysql_link);
+	$auth   = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+	// vérification des autorisations
+	verifySessionAccess($auth[0], $auth[1]);
+
+	// commande utilisateur
+	if ( $submit == "del" ) {
+		$IDdata = (int) @$_GET["IDdata"];
+
+		$Query  = "delete from carnet_data ";
+		$Query .= "where _IDdata = '$IDdata' ";
+		$Query .= ( $_SESSION["CnxAdm"] == 255 ) ? "" : "AND _ID = '".$_SESSION["CnxID"]."' " ;
+
+		mysql_query($Query, $mysql_link);
+		}
+
+	// initialisation
+	$href = "index.php?item=$item&IDcentre=$IDcentre&IDtype=$IDtype&IDclass=$IDclass&name=$name";
+?>
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($CARNET_DETAILS)); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+
+
+	<?php print($msg->read($CARNET_MYNAME)); ?>
+	<?php
+		// affichage de l'élève
+		$Query  = "select _name, _fname, _IDclass from user_id ";
+		$Query .= "where _ID = '$IDeleve' AND _IDgrp = '1' ";
+		$Query .= "limit 1";
+
+		$result = mysql_query($Query, $mysql_link);
+		$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+		print(formatUserName($row[0], $row[1]));
+	?>
+	<br />
+	<?php print($msg->read($CARNET_MYCLASS)); ?>
+	<?php
+		// affichage de la classe
+		$Query  = "select _ident from campus_classe ";
+		$Query .= "where _IDclass = '$row[2]' ";
+		$Query .= "limit 1";
+
+		$result = mysql_query($Query, $mysql_link);
+		$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+		print("$row[0]");
+	?>
+
+	<?php
+		print("
+			<table class=\"width100\" id=\"table_print\">
+			  <tr class=\"align-center\" style=\"background-color:#C0C0C0;\">
+	                <td style=\"width:20%; border-radius: 4px 0 0 4px; padding: 10px\" class=\"btn-primary\">
+				". $msg->read($CARNET_MOTIF) ."
+	                </td>
+	                <td style=\"width:10%; padding: 10px\" class=\"btn-primary\">
+				". $msg->read($CARNET_POINTS) ."
+	                </td>
+					<td class=\"btn-primary\" style=\"padding: 10px\">
+					</td>
+	                <td class=\"align-right btn-primary\" style=\"border-radius: 0 4px 4px 0; padding: 10px\"><a href=\"javascript:window.print()\"><img class=\"noprint\" alt=\"imprimer\" title=\"imprimer\" src=\"./images/print.gif\"></a></td>
+			  </tr>
+			");
+
+		// affichage des points
+		$query  = "select _ID, _IP, _date, _IDitem, _texte, _IDmat, _IDdata, _IDtype ";
+		$query .= "from carnet_data ";
+		$query .= "where _IDeleve = '$IDeleve' ";
+		$query .= "order by _IDdata desc";
+
+		$result = mysql_query($query, $mysql_link);
+		$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+		$i = 0;
+		while ( $row ) {
+			$bgcol  = ( $i++ % 2 ) ? "item" : "menu" ;
+
+			$texte  = ( strlen($row[4]) ) ? "<br/><em>$row[4]</em>" : "" ;
+
+			// lecture de l'auteur de la consigne
+			// lecture de l'adresse IP
+			// dates création
+			$desc   = $msg->read($CARNET_BY, Array(getUserName($row[0], false), _getHostName($row[1], false), $row[2]));
+
+			// recherche cours
+			$query  = "select _titre from campus_data ";
+			$query .= "where _IDmat = '$row[5]' AND _lang = '".$_SESSION["lang"]."' ";
+			$query .= "limit 1";
+
+			$return = mysql_query($query, $mysql_link);
+			$myrow  = ( $return ) ? remove_magic_quotes(mysql_fetch_row($return)) : 0 ;
+
+			$desc  .= ( $myrow ) ? "<br/>".$msg->read($CARNET_COURSE)." $myrow[0]" : "" ;
+
+			$about  = "<span>$desc</span>";
+			$about .= "</a>";
+
+			// affichage des motifs
+			$query  = "select carnet_items._pts, carnet_items._texte, carnet_type._ident ";
+			$query .= "from carnet_items, carnet_type ";
+			$query .= "where carnet_items._IDitem = '$row[3]' ";
+			$query .= "AND carnet_type._IDtype = '$row[7]' ";
+			$query .= "AND carnet_type._lang = '".$_SESSION["lang"]."' ";
+			$query .= "AND carnet_items._lang = '".$_SESSION["lang"]."' ";
+			$query .= "AND carnet_items._IDtype = carnet_type._IDtype ";
+
+			$return = mysql_query($query, $mysql_link);
+			$myrow  = ( $return ) ? remove_magic_quotes(mysql_fetch_row($return)) : 0 ;
+
+			// suppression sanction
+			$req    = $msg->read($CARNET_DELETE);
+			$delete = ( $_SESSION["CnxAdm"] == 255 OR $row[0] == $_SESSION["CnxID"] )
+				? "<a href=\"".myurlencode("$href&cmde=visu&IDeleve=$IDeleve&IDdata=$row[6]&submit=del")."\" onclick=\"return confirmLink(this, '$req');\" class=\"noprint\"><img src=\"".$_SESSION["ROOTDIR"]."/images/corb.gif\" title=\"". $msg->read($CARNET_DELETE) ."\" alt=\"\" /></a>"
+				: "" ;
+
+			print("
+				<tr class=\"$bgcol btn\" style=\"display: table-row\">
+		                <td class=\"align-center valign-top\">$myrow[2] $delete</td>
+		                <td class=\"align-center valign-top\">$myrow[0]</td>
+						<td style=\"text-align: left\">$about</td>
+		                <td>$myrow[1] $texte</td>
+				</tr>
+				");
+
+			$row = remove_magic_quotes(mysql_fetch_row($result));
+			}
+
+		print("
+			  <tr>
+				<td colspan=\"4\" class=\"noprint\"><hr/></td>
+			  </tr>
+
+			  <tr class=\"noprint\">
+				<td class=\"align-right valign-middle\">
+				  <a href=\"".myurlencode("$href")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/cancel.gif\" title=\"\" alt=\"".$msg->read($CARNET_INPUTCANCEL)."\" /></a>
+				</td>
+				<td colspan=\"2\" class=\"valign-middle\">
+				  ". $msg->read($CARNET_GOBACK) ."
+				</td>
+			  </tr>
+	            </table>
+			");
+	      ?>
+
+</div>

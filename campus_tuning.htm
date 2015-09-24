@@ -1,0 +1,285 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2008 by Dominique Laporte(C-E-D@wanadoo.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : campus_tuning.htm
+ *		projet   : la page de personalisation des e-campus
+ *
+ *		version  : 1.0
+ *		auteur   : laporte
+ *		creation : 15/07/08
+ *		modif    : 
+ */
+
+
+$IDmat   = ( @$_POST["IDmat"] )		// ID matière/formation
+	? (int) $_POST["IDmat"]
+	: (int) @$_GET["IDmat"] ;
+
+$titre    = addslashes(trim(@$_POST["titre"]));
+$texte    = addslashes(trim(@$_POST["texte"]));
+$rb       = ( @$_POST["rb"] ) ? $_POST["rb"] : "N" ;
+$cbox     = ( @$_POST["cbox"] ) ? $_POST["cbox"] : "N" ;
+$valid    = ( @$_POST["valid"] ) ? $_POST["valid"] : $ACOUNTIME ;
+
+$submit   = @$_POST["submit"];		// bouton de validation
+?>
+
+
+<?php
+	// initialisation
+	$errident = "";
+	$statut   = ( $IDmat ) ? $msg->read($CAMPUS_MODIFICATION) : $msg->read($CAMPUS_NEW) ;
+
+	// traitement commande
+	if ( $submit == "Valider" ) {
+		// vérification saisie
+		$errident = ( $titre == "" ) ? $msg->read($CAMPUS_ERRINPUT) : "" ;
+            	
+		if ( $errident == "" ) {
+			if ( $IDmat < 0 ) {
+				$Query  = "update campus_classe ";
+				$Query .= "set _ident = '$titre', _text = '$texte', _private = '$rb', _auto = '$cbox', _valid = '$valid' ";
+				$Query .= "where _IDclass = abs($IDmat) ";
+				$Query .= "limit 1";
+				}
+			else {
+				$Query  = "update campus_data ";
+				$Query .= "set _titre = '$titre', _texte = '$texte', _private = '$rb', _auto = '$cbox', _valid = '$valid' ";
+				$Query .= "where _IDmat = '$IDmat' ";
+				$Query .= "AND _lang = '".$_SESSION["lang"]."' ";
+				$Query .= "limit 1";
+				}
+
+			$statut .= ( mysql_query($Query, $mysql_link) )
+				? " <img src=\"".$_SESSION["ROOTDIR"]."/images/ok.gif\" title=\"\" alt=\"\" />"
+				: " <img src=\"".$_SESSION["ROOTDIR"]."/images/bad.gif\" title=\"\" alt=\"\" /> " ;
+
+			// fichier à transférer
+			$file  = @$_FILES["UploadedFile"]["tmp_name"];
+
+			if ( $file AND authfile(@$_FILES["UploadedFile"]["name"]) AND strstr($statut, "ok.gif") ) {
+				require_once "include/gallery.php";
+
+   		 		switch ( extension(@$_FILES["UploadedFile"]["name"]) ) {
+    					case "gif" :
+    					case "jpg" :
+    					case "jpeg" :
+    					case "png" :
+						// copie du fichier temporaire -> répertoire de stockage
+						@unlink("$DOWNLOAD/campus/$IDmat.gif");
+
+						// création de la vignette
+						vignette("$file|".@$_FILES["UploadedFile"]["name"], "$DOWNLOAD/campus", "$IDmat.gif", $srcWidth, $srcHeight, 300, 300);
+    						break;
+    					default :
+		    				break;
+					}
+				}
+			}
+		}
+
+	// lecture du e-campus
+	if ( $errident == "" ) {
+		// on sélectionne les matières pédagogiques ou les formations des campus
+		if ( $IDmat < 0 ) {
+			$Query  = "select  _ident, _text, _valid, _private, _auto from campus_classe ";
+			$Query .= "where _visible = 'O' ";
+			$Query .= "AND _IDclass = abs($IDmat) ";
+			$Query .= "limit 1";
+			}
+		else {
+			$Query  = "select _titre, _texte, _valid, _private, _auto from campus_data ";
+			$Query .= "where _visible = 'O' AND _lang = '".$_SESSION["lang"]."' ";
+			$Query .= "AND _IDmat = '$IDmat' ";
+			$Query .= "AND _lang = '".$_SESSION["lang"]."' ";
+			$Query .= "limit 1";
+			}
+
+		$result = mysql_query($Query, $mysql_link);
+		$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+		// lectures de données
+		$titre  = $row[0];
+		$texte  = $row[1];
+		$valid  = ( $row[2] ) ? $row[2] : $ACOUNTIME ;
+		$rb     = ( $row[3] ) ? $row[3] : "N" ;
+		$cbox   = ( $row[4] ) ? $row[4] : "O" ;
+		}
+
+	// on vérifie si la photo existe
+	$photo = ( file_exists("$DOWNLOAD/campus/$IDmat.gif") ) 
+		? "$DOWNLOAD/campus/$IDmat.gif"
+		: $_SESSION["ROOTDIR"]."/css/themes/".$_SESSION["CfgTheme"]."/images/0.gif" ;
+?>
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($CAMPUS_MANAGEMENT)); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+
+		<form id="formulaire" name="formulaire" action="index.php" method="post" enctype="multipart/form-data">
+		<?php
+			print("
+				<p class=\"hidden\"><input type=\"hidden\" name=\"item\"    value=\"$item\" /></p>
+				<p class=\"hidden\"><input type=\"hidden\" name=\"cmde\"    value=\"$cmde\" /></p>
+				<p class=\"hidden\"><input type=\"hidden\" name=\"IDmat\"   value=\"$IDmat\" /></p>
+				<p class=\"hidden\"><input type=\"hidden\" name=\"submit\"  value=\"Valider\" /></p>
+				");
+		?>
+
+            <table class="width100">
+              <tr>
+                <td style="width:20;%;" class="valign-top align-right">
+			<?php print($msg->read($CAMPUS_STATUS)); ?>
+                </td>
+                <td style="width:80;%;" class="valign-top">
+			<?php print("$statut"); ?>
+                </td>
+              </tr>
+
+              <tr>
+                <td class="align-center valign-top">
+			<?php
+				print("<img src=\"$photo\" title=\"$photo\" alt=\"$photo\" />");
+
+				imageSize($photo, $srcWidth, $srcHeight);
+
+				print("<br/>$srcWidth x $srcHeight");
+			?>
+                </td>
+                <td class="valign-top">
+
+			<div style="border:#cccccc solid 1px;">
+
+				<table class="width100">
+
+				<?php
+      	            	if ( $errident != "" )
+                  			print("
+				                    <tr>
+		          					<td style=\"width:100%; text-align: justify\" class=\"valign-middle\" colspan=\"2\">
+									<span style=\"color:#FF0000;\">$errident</span>
+	          						</td>
+			                  	  </tr>");
+
+					print("
+			                    <tr>
+							<td style=\"width:25%;\" class=\"align-right valign-middle\">
+			                          ". $msg->read($CAMPUS_IDENT) ."
+							</td>
+							<td style=\"width:75%;\" class=\"valign-middle\">
+							  <label for=\"titre\"><input type=\"text\" id=\"titre\" name=\"titre\" size=\"40\" value=\"$titre\" /></label>
+							  <span style=\"color:#FF0000;\">". $msg->read($CAMPUS_MANDATORY) ."</span>
+							</td>
+			                    </tr>
+
+						  <tr>
+							<td class=\"align-right valign-top\">
+							  ". $msg->read($CAMPUS_DESCRIPTION) ." <a href=\"#\" onclick=\"popWin('".$_SESSION["ROOTDIR"]."/spip_typo.php?lang=".$_SESSION["lang"]."', '450', '350'); return false;\">
+		        				  <img src=\"".$_SESSION["ROOTDIR"]."/images/spip/aide.gif\" title=\"". $msg->read($CAMPUS_HELP) ."\" alt=\"". $msg->read($CAMPUS_HELP) ."\" /></a> :
+							</td>
+				                  <td>
+			                          <label for=\"texte\"><textarea id=\"texte\" name=\"texte\" rows=\"5\" cols=\"40\">$texte</textarea></label>
+			                        </td>
+						  </tr>");
+
+					$check1 = ( $rb == "N" ) ? "checked=\"checked\"" : "" ;
+					$check2 = ( $rb == "O" ) ? "checked=\"checked\"" : "" ;
+
+					$check3 = ( $cbox == "O" ) ? "checked=\"checked\"" : "" ;
+
+					print("
+			                    <tr>
+			                        <td class=\"align-right valign-middle\">". $msg->read($CAMPUS_ISPRIVATE) ."</td>
+			                        <td>
+							  <label for=\"rb_N\"><input type=\"radio\" id=\"rb_N\" name=\"rb\" value=\"N\" $check1 />". $msg->read($CAMPUS_NO) ."</label>
+							  <label for=\"rb_O\"><input type=\"radio\" id=\"rb_O\" name=\"rb\" value=\"O\" $check2 />". $msg->read($CAMPUS_YES) ."</label>
+			                        </td>
+			                    </tr>
+
+			                    <tr>
+			                        <td class=\"align-right valign-middle\">". $msg->read($CAMPUS_INSCRIPTION) ."</td>
+			                        <td>
+							  <label for=\"cbox\"><input type=\"checkbox\" id=\"cbox\" name=\"cbox\" value=\"O\" $check3 />". $msg->read($CAMPUS_AUTO) ."</label>
+			                        </td>
+			                    </tr>
+
+			                    <tr>
+							<td class=\"align-right valign-middle\">". $msg->read($CAMPUS_VALIDITY) ."</td>
+							<td>
+							  <label for=\"is_valid\"><input type=\"text\" id=\"is_valid\" name=\"valid\" size=\"20\" value=\"$valid\" /></label>");
+
+						// calendrier surgissant
+						CalendarPopup("valid", "document.formulaire.valid");
+
+					print("
+							</td>
+			                    </tr>
+
+			                    <tr>
+							<td class=\"align-right valign-middle\">". $msg->read($CAMPUS_IMAGE) ."</td>
+							<td>
+							  <p class=\"hidden\"><input type=\"hidden\" name=\"MAX_FILE_SIZE\" value=\"$FILESIZE\" /></p>
+			      			  <input type=\"file\" name=\"UploadedFile\" />
+							</td>
+			                    </tr>");
+
+					print("
+			                    <tr>
+							<td class=\"align-center\" colspan=\"2\"><hr style=\"width:80%;\" /></td>
+			                    </tr>
+
+			                    <tr>
+							<td class=\"valign-middle align-right\">
+							  <input type=\"image\" src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/valid.gif\" name=\"valid\" alt=\"".$msg->read($CAMPUS_INPUTOK)."\" />
+							</td>
+							<td class= \"valign-middle\">
+			              		  ". $msg->read($CAMPUS_UPDATECAMPUS) ."
+							</td>
+			                    </tr>
+
+				              <tr>
+							<td class=\"valign-middle align-right\">
+				              	  <a href=\"".myurlencode("index.php?item=$item&cmde=visu&IDmat=$IDmat")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/cancel.gif\" title=\"\" alt=\"".$msg->read($CAMPUS_INPUTCANCEL)."\" /></a>
+							</td>
+							<td class= \"valign-middle\">
+				              	  ". $msg->read($CAMPUS_QUIT) ."
+			      			</td>
+						  </tr>");
+				?>
+
+				</table>
+
+			</div>
+
+                </td>
+              </tr>
+            </table>
+
+		</form>
+		<br/>
+
+</div>

@@ -1,0 +1,262 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2003-2007 by Dominique Laporte(C-E-D@wanadoo.fr)
+   Copyright (c) 2006 by Didier Roy (miraceti@free.fr)
+   Copyright (c) 2006 by Nordine Zetoutou (nordine.zetoutou@educagri.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : spip_new.htm
+ *		projet   : la page de création des publications par Internet
+ *
+ *		version  : 1.1
+ *		auteur   : laporte
+ *		creation : 6/09/03
+ *		modif    : 20/06/06 - par Didier Roy
+ * 		           migration PHP5
+ *		           17/07/06 - Nordine Zetoutou
+ * 	                 migration des balises HTML en XHTML 1.0 strict
+ */
+
+
+$IDflash = ( @$_POST["IDflash"] )		// ID du flash info
+	? (int) $_POST["IDflash"]
+	: (int) @$_GET["IDflash"] ;
+$title  = @$_POST["title"];			// titre de la publi
+$texte  = @$_POST["texte"];			// texte de la publi
+$templ  = @$_POST["templ"];			// squelette de la publi
+
+$submit  = @$_POST["valid_x"];		// bouton de validation
+?>
+
+
+<?php
+	// initialisation des erreurs
+	$error  = 0;
+	$status = "-";
+
+	// recherche de l'auteur
+	$auteur = $_SESSION["CnxName"];
+
+	// l'utilisateur a validé
+	if ( $submit ) {
+		// test d'erreur sur champs non renseignés
+		$error = ( $title == "" ) ? 1 : 0 ;
+
+		// on procède à la création si pas d'erreur
+		if ( !$error ) {
+			// initialisation des champs
+			$date   = date("Y-m-d H:i:s");
+			$valid  = ( $_SESSION["CnxAdm"] == 255 ) ? "O" : "N" ;
+
+			if ( $IDflash ) {
+				//mise à jour d'une publi
+				$Query  = "update flash ";
+				$Query .= "set _title = '$title', _texte = '$texte', _template = '$templ' ";
+				$Query .= "where _IDflash = '$IDflash'";
+				}
+			else {
+				// création d'une publi
+				$Query  = "insert into flash ";
+				$Query .= "values('', '0', '".$_SESSION["CnxID"]."', '254', '254', '255', '$date', 'N', '$title', 'C', '$texte', '$templ', 'P', 'N', '$valid', 'O', 'O', '1', 'O', 'O', 'N', '".$_SESSION["lang"]."')";
+				}
+
+			if ( !mysql_query($Query, $mysql_link) ) {
+				$status = "erreur <img src=\"".$_SESSION["ROOTDIR"]."/images/bad.gif\" title=\"\" alt=\"\" />";
+				sql_error($mysql_link);
+				}
+			else {
+				$status  = ( $IDflash )
+					? $msg->read($SPIP_MODIFICATION) ." <img src=\"".$_SESSION["ROOTDIR"]."/images/ok.gif\" title=\"\" alt=\"\" /> "
+					: $msg->read($SPIP_INSERTION) ." <img src=\"".$_SESSION["ROOTDIR"]."/images/ok.gif\" title=\"\" alt=\"\" /> " ;
+				$status .= ( $_SESSION["CnxAdm"] == 255 OR $IDflash )
+					? ""
+					: "<br/>" . $msg->read($SPIP_THANX) ;
+
+				if ( !$IDflash ) {
+					require_once "include/postit.php";
+
+					// on avertit le webmaster qu'un utilisateur a créé une publi
+					if ( $_SESSION["CnxAdm"] != 255 )
+						sendWarningMessage($msg->read($SPIP_SUBJECT), "<strong>$title</strong><br/>$texte");
+
+//					$IDflash = mysql_insert_id();
+					}
+				}
+			}
+		}
+
+	// lecture de la publication
+	$result = mysql_query("select _title, _texte, _template from flash where _IDflash = '$IDflash'", $mysql_link);
+	$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+	$title = $row[0];
+	$texte = $row[1];
+	$templ = ( $row ) ? $row[2] : "publication.htm" ;
+?>
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($SPIP_FORMFEED)); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+
+		  <table class="width100">
+		    <tr>
+		      <td style="width:15%;" class="align-right valign-top"><?php print($msg->read($SPIP_STATUS)); ?></td>
+		      <td style="width:85%;" class="valign-top"><?php print("$status"); ?></td>
+		    </tr>
+
+		    <tr>
+		      <td class="align-right valign-top"><?php print($msg->read($SPIP_AUTHOR)); ?></td>
+		      <td class="valign-top"><?php print("$auteur"); ?></td>
+		    </tr>
+		  </table>
+
+	<hr style="width:80%;" />
+
+	<form id="formulaire" action="index.php" method="post">
+	<?php
+		print("
+			<p class=\"hidden\"><input type=\"hidden\" name=\"item\"     value=\"$item\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"cmde\"     value=\"$cmde\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"IDflash\"  value=\"$IDflash\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"submit\"   value=\"Valider\" /></p>
+			");
+	?>
+
+	  <table class="width100">
+	   <tr>
+	     <td style="width:10%;"></td>
+	     <td style="width:80%;">
+		
+		  <table class="width100">
+		  <?php
+			// intitulé non renseigné
+			if ( $error )
+			  	print("
+				    <tr>
+				      <td style=\"width:100%;\">
+				        <span style=\"color:#FF0000;\">". $msg->read($SPIP_ERRTITLE) ."</span>
+				      </td>
+				    </tr>
+				    	");
+			?>
+
+		    <tr style="background-color:#eeeeee;">
+		      <td style="width:100%;">
+		        <?php print($msg->read($SPIP_TITLE)); ?>
+		      </td>
+		    </tr>
+
+		    <tr>
+		      <td style="width:100%;">
+		        <label for="title"><input type="text" id="title" name="title" size="40" value="<?php print("$title"); ?>" /></label>
+		      </td>
+		    </tr>
+
+		    <tr style="background-color:#eeeeee;">
+		      <td style="width:100%;">
+		        <?php print($msg->read($SPIP_MYDESCRIPTION)); ?>
+		      </td>
+		    </tr>
+
+		    <tr>
+		      <td style="width:100%;">
+		        <?php print("<label for=\"texte\"><textarea id=\"texte\" name=\"texte\" rows=\"4\" cols=\"35\">$texte</textarea></label>"); ?>
+		      </td>
+		    </tr>
+
+		    <tr style="background-color:#eeeeee;">
+		      <td style="width:100%;">
+		        <?php print($msg->read($SPIP_TEMPLATE)); ?>
+		      </td>
+		    </tr>
+
+		    <tr>
+		      <td style="width:100%;">
+				<label for="templ">
+				<select id="templ" name="templ">
+				<?php
+					// ouverture du répertoire des modèles
+					$path  = "download/spip/templates/".$_SESSION["lang"];
+					$myDir = @opendir($path);
+
+					// lecture des répertoires
+					while ( $entry = @readdir($myDir) ) {
+						switch ( extension($entry) ) {
+							case "htm" :
+							case "html" :
+								$sel = ( $entry == $templ ) ? "selected=\"selected\"" : "" ;
+
+								// construction du menu déroulant
+								print("<option value=\"$entry\" $sel>$entry</option>");
+								break;
+
+							default :
+								break;
+							}
+						}
+
+					@closedir($myDir);
+				?>
+				</select>
+				</label>
+		      </td>
+		    </tr>
+
+		  </table>
+
+		  </td>
+	     <td style="width:10%;"></td>
+	   </tr>
+	  </table>
+
+	<hr style="width:80%;" />
+
+	  <table class="width100">
+           <tr>
+              <td style="width:10%;" class="valign-middle align-center">
+              	<?php print("<input type=\"image\" src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/valid.gif\" name=\"valid\" alt=\"".$msg->read($SPIP_INPUTOK)."\" />"); ?>
+              </td>
+              <td class="valign-middle">
+              <?php
+              	$action = ( $IDflash ) ? $msg->read($SPIP_UPDTPUBLI) : $msg->read($SPIP_ADDPUBLI) ;
+
+              	print("$action");
+              ?>
+              </td>
+           </tr>
+           <tr>
+              <td class="valign-middle align-center">
+              	<?php print("<a href=\"index.php?item=$item\">"); ?>
+              	<?php print("<img src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/cancel.gif\" title=\"\" alt=\"".$msg->read($SPIP_INPUTCANCEL)."\" />"); ?></a>
+              </td>
+              <td class="valign-middle">
+              	<?php print($msg->read($SPIP_GOBACK)); ?>
+              </td>
+           </tr>
+	  </table>
+
+	</form>
+
+</div>

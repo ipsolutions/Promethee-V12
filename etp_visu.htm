@@ -1,0 +1,1110 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2006-2008 by Dominique Laporte(C-E-D@wanadoo.fr)
+   Copyright (c) 2006 by Nordine Zetoutou (nordine.zetoutou@educagri.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : etp_visu.htm
+ *		projet   : la page des Espaces de Travail Partagé
+ *
+ *		version  : 1.0
+ *		auteur   : laporte
+ *		creation : 1/07/06
+ *		modif    : 17/07/06 - Nordine Zetoutou
+ * 	                 migration des balises HTML en XHTML 1.0 strict
+ */
+
+
+$IDcentre   = ( @$_POST["IDcentre"] )	// Identifiant du centre
+	? (int) $_POST["IDcentre"]
+	: (int) (@$_SESSION["CnxCentre"] ? $_SESSION["CnxCentre"] : 1) ;
+$IDetp      = ( @$_POST["IDetp"] )		// ID de l'ETP
+	? (int) $_POST["IDetp"]
+	: (int) @$_GET["IDetp"];
+$IDdata     = ( @$_POST["IDdata"] )		// Identifiant du répertoire parent
+	? (int) $_POST["IDdata"]
+	: (int) @$_GET["IDdata"] ;
+$IDroot     = ( @$_POST["IDroot"] )		// Identifiant du répertoire racine
+	? (int) $_POST["IDroot"]
+	: (int) @$_GET["IDroot"] ;
+$IDpage     = (int) @$_GET["IDpage"];	// Identifiant du document wiki
+$page_cmde  = ( @$_POST["page_cmde"] )	// commande utilisateur
+	? $_POST["page_cmde"]
+	: @$_GET["page_cmde"] ;
+
+$IDitem     = (int) @$_GET["IDitem"];
+$newdir     = trim(@$_GET["newdir"]);
+
+$titre      = trim(@$_POST["titre"]);
+$texte      = trim(@$_POST["texte"]);
+
+$wiki_tag   = ( @$_POST["wiki_tag"] )
+	? $_POST["wiki_tag"] 
+	: @$_GET["wiki_tag"] ;
+$wiki_title = ( @$_POST["wiki_title"] )
+	? $_POST["wiki_title"] 
+	: @$_GET["wiki_title"] ;
+$wiki_cmde  = ( @$_POST["wiki_cmde"] )
+	? $_POST["wiki_cmde"] 
+	: @$_GET["wiki_cmde"] ;
+?>
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($ETP_WORKGROUP)); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+
+	<?php
+		require_once "include/user.php";
+		require_once "include/wiki.php";
+
+		// création automatique de l'ETP
+		if ( !$IDetp ) {
+			$query  = "select _IDetp from etp ";
+			$query .= "where _IDmod = '".$_SESSION["CnxID"]."' ";
+			$query .= "AND _IDgrp = '0' ";
+			$query .= "limit 1";
+
+			if ( mysql_query($query, $mysql_link) )
+				if ( !mysql_affected_rows($mysql_link) ) {
+					// recherche du quotas disque
+					$query  = "select _maxsize from etp ";
+					$query .= "where _IDgrp = '".$_SESSION["CnxGrp"]."' ";
+					$query .= "limit 1";
+
+					$result = mysql_query($query, $mysql_link);
+					$row    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+					$hdsize = ( $row ) ? $row[0] : $HDQUOTAS ;
+
+					// création espace
+					$query  = "insert into etp ";
+					$query .= "values('', '$IDcentre', '0', '".$_SESSION["CnxID"]."', '0', '".$_SESSION["CnxGrp"]."', '', '$hdsize', '0', '', '0', '0', 'O')";
+
+					mysql_query($query, $mysql_link);
+					}
+			}
+
+		// mise à jour du dernier accès
+		$query  = "update etp ";
+		$query .= "set _date = '".date("Y:m:d H:i:s")."', _ID = '".$_SESSION["CnxID"]."', _IP = '".$_SESSION["CnxIP"]."' ";
+		$query .= ( $IDetp ) ? "where _IDetp = '$IDetp' " : "where _IDmod = '".$_SESSION["CnxID"]."' ";
+		$query .= "limit 1";
+
+		mysql_query($query, $mysql_link);
+
+		if ( $IDetp) {
+			$query  = "insert into etp_vu ";
+			$query .= "values('$IDetp', '". $_SESSION["CnxID"] ."', '". $_SESSION["CnxIP"] ."', '". date("Y:m:d H:i:s") ."')";
+
+			if ( !mysql_query($query, $mysql_link) ) {
+				$query  = "update etp_vu ";
+				$query .= "set _date = '".date("Y:m:d H:i:s")."', _IP = '".$_SESSION["CnxIP"]."' ";
+				$query .= "where _IDetp = '$IDetp' AND _ID = '".$_SESSION["CnxID"]."' ";
+				$query .= "limit 1";
+
+				mysql_query($query, $mysql_link);
+				}
+			}
+
+		// recherche de l'ETP
+		$query  = "select _texte, _IDmod, _IDgrpwr, _IDgrprd, _maxsize, _size, _IDetp, _IDgrp from etp ";
+		$query .= ( $IDetp ) ? "where _IDetp = '$IDetp' " : "where _IDmod = '".$_SESSION["CnxID"]."' ";
+		$query .= "AND _IDgrp = '0' ";
+		$query .= "order by _IDetp limit 1";
+
+		$result = mysql_query($query, $mysql_link);
+		$etp    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+		// vérification des autorisations
+		verifySessionAccess($etp[1], $etp[3]);
+
+		$IDetp  = (int) $etp[6];
+		$IDmod  = (int) $etp[1];
+		$IDgrp  = (int) $etp[7];
+
+		// calcul de l'espace disque dispo
+		$dispo  = $msg->read($ETP_NOLIMIT);
+
+		if ( $etp[4] ) {
+			$space = ( $etp[4] - $etp[5] < 0 ) ? 0 : $etp[4] - $etp[5] ;
+			$space = (int) (($space * 100) / $etp[4]);
+
+			$dispo = "$space % (". (int) (($etp[4] - $etp[5]) / 1024) ." ko)";
+			}
+
+		$config = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $IDmod )
+			? "[<a href=\"".myurlencode("index.php?item=$item&cmde=tuning&IDetp=$IDetp&from=$cmde")."\">". $msg->read($ETP_CONFIG) ."</a>".
+			  "|<a href=\"#\" onclick=\"popWin('".$_SESSION["ROOTDIR"]."/user_list.php?sid=".$_SESSION["sessID"]."&amp;IDetp=$IDetp&amp;cmde=etp&amp;lang=".$_SESSION["lang"]."', '450', '200'); return false;\">". $msg->read($ETP_SHOWACCESS) ."</a>]"
+			: "" ;
+
+		$ident  = ( $IDgrp ) ? $msg->read($ETP_USERGROUP) : $msg->read($ETP_OWNER) ;
+
+     		print("
+	            <table class=\"width100\">
+	              <tr>
+	                <td class=\"align-right\" style=\"width:1%; white-space:nowrap;\">$ident</td>
+	                <td>". getUserName($etp[1]) ."</td>
+	                <td class=\"align-right\">$config</td>
+	              </tr>
+	              <tr>
+	                <td class=\"align-right\" style=\"white-space:nowrap;\">". $msg->read($ETP_SPACEAVAIL) ."</td>
+	                <td colspan=\"2\">$dispo</td>
+	              </tr>
+	            </table>
+
+	            <div style=\"background-color:#eeeeee; text-align:justify;\">
+			". $msg->read($ETP_TEXT) ."<br/>$etp[0]
+			</div>
+			");
+
+		// suppression de documents
+		if ( @$_POST["del_x"] )
+			if ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $etp[1] ) {
+				//---- suppression de fichiers/url
+				$cb = @$_POST["cbitem"];
+
+				for ($i = 0; $i < count($cb); $i++) {
+					$IDitem = (int) $cb[$i];
+
+					$result = mysql_query("select _file, _size from etp_items where _IDitem = '$IDitem' limit 1", $mysql_link);
+					$row    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+					$Query  = "delete from etp_items ";
+					$Query .= "where _IDitem = '$IDitem' ";
+					$Query .= "limit 1";
+
+					if ( mysql_query($Query, $mysql_link) )
+						if ( $row[1] ) {
+							// effacer les documents sur le serveur...
+							unlink("$DOWNLOAD/etp/$etp[1]/$IDroot-$row[0]");
+
+							$size   = (int) -$row[1];
+
+							// attention à l'espace disque
+							$Query  = "update etp ";
+							$Query .= "set _size = _size + '$size' ";
+							$Query .= "where _IDetp = '$IDetp' ";
+							$Query .= "limit 1";
+
+							mysql_query($Query, $mysql_link);
+							}
+					}
+
+				//---- suppression de dossiers
+				$cb = @$_POST["cbdata"];
+
+				for ($i = 0; $i < count($cb); $i++) {
+					$IDdata = (int) $cb[$i];
+
+					$Query  = "delete from etp_data ";
+					$Query .= "where _IDdata = '$IDdata' ";
+					$Query .= ( $_SESSION["CnxAdm"] == 255 ) ? "" : "AND _IDmod = '".$_SESSION["CnxID"]."' ";
+					$Query .= "limit 1";
+
+					if ( mysql_query($Query, $mysql_link) ) {
+						$Query  = "delete from etp_items ";
+						$Query .= "where _IDdata = '$IDdata' ";
+						$Query .= ( $_SESSION["CnxAdm"] == 255 ) ? "" : "AND _IDmod = '".$_SESSION["CnxID"]."' ";
+						$Query .= "limit 1";
+
+						if ( mysql_query($Query, $mysql_link) ) {
+							// effacer les documents sur le serveur...
+							}
+						}
+					}
+
+				//---- suppression de doc wiki
+				$cb = @$_POST["cbwiki"];
+
+				for ($i = 0; $i < count($cb); $i++) {
+					$IDpage = (int) $cb[$i];
+
+					$wk = new wiki;
+					$wk->delete($IDpage);
+					}
+				}
+	?>
+
+	<hr style="width:80%; text-align:center;" />
+
+	<table class="width100">
+	<?php
+		// pour les dossiers privés (gestion par ACL)
+		$acl = new user_acl("etp_data");
+
+		//----- lecture du répertoire courant -----
+		$Query  = "select _titre, _IDparent, _IDgrpwr, _IDgrprd from etp_data ";
+		$Query .= "where _IDdata = '$IDroot' ";
+		$Query .= "limit 1";
+
+		$result = mysql_query($Query, $mysql_link);
+		$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+		// initialisation
+		$mydir  = ( $IDroot ) ? $row[0] : $msg->read($ETP_ROOTDIR) ;
+		$link   = "index.php?item=$item&amp;IDetp=$IDetp&amp;IDroot=$IDroot&amp;cmde=$cmde";
+		$date   = date("Y-m-d H:i:s");
+
+		// permissions
+		$iswrite = ( $IDroot ) ? $row[2] : $etp[2] ;
+		$isread  = ( $IDroot ) ? $row[3] : $etp[3] ;
+
+		// cartable numérique
+		if (  $_SESSION["CnxAdm"] == 255 OR ($etp[3] & pow(2, $_SESSION["CnxGrp"] - 1)) )
+			$page_cmde = ( @$_POST["mybag_x"] AND count(@$_POST["bag"]) )
+				? "addbag"
+				: $page_cmde ;
+
+		// actions sur les répertoires (prioritaires)
+		if ( @$_POST["move_x"] )
+			$page_cmde = "moveDir";
+		if ( @$_POST["copy_x"] )
+			$page_cmde = "copyDir";
+
+		switch ( $page_cmde ) {
+			case "addbag" :	// ajout au cartable numérique
+				$cb = @$_POST["bag"];
+				$id = @$_POST["path"];
+
+				for ($i = 0; $i < count($cb); $i++)
+					if ( @$cb[$i] ) {
+						$query  = "insert into resource_bag ";
+						$query .= "values('', '".$_SESSION["CnxID"]."', '".date("Y-m-d H:i:s")."', '".addslashes($cb[$i])."', '".addslashes($id[$i])."')";
+
+						mysql_query($query, $mysql_link);
+						}
+				break;
+
+			case "createDir" :	// création d'un répertoire
+				$value = ( $IDdata ) ? $msg->read($ETP_MODIFY) : $msg->read($ETP_CREATE) ;
+
+				print("
+			              <tr>
+						<td>
+						  <form id=\"createDir\" action=\"$link\" method=\"post\">
+							<p class=\"hidden\"><input type=\"hidden\" name=\"IDdata\"    value=\"$IDdata\" /></p>
+							<p class=\"hidden\"><input type=\"hidden\" name=\"IDroot\"    value=\"$IDroot\" /></p>
+
+							<p style=\"margin:0px;\">
+							<img src=\"".$_SESSION["ROOTDIR"]."/images/folder-add.gif\" title=\"\" alt=\"\"  />
+							<label for=\"titre\"><input type=\"text\" id=\"titre\" name=\"titre\" size=\"30\" value=\"$newdir\" style=\"font-size:9px;\" /></label>
+							<input type=\"submit\" value=\"$value\" name=\"page_cmde\" style=\"font-size:9px;\" />
+							</p>
+						  </form>
+						</td>
+			              </tr>
+					");
+				break;
+
+			case "moveDir" :	// déplacement dans répertoire
+			case "copyDir" :	// copie dans répertoire
+				$value   = ( $page_cmde == "moveDir" ) ? $msg->read($ETP_MOVE) : $msg->read($ETP_COPY) ;
+				$cbw     = ( $page_cmde == "moveDir" ) ? @$_POST["mvwiki"] : @$_POST["cpwiki"] ;
+				$cbi     = ( $page_cmde == "moveDir" ) ? @$_POST["mvitem"] : @$_POST["cpitem"] ;
+
+				$query  = "select _IDdata, _titre from etp_data ";
+				$query .= "where _IDetp = '$IDetp' AND _IDparent = '$IDroot' ";
+				$query .= "order by _titre";
+
+				$result = mysql_query($query, $mysql_link);
+				$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+				$select  = "<label for=\"newdir\" >" ;
+				$select .= "<select id=\"newdir\" name=\"newdir\" style=\"font-size:9px;\" >" ;
+				$select .= ( $IDroot ) ? "<option value=\"0\">..</option>" : "<option value=\"0\">.</option>" ;
+
+				while ( $row ) {			
+					$select .= "<option value=\"$row[0]\">$row[1]</option>";
+
+					$row = remove_magic_quotes(mysql_fetch_row($result));
+					}				
+				$select .= "</select>";
+				$select .= "</label>";
+
+				print("
+			              <tr>
+						<td>
+						  <form id=\"copyDir\" action=\"$link\" method=\"post\">
+							<p class=\"hidden\"><input type=\"hidden\" name=\"IDdata\"    value=\"$IDdata\" /></p>
+							<p class=\"hidden\"><input type=\"hidden\" name=\"IDroot\"    value=\"$IDroot\" /></p>");
+
+				for ($i = 0; $i < count($cbw); $i++)
+					print("<p class=\"hidden\"><input type=\"hidden\" name=\"cbwiki[]\" value=\"$cbw[$i]\" /></p>");
+				for ($i = 0; $i < count($cbi); $i++)
+					print("<p class=\"hidden\"><input type=\"hidden\" name=\"cbitem[]\" value=\"$cbi[$i]\" /></p>");
+
+				print("
+							<p style=\"margin:0px;\">
+							<img src=\"".$_SESSION["ROOTDIR"]."/images/mvcopy.gif\" title=\"\" alt=\"\" />
+							". $msg->read($ETP_SELECTION, $value) ." $select
+							<input type=\"submit\" name=\"page_cmde\" value=\"$value\" style=\"font-size: 9px;\" />
+							". $msg->read($ETP_OR) ."
+							<input type=\"submit\" value=\"".$msg->read($ETP_INPUTCANCEL)."\" name=\"page_cancel\" style=\"font-size: 9px;\" />
+							</p>
+						  </form>
+						</td>
+			              </tr>
+					");
+				break;
+
+			default :
+				if ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $etp[1] ) {
+					// création répertoire
+					if ( $page_cmde == $msg->read($ETP_CREATE) AND $titre != "" ) {
+						// héritage des droits
+						$result = mysql_query("select _IDgrpwr, _IDgrprd from etp where _IDmod = '".$_SESSION["CnxID"]."' limit 1", $mysql_link);
+						$row    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+						$Query  = "insert into etp_data ";
+						$Query .= "values('', '$IDroot', '$IDetp', '".addslashes($titre)."', '$date', '".$_SESSION["CnxIP"]."', '".$_SESSION["CnxID"]."', '$row[0]', '$row[1]', 'N', 'O')";
+
+						if ( !mysql_query($Query, $mysql_link) )
+							sql_error($mysql_link);
+						}
+
+					// modification répertoire
+					if ( $page_cmde == $msg->read($ETP_MODIFY) AND $titre != "" ) {
+						$Query  = "update etp_data ";
+						$Query .= "set _titre = '". addslashes($titre) ."' ";
+						$Query .= "where _IDdata = '$IDdata'";
+
+						if ( !mysql_query($Query, $mysql_link) )
+							sql_error($mysql_link);
+						}
+
+					// copie ou déplacement dans répertoire
+					if ( $page_cmde == $msg->read($ETP_COPY) OR $page_cmde == $msg->read($ETP_MOVE) ) {
+						$cbi = @$_POST["cbitem"];
+
+						for ($i = 0; $i < count($cbi); $i++) {
+							$result = mysql_query("select * from etp_items where _IDitem = '$cbi[$i]' limit 1", $mysql_link);
+							$row    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+							// ajout dans la base de données
+							$Query  = "insert into etp_items ";
+							$Query .= "values('', '".@$_POST["newdir"]."', '$row[2]', '$row[3]', '$date', '$date', '".$_SESSION["CnxIP"]."', '".$_SESSION["CnxID"]."', '$row[8]', '$row[9]', '$row[10]', '$row[11]', '$row[12]', '$row[13]', '$row[14]', '$row[15]', '$row[16]', '$row[17]', '$row[18]')";
+
+							if ( mysql_query($Query) )
+								copy("$DOWNLOAD/etp/$etp[1]/$IDroot-$row[12]", "$DOWNLOAD/etp/$etp[1]/".@$_POST["newdir"]."-$row[12]");
+
+							// si on déplace => suppression ancien fichier
+							if ( $page_cmde == $msg->read($ETP_MOVE) )
+								if ( mysql_query("delete from etp_items where _IDitem = '$cbi[$i]' limit 1", $mysql_link) )
+									unlink("$DOWNLOAD/etp/$etp[1]/$IDroot-$row[12]");
+							}
+						}
+					}
+
+				$icon = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $etp[1] )
+					? "<img src=\"".$_SESSION["ROOTDIR"]."/images/folder-add.gif\" title=\"\" alt=\"\" />"
+					: "" ;
+				$add  = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $etp[1] )
+					? "<a href=\"$link&amp;IDroot=$IDroot&amp;page_cmde=createDir\">". $msg->read($ETP_CREATEDIR) ."</a>."
+					: "" ;
+				$home = "<a href=\"$link&amp;IDroot=0\">". $msg->read($ETP_ROOTDIR) ."</a>";
+
+				print("
+			              <tr>
+			                <td style=\"width:1%;\" class=\"valign-middle align-center\">$icon</td>
+			                <td class=\"valign-middle align-left\">$add</td>
+			                <td class=\"valign-middle align-right\">[$home]</td>
+			              </tr>
+		              	");
+		              break;
+	              }
+	?>
+	</table>
+
+	<form id="formulaire" action="index.php" method="post" enctype="multipart/form-data">
+	<?php
+		print("
+			<p class=\"hidden\"><input type=\"hidden\" name=\"item\"   value=\"$item\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"cmde\"   value=\"$cmde\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"IDetp\"  value=\"$IDetp\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"IDroot\" value=\"$IDroot\" /></p>
+			");
+	?>
+
+	<table class="width100">
+	<?php
+		// tri par colonne
+		$mysort = "<a href=\"#\" onclick=\"ts_resortTable(this); return false;\"><img src=\"".$_SESSION["ROOTDIR"]."/images/sort_none.gif\" title=\"\" alt=\"\" /></a>";
+
+		// cartable électronique
+		$mybag  = ( $_SESSION["CnxAdm"] == 255 OR ($etp[3] & pow(2, $_SESSION["CnxGrp"] - 1)) )
+			? "<input type=\"image\" src=\"".$_SESSION["ROOTDIR"]."/images/bag.png\" name=\"mybag\" title=\"". $msg->read($ETP_ADDSCHOOLBAG) ."\" alt=\"". $msg->read($ETP_ADDSCHOOLBAG) ."\" />"
+			: "<img src=\"".$_SESSION["ROOTDIR"]."/images/bag.png\" title=\"\" alt=\"*\" />" ;
+
+		// suppression des ressources
+		$delete = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $etp[1] )
+			? "<input type=\"image\" src=\"".$_SESSION["ROOTDIR"]."/images/corb.gif\" name=\"del\" title=\"". $msg->read($ETP_DELDOC) ."\" alt=\"". $msg->read($ETP_DELDOC) ."\" />"
+			: "<img src=\"".$_SESSION["ROOTDIR"]."/images/corb.gif\" title=\"\" alt=\"*\" />" ;
+
+		// déplacement des ressources
+		$move   = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $etp[1] )
+			? "<input type=\"image\" src=\"".$_SESSION["ROOTDIR"]."/images/mv.gif\" name=\"move\" title=\"". $msg->read($ETP_MOVE) ."\" alt=\"". $msg->read($ETP_MOVE) ."\" />"
+			: "<img src=\"".$_SESSION["ROOTDIR"]."/images/mv.gif\" title=\"\" alt=\"*\" />" ;
+
+		// copie des ressources
+		$copy   = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $etp[1] )
+			? "<input type=\"image\" src=\"".$_SESSION["ROOTDIR"]."/images/add.gif\" name=\"copy\" title=\"". $msg->read($ETP_COPY) ."\" alt=\"". $msg->read($ETP_COPY) ."\" />"
+			: "<img src=\"".$_SESSION["ROOTDIR"]."/images/add.gif\" title=\"\" alt=\"*\" />" ;
+
+		// en-tête tableau
+		print("
+	              <tr style=\"background-color:#C0C0C0;\">
+	                <td style=\"width:1%;\"><img src=\"".$_SESSION["ROOTDIR"]."/images/folder-opened.gif\" title=\"\" alt=\"\" /></td>
+	                <td style=\"width:65%;\">$mysort <strong>$mydir</strong></td>
+			    <td style=\"width:1%;\"  class=\"align-center\">$mybag</td>
+			    <td style=\"width:1%;\"  class=\"align-center\">$delete</td>
+		          <td style=\"width:1%;\"  class=\"align-center\">$move</td>
+		          <td style=\"width:1%;\"  class=\"align-center\">$copy</td>
+	                <td style=\"width:20%;\" class=\"align-center\">$mysort ". $msg->read($ETP_ARTICLE) ."</td>
+	                <td style=\"width:10%;\" class=\"align-center\">". $msg->read($ETP_HIT) ."</td>
+	              </tr>
+			");
+
+		// accès au répertoire parent
+		if ( $IDroot )
+			print("            
+				<tr style=\"background-color: #eeeeee;\">
+					<td class=\"align-center\"><img src=\"".$_SESSION["ROOTDIR"]."/images/folder-up.gif\" title=\"". $msg->read($ETP_PARENTDIR) ."\" alt=\"". $msg->read($ETP_PARENTDIR) ."\" /></td>
+					<td colspan=\"8\">[<a href=\"$link&amp;IDroot=$row[1]\">". $msg->read($ETP_PARENTDIR) ."</a>]</td>
+				</tr>
+	       		");
+
+		//----- lecture des dossiers -----
+		$Query  = "select _IDdata, _IDmod, _IP, _date, _titre, _visible, _IDgrprd, _private from etp_data ";
+		$Query .= "where _IDparent = '$IDroot' ";
+		$Query .= ( $IDetp ) ? "AND _IDetp = '$IDetp' " : "AND _IDetp = '".$_SESSION["CnxID"]."' " ;
+		$Query .= ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $etp[1] ) ? "" : "AND  _visible = 'O' ";
+		$Query .= "order by _titre asc";
+
+		$result = mysql_query($Query, $mysql_link);
+		$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+		$i = 0;
+		while ( $row ) {
+			$bgcolor = ( $i++ % 2 ) ? "item" : "menu" ;
+
+			$icon    = ( $row[5] == "O" ) ? "folder-closed.gif" : "locked.gif" ;
+
+			// le dossier est-il privé ?
+			// seuls l'admin ou le modérateur peuvent modifier l'ACL
+			if ( $row[7] == "O" ) {
+				$mylink = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $row[1] OR $acl->isMember($row[0], $_SESSION["CnxID"]) )
+					? "<a href=\"$link&amp;IDroot=$row[0]\">$row[4]</a>"
+					: $row[4] ;
+
+				$priv   = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $row[1] )
+					? "<a href=\"index.php?item=1&amp;cmde=acl&amp;ident=etp_data&amp;IDident=$row[0]\"><img src=\"".$_SESSION["ROOTDIR"]."/images/invisible.gif\" title=\"". $msg->read($ETP_PRIVDIR) ."\" alt=\"". $msg->read($ETP_PRIVDIR) ."\" /></a>"
+					: "<img src=\"".$_SESSION["ROOTDIR"]."/images/invisible.gif\" title=\"". $msg->read($ETP_PRIVDIR) ."\" alt=\"". $msg->read($ETP_PRIVDIR) ."\" />" ;
+				}
+			else {
+				$mylink = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $row[1] OR ($row[6] & pow(2, $_SESSION["CnxGrp"] - 1)) )
+					? "<a href=\"$link&amp;IDroot=$row[0]\">$row[4]</a>"
+					: $row[4] ;
+
+				$priv   = "";
+				}
+
+			// nbr de documents dans le répertoire
+			$query   = "select _IDitem from etp_items ";
+			$query  .= "where _IDetp = '$IDetp' AND _IDdata = '$row[0]' ";
+			$query  .= ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $row[1] )
+				? ""
+				: "AND _visible = 'O' ";
+
+			$return  = mysql_query($query, $mysql_link);
+			$count   = ( $return ) ? mysql_affected_rows($mysql_link) : 0 ;
+			$msg->isPlural = (bool) ( $count > 1 );
+
+			// on efface uniquement les dossiers vides
+			$delete  = ( $count == 0 AND ($_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $row[1]) )
+ 				? "<label for=\"cbdata_$row[0]\"><input type=\"checkbox\" id=\"cbdata_$row[0]\" name=\"cbdata[]\" value=\"$row[0]\" /></label>"
+             		: "" ;
+
+	            $update  = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $row[1] )
+        	      	? "<a href=\"$link&amp;IDdata=$row[0]&amp;newdir=$row[4]&amp;page_cmde=createDir\"><img src=\"".$_SESSION["ROOTDIR"]."/images/stats/post.gif\" title=\"". $msg->read($ETP_UPDATEDIR) ."\" alt=\"". $msg->read($ETP_UPDATEDIR) ."\" /></a>"
+              		: "" ;
+	            $secure  = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $row[1] )
+        	      	? "<a href=\"$link&amp;IDdata=$row[0]&amp;cmde=access\"><img src=\"".$_SESSION["ROOTDIR"]."/images/tools.gif\" title=\"". $msg->read($ETP_DIRMANAGEMENT) ."\"  alt=\"\" /></a>"
+              		: "" ;
+
+			// affichage tableau
+			if ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $etp[1]
+				OR $_SESSION["CnxID"] == $row[1] OR ($row[6] & pow(2, $_SESSION["CnxGrp"] - 1)) )
+				print("            
+					<tr class=\"$bgcolor\">
+	      				<td class=\"align-center\"><img src=\"".$_SESSION["ROOTDIR"]."/images/$icon\" title=\"\" alt=\"\" /></td>
+						<td>
+		   					$mylink $priv $update $secure<br/>
+							<span class=\"x-small\">". $msg->read($ETP_CREATEBY, Array(date2longfmt($row[3]), getUserName($row[1]), _getHostName($row[2]))) ."</span>
+						</td>
+						<td></td>
+						<td>$delete</td>
+						<td></td>
+						<td></td>
+						<td class=\"align-center\">
+		   					". $msg->read($ETP_NBDOC, strval($count)) ."
+						</td>
+						<td></td>
+					</tr>
+					");
+
+			$row = remove_magic_quotes(mysql_fetch_row($result));
+			}
+
+		//----- lecture des documents -----
+		$errmsg = "";
+
+		switch ( $page_cmde ) {
+			case "createFile" : // Affichage des zones pour l'insertion d'un document
+				print("
+					<tr>
+						<td class=\"valign-middle\" colspan=\"8\"><hr/></td>
+					</tr>
+					<tr>
+						<td colspan=\"8\">
+						  <form id=\"form_upload\" action=\"$link\" method=\"post\" enctype=\"multipart/form-data\">
+							<p class=\"hidden\"><input type=\"hidden\" name=\"IDdata\"    value=\"$IDdata\" /></p>
+							<p class=\"hidden\"><input type=\"hidden\" name=\"page_cmde\" value=\"insertFile\" /></p>
+							<p class=\"hidden\"><input type=\"hidden\" name=\"MAX_FILE_SIZE\" value=\"$FILESIZE\" /></p>
+
+							<p style=\"margin:0px;\">
+							<img src=\"".$_SESSION["ROOTDIR"]."/images/item-add.gif\" title=\"". $msg->read($ETP_ADDING) ."\" alt=\"". $msg->read($ETP_ADDING) ."\" />
+							<input type=\"file\" name=\"UploadFile[]\" size=\"50\" style=\"font-size:9px;\" />
+							<input type=\"submit\" value=\"". $msg->read($ETP_SEND) ."\" style=\"font-size:9px;\" />
+							<span style=\"cursor: pointer;\" onclick=\"$('uploaded')._display.toggle(); return false;\"><img src=\"".$_SESSION["ROOTDIR"]."/images/updown.png\" title=\"". $msg->read($ETP_MORE) ."\" alt=\"". $msg->read($ETP_MORE) ."\" /></span>
+							</p>
+
+							<div id=\"uploaded\" style=\"display:none;\">");
+
+					for ($k = 1; $k < 5; $k++)
+						print("
+							<img src=\"".$_SESSION["ROOTDIR"]."/images/item-add.gif\" title=\"". $msg->read($ETP_ADDING) ."\" alt=\"". $msg->read($ETP_ADDING) ."\" />
+							<input type=\"file\" name=\"UploadFile[]\" size=\"50\" style=\"font-size:9px;\" /><br/>");
+
+				print("
+							</div>
+						  </form>
+						</td>
+				 	</tr>
+					");
+				break;
+
+			case "createUrl" : // Affichage des zones pour l'insertion d'une URL
+				print("
+					<tr>
+						<td class=\"valign-middle\" colspan=\"8\"><hr/></td>
+					</tr>
+					<tr>
+						<td colspan=\"8\">
+						  <form id=\"form_url\" action=\"$link\" method=\"post\">
+							<p class=\"hidden\"><input type=\"hidden\" name=\"IDdata\"    value=\"$IDdata\" /></p>
+							<p class=\"hidden\"><input type=\"hidden\" name=\"page_cmde\" value=\"insertUrl\" /></p>
+
+							<p style=\"margin:0px;\">
+							<img src=\"".$_SESSION["ROOTDIR"]."/images/world.gif\" title=\"". $msg->read($ETP_ADDING) ."\" alt=\"". $msg->read($ETP_ADDING) ."\" />
+							<input name=\"UploadUrl\" size=\"50\" style=\"font-size:9px;\" />
+							<input type=\"submit\" value=\"". $msg->read($ETP_SEND) ."\" style=\"font-size:9px;\" />
+							</p>
+						  </form>
+						</td>
+				 	</tr>
+					");
+				break;
+
+			case "createLink" : // Affichage des zones pour l'insertion d'un lien
+				print("
+					<tr>
+						<td class=\"valign-middle\" colspan=\"8\"><hr/></td>
+					</tr>
+					<tr>
+						<td colspan=\"8\">
+						  <form id=\"form_link\" action=\"$link\" method=\"post\" enctype=\"multipart/form-data\">
+							<p class=\"hidden\"><input type=\"hidden\" name=\"IDdata\"    value=\"$IDdata\" /></p>
+							<p class=\"hidden\"><input type=\"hidden\" name=\"page_cmde\" value=\"insertLink\" /></p>
+
+							<p style=\"margin:0px;\">
+							<img src=\"".$_SESSION["ROOTDIR"]."/images/server.gif\" title=\"". $msg->read($ETP_ADDING) ."\" alt=\"". $msg->read($ETP_ADDING) ."\" />
+							<input type=\"file\" name=\"UploadLink\" onblur=\"form.LienC.value=this.value\" size=\"50\" style=\"font-size:9px;\" />
+							<input type=\"hidden\" name=\"LienC\" />
+							<input type=\"submit\" value=\"". $msg->read($ETP_SEND) ."\" style=\"font-size:9px;\" />
+							</p>
+						  </form>
+						</td>
+				 	</tr>
+					");
+				break;
+
+			case "insertFile" :
+			case "insertLink" :
+			case "insertUrl" :
+				// initialisation
+				$size  = 0;
+				$error = 0;
+
+				if ( $page_cmde == "insertFile" ) {
+					$UploadFile = @$_FILES["UploadFile"]["tmp_name"];
+
+					for ($j = 0; $j < count($UploadFile) && @$UploadFile[$j]; $j++) {
+						// pb de transfert
+						if ( $UploadFile == "" )
+	   			 			if ( @$_FILES["UploadFile"]["name"][$j] != "" AND @$_FILES["UploadFile"]["size"][$j] == 0 )
+		    						$error = 2;
+						else
+							$error = 3;
+
+						// Vérification du type de fichier à transférer
+						if ( !$error )
+							$error = authfile(@$_FILES["UploadFile"]["name"][$j]) ? 0 : 4 ;
+
+						if ( !$error AND $etp[4] )
+							if ( @$_FILES["UploadFile"]["size"][$j] > ($etp[4] - $etp[5]) )
+		    						$error = 1;
+
+						if ( !$error ) {
+							// héritage des droits
+							$result = mysql_query("select _IDgrpwr, _IDgrprd from etp where _IDmod = '".$_SESSION["CnxID"]."' limit 1", $mysql_link);
+							$row    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+							// fichier destination
+							if ( !is_dir("$DOWNLOAD/etp/$etp[1]") )
+								if ( mymkdir("$DOWNLOAD/etp/$etp[1]", $CHMOD) )
+									copy("$DOWNLOAD/etp/index.php", "$DOWNLOAD/etp/$etp[1]/index.php");
+
+							$dest   = stripaccent("$DOWNLOAD/etp/$etp[1]/$IDroot-".$_FILES["UploadFile"]["name"][$j]);
+
+							// copie du fichier temporaire -> répertoire de stockage
+							if ( move_uploaded_file($UploadFile[$j], $dest) )
+								mychmod($dest, $CHMOD);
+
+							$size   = (int) $_FILES["UploadFile"]["size"][$j];
+
+							// ajout dans la base de données
+							$Query  = "insert into etp_items ";
+							$Query .= "values('', '$IDroot', '$IDetp', '1', '$date', '$date', '".$_SESSION["CnxIP"]."', '".$_SESSION["CnxID"]."', '0', '$row[0]', '$row[1]', '". addslashes($titre) ."', '".$_FILES["UploadFile"]["name"][$j]."', '$size', '1', '". addslashes($texte) ."', '', 'N', 'O')";
+
+							// si le fichier est déjà enregistré on effectue la mise à jour
+							if ( !mysql_query($Query, $mysql_link) ) {
+								$Query  = "select _size, _IDgrpwr etp_items ";
+								$Query .= "where _IDdata = '$IDroot' AND _file = '".$_FILES["UploadFile"]["name"][$j]."'";
+
+								$result = mysql_query($Query, $mysql_link);
+								$row    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+								// attention au droit d'écriture
+								if ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $etp[1] OR ($row[1] & pow(2, $_SESSION["CnxGrp"] - 1)) ) {
+									$Query  = "update etp_items ";
+									$Query .= "set _ver = _ver + 1, _update = '$date', _ID = '".$_SESSION["CnxID"]."', _size = '$size' ";
+									$Query .= "where _IDdata = '$IDroot' AND _file = '".$_FILES["UploadFile"]["name"][$j]."'";
+
+									// la taille du fichier peut être différente
+									if ( mysql_query($Query, $mysql_link) )
+										$size -= $row[0];
+									}
+								else {
+									$errmsg = "<img src=\"".$_SESSION["ROOTDIR"]."/images/forbidden.gif\" title=\"\" alt=\"\" />". $msg->read($ETP_ACCESSDENIED);
+									$size   = 0;
+									}
+								}	// endif fichier déjà enregistré
+							}	// endif !$error
+
+						switch ( $error ) {
+							case 1 :
+								$errmsg = $msg->read($ETP_NOSPACELEFT);
+								break;
+
+							case 2 :
+								$errmsg = $msg->read($ETP_LIMITEDSIZE, $FILESIZE);
+								break;
+
+							case 4 :
+								$errmsg = $msg->read($ETP_PERMDENIED);
+								break;
+
+							default :
+								break;
+							}
+
+						if ( $errmsg )
+						  	print("
+							    <tr>
+							      <td colspan=\"8\">
+							        <span style=\"color:#FF0000;\"><img src=\"".$_SESSION["ROOTDIR"]."/images/forbidden.gif\" alt=\"\" title=\"\" /> $errmsg</span>
+							      </td>
+							    </tr>");
+						}	// endfor
+					}	// endif insertFile
+				else {
+					// les Liens
+					$Upload     = "";
+					$UploadUrl  = @$_POST["UploadUrl"];
+					$UploadLink = @$_POST["LienC"];
+
+					if ( $UploadUrl != "" AND strstr($UploadUrl, "http://") == "" AND strstr($UploadUrl, "https://") == "" )
+						$UploadUrl = "http://" . $UploadUrl;
+
+					if ( $UploadUrl != "" )
+						$Upload = $UploadUrl;
+					if ( $UploadLink != "" )
+						$Upload = str_replace("\\", "/", substr($UploadLink, strpos($UploadLink, $DOWNLOAD), strlen($UploadLink)));
+
+					// ajout dans la base de données
+					$Query  = "insert into etp_items ";
+					$Query .= "values('', '$IDroot', '$IDetp', '1', '$date', '$date', '".$_SESSION["CnxIP"]."', '".$_SESSION["CnxID"]."', '0', '".$_SESSION["CnxGrp"]."', '".$_SESSION["CnxGrp"]."', '', '$Upload', '0', '1', '', '', 'N', 'O')";
+
+					if ( $Upload != "" )
+						mysql_query($Query, $mysql_link);
+					}
+
+				// attention à l'espace disque
+				$Query  = "update etp ";
+				$Query .= "set _size = _size + '$size' ";
+				$Query .= "where _IDetp = '$IDetp' ";
+				$Query .= "limit 1";
+
+				if ( $size )
+					mysql_query($Query, $mysql_link);
+//				break;
+
+			default :
+				// pour les fichiers privés (gestion par ACL)
+				$acl = new user_acl("etp_items");
+
+				//---- lecture des documents ----
+				$Query  = "select _IDitem, _IDmod, _IP, _date, _titre, _texte, _private, _file, _size, _visible, _IDgrprd, _ver, _IDlicense, _update, _ID, _note ";
+				$Query .= "from etp_items ";
+				$Query .= "where _IDetp = '$IDetp' AND _IDdata = '$IDroot' ";
+				$Query .= ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $etp[1] ) ? "" : "AND  _visible = 'O' ";
+				$Query .= "order by _titre, _IDitem asc";
+
+				$result = mysql_query($Query, $mysql_link);
+				$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+				// suppression des fichiers
+				$req    = $msg->read($ETP_DELFILE);
+
+				$j      = 0;
+				while ( $row AND $wiki_cmde != "createFile" ) {
+					if ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $etp[1]
+						OR $_SESSION["CnxID"] == $row[1] OR ($row[10] & pow(2, $_SESSION["CnxGrp"] - 1)) ) {
+
+						$bgcolor = ( $i++ % 2 ) ? "item" : "menu" ;
+
+						// le fichier est-il privé ?
+						// seuls l'admin ou le modérateur peuvent modifier l'ACL
+						if ( $row[6] == "O" )
+							$priv = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $row[1] )
+								? "<a href=\"index.php?item=1&amp;cmde=acl&amp;ident=etp_items&amp;IDident=$row[0]\"><img src=\"".$_SESSION["ROOTDIR"]."/images/invisible.gif\" title=\"". $msg->read($ETP_PRIVFILE) ."\" alt=\"\" /></a>"
+								: "<img src=\"".$_SESSION["ROOTDIR"]."/images/invisible.gif\" title=\"". $msg->read($ETP_PRIVFILE) ."\" alt=\"". $msg->read($ETP_PRIVFILE) ."\" />" ;
+						else
+							$priv = "";
+
+						// lecture de l'icone associée à l'extension
+						$ext   = ( $row[8] )
+							? "mime/".extension($row[7]).".gif"
+							: ((strstr($row[7], "http") == "") ? "link.png" : "url.png") ;
+
+						// lecture du modérateur du propriétaire du document
+						$desc   = $msg->read($ETP_AUTHOR, getUserName($row[1], false));
+
+						// lecture de l'adresse IP
+						$desc  .= " " . _getHostName($row[2], false) . "<br/>";
+
+						// date de création/modification
+						$desc  .= $msg->read($ETP_CREATEON, date2longfmt($row[3])) ."<br/>";
+						$desc  .= ( $row[3] != $row[13] )
+							? $msg->read($ETP_MODIFIED, date2longfmt($row[13])) ."<br/>"
+							: "" ;
+						$desc  .= ( $row[3] != $row[13] )
+							? $msg->read($ETP_BY, getUserName($row[14], false)) ."<br/>"
+							: "" ;
+
+						// version
+						$desc  .= $msg->read($ETP_VERSION, $row[11]) ."<br/>";
+
+						// lecture de la license
+						$res    = mysql_query("select _texte from resource_license where _IDlicense = '$row[12]' AND _lang = '".$_SESSION["lang"]."' limit 1", $mysql_link);
+						$lic    = ( $res ) ? remove_magic_quotes(mysql_fetch_row($res)) : 0 ;
+
+						$desc  .= $msg->read($ETP_LICENSE, $lic[0]);
+
+						// lien sur le fichier
+						$icon   = ( $row[9] == "O" ) ? $ext : "lock.gif" ;
+						$file   = ( strlen($row[4]) ) ? $row[4] : $row[7] ;
+						$myfile = ( $row[8] ) ? "$DOWNLOAD/etp/$etp[1]/$IDroot-$row[7]" : $row[7] ;
+						$mylink = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $etp[1] OR ($row[6] != "O" AND ($row[10] & pow(2, $_SESSION["CnxGrp"] - 1))) OR $acl->isMember($row[0], $_SESSION["CnxID"]) )
+							? "<a href=\"".myurlencode("index.php?file=$myfile")."\" class=\"overlib\" onclick=\"window.open(this.href, '_blank'); return false;\">$file<span>$desc</span></a>"
+							: $file ;
+
+						// note associée
+						$over = ( strlen($row[15]) ) 
+							? "<span>". str_replace(Array("\r", "\n"), Array("", "<br/>"), $row[15]) ."</span>"
+							: "";
+
+						$click = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $etp[1] )
+							? "onclick=\"popWin('".myurlencode($_SESSION["ROOTDIR"]."/etp_note.php?sid=".$_SESSION["sessID"]."&item=$item&IDitem=$row[0]&IDetp=$IDetp&IDroot=$IDroot&lang=".$_SESSION["lang"])."', '450', '305'); return false;\""
+							: "" ;
+
+						$note  = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $etp[1] OR $over )
+							? "<a href=\"#\" class=\"overlib\" $click><img src=\"".$_SESSION["ROOTDIR"]."/images/document.gif\" title=\"\" alt=\"\" />$over</a>"
+							: "" ;
+
+						// cartable électronique
+						$res   = mysql_query("select _IDitem from resource_bag where _file = '".addslashes($myfile)."' AND _ID = '".$_SESSION["CnxID"]."' limit 1", $mysql_link);
+						$myrow = ( $res ) ? mysql_fetch_row($res) : 0 ;
+
+						$isbag = ( $_SESSION["CnxAdm"] == 255 OR ($row[10] & pow(2, $_SESSION["CnxGrp"] - 1)) )
+							? ($myrow ? "checked=\"checked\"" : "")
+							: "disabled=\"disabled\"" ;
+
+						// suppression des ressources
+						$isrm  = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $etp[1] )
+							? ""
+							: "disabled=\"disabled\"" ;
+
+						// déplacement des ressources
+						$ismv  = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $etp[1] )
+							? ((@$_POST["move_x"] AND @in_array($row[0], @$_POST["mvitem"])) ? "checked=\"checked\"" : "")
+							: "disabled=\"disabled\"" ;
+
+						// copie des ressources
+						$iscp  = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $etp[1] )
+							? ((@$_POST["copy_x"] AND @in_array($row[0], @$_POST["cpitem"])) ? "checked=\"checked\"" : "")
+							: "disabled=\"disabled\"" ;
+
+				            $secure = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $etp[1] )
+			        	      	? "<a href=\"$link&amp;IDitem=$row[0]&amp;cmde=access\"><img src=\"".$_SESSION["ROOTDIR"]."/images/tools.gif\" title=\"". $msg->read($ETP_DOCMANAGEMENT) ."\" alt=\"". $msg->read($ETP_DOCMANAGEMENT) ."\" /></a>"
+              					: "" ;
+
+						// description (ou message d'erreur)
+						if ( $errmsg != "" )
+							$texte = $errmsg;
+						else {
+							$texte = ( strlen($row[5]) > 60 )
+								? substr($row[5], 0, 60) . "..."
+								: $row[5] ;
+							$texte = str_replace("<br/>", " ", $texte);
+							}
+
+						// taille des fichiers
+						$msg->isPlural = (bool) ( $row[8] > 1 );
+						$size   = ( $row[8] )
+							? $msg->read($ETP_BYTE, number_format($row[8], 0, ",", " "))
+							: "url" ;
+
+						// lecture du compteur des téléchargements
+						$res    = mysql_query("select _IDdown, _count from download_data where _file = '$myfile'", $mysql_link);
+						$down   = ( $res ) ? mysql_fetch_row($res) : 0 ;
+
+						$dwload = ( $down[0] )
+							? "<a href=\"#\" onclick=\"popWin('".$_SESSION["ROOTDIR"]."/user_list.php?sid=".$_SESSION["sessID"]."&amp;IDdown=$down[0]&amp;cmde=dwload&amp;lang=".$_SESSION["lang"]."', '450', '200'); return false;\">$down[1]</a>"
+							: "0" ;
+
+						// affichage tableau
+						print("
+							<tr class=\"$bgcolor\">
+	      		    				<td class=\"align-center\"><img src=\"".$_SESSION["ROOTDIR"]."/images/$icon\" title=\"\" alt=\"\" /></td>
+				       	         	<td>
+				       	         		$mylink $priv $secure $note<br/>
+				       	         		<span class=\"x-small\">$texte &nbsp;</span>
+								</td>
+				       			<td class=\"align-center\">
+									<label for=\"bag_$row[0]\">
+									<input type=\"checkbox\" id=\"bag_$row[0]\" name=\"bag[]\" value=\"$file\" $isbag />
+									<input type=\"hidden\" name=\"path[]\" value=\"$myfile\" />
+									</label>
+								</td>
+								<td class=\"align-center\"><label for=\"cbitem_$row[0]\"><input type=\"checkbox\" id=\"cbitem_$row[0]\" name=\"cbitem[]\" value=\"$row[0]\" $isrm /></label></td>
+								<td class=\"align-center\"><label for=\"mvitem_$row[0]\"><input type=\"checkbox\" id=\"mvitem_$row[0]\" name=\"mvitem[]\" value=\"$row[0]\" $ismv /></label></td>
+								<td class=\"align-center\"><label for=\"cpitem_$row[0]\"><input type=\"checkbox\" id=\"cpitem_$row[0]\" name=\"cpitem[]\" value=\"$row[0]\" $iscp /></label></td>
+				       	         	<td class=\"align-center\">$size</td>
+				       	         	<td class=\"align-center\">[$dwload]</td>
+				       		</tr>
+				       		");
+						}
+
+					$j++;
+					$row = remove_magic_quotes(mysql_fetch_row($result));
+					}
+				break;
+			}
+
+		//----- lecture des documents collaboratifs -----
+		$wk = new wiki;
+
+		// initialisation des variables de l'objet wiki
+		$wk->tag     = ( $wiki_tag )
+			? $wiki_tag							// lien interne
+			: "ETP_".$IDetp."_". date("Y-m-d-H-i-s") ;	// générateur ID unique peu rigoureux mais rapide
+//		$wk->version = "$item.$IDroot";
+		$wk->version = "$IDroot";
+		$wk->admin   = (bool) ( $_SESSION["CnxAdm"] == 255 OR $etp[1] == $_SESSION["CnxID"] );
+		$wk->user    = (bool) ( $etp[2] & pow(2, $_SESSION["CnxGrp"] - 1));
+		$wk->link    = myurlencode("index.php?item=$item&cmde=$cmde&IDetp=$IDetp&IDroot=$IDroot");
+
+		switch ( $wiki_cmde ) {
+			case "createFile" :
+				print("
+					<tr>
+						<td class=\"valign-middle\" colspan=\"8\"><hr/></td>
+					</tr>
+					<tr>
+			                  <td colspan=\"8\">
+			       	");
+
+				$wk->rows  = 30;
+				$wk->title = $msg->read($ETP_DOCTITLE);
+				$wk->init(0);	// on crée le document
+
+				print("
+			                  </td>
+					</tr>
+					");
+				break;
+
+			default :
+				switch ( $wiki_cmde ) {
+					case "insert" :
+						$wk->insert($wiki_title, "", $_SESSION["CnxName"]);
+						break;
+					default :
+						break;
+					}
+
+				//---- lecture des documents ----
+				$Query  = "select _IDpage, _title, _date, _author, _ver, _owner ";
+				$Query .= "from wiki ";
+//				$Query .= "where _ver = '$item.$IDroot' AND _current = 'O' ";
+				$Query .= "where _ver = '$IDroot' AND _current = 'O' ";
+				$Query .= "AND _tag like 'ETP\_".$IDetp."\_%' ";
+
+				$result = mysql_query($Query, $mysql_link);
+				$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+				// suppression des fichiers
+				$req    = $msg->read($ETP_DELFILE);
+
+				while ( $row AND $page_cmde != "createFile" AND $page_cmde != "createUrl" AND $page_cmde != "createLink" ) {
+					$bgcolor = ( $i++ % 2 ) ? "item" : "menu" ;
+
+					$titre   = ( strpos($row[1], "\n") )
+						? substr($row[1], 0, strpos($row[1], "\n"))
+						: $row[1] ;
+					$titre   = ( strlen($titre) > 60 )
+						? substr($titre, 0, 60) . "..."
+						: $titre ;
+
+					// suppression des ressources
+					$isrm  = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $etp[1] )
+						? ""
+						: "disabled=\"disabled\"" ;
+
+					// déplacement des ressources
+					$ismv  = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $etp[1] )
+						? ((@$_POST["move_x"] AND @in_array($row[0], @$_POST["mvwiki"])) ? "checked=\"checked\"" : "")
+						: "disabled=\"disabled\"" ;
+
+					// copie des ressources
+					$iscp  = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $etp[1] )
+						? ((@$_POST["copy_x"] AND @in_array($row[0], @$_POST["cpwiki"])) ? "checked=\"checked\"" : "")
+						: "disabled=\"disabled\"" ;
+
+					// affichage tableau
+					print("            
+						<tr class=\"$bgcolor\">
+      		    				<td class=\"align-center\"><img src=\"".$_SESSION["ROOTDIR"]."/images/mime/txt.gif\" title=\"\" alt=\"\" /></td>
+			       	         	<td>
+			       	         		<a href=\"".myurlencode("index.php?item=34&cmde=visu&IDroot=$IDroot&IDpage=$row[0]")."\">$titre</a><br/>
+								<span class=\"x-small\">". $msg->read($ETP_CREATEBY, Array(date2longfmt($row[2]), $row[3], '')) ."</span>
+							</td>
+				       		<td class=\"align-center\"><label for=\"bgwiki_$row[0]\"><input type=\"checkbox\" id=\"bgwiki_$row[0]\" name=\"cbbgwiki[]\" value=\"$row[0]\" disabled=\"disabled\"/></label></td>
+				       		<td class=\"align-center\"><label for=\"cbwiki_$row[0]\"><input type=\"checkbox\" id=\"cbwiki_$row[0]\" name=\"cbwiki[]\" value=\"$row[0]\" $isrm /></label></td>
+				       		<td class=\"align-center\"><label for=\"mvwiki_$row[0]\"><input type=\"checkbox\" id=\"mvwiki_$row[0]\" name=\"mvwiki[]\" value=\"$row[0]\" $ismv /></label></td>
+				       		<td class=\"align-center\"><label for=\"cpwiki_$row[0]\"><input type=\"checkbox\" id=\"cpwiki_$row[0]\" name=\"cpwiki[]\" value=\"$row[0]\" $iscp /></label></td>
+			       	         	<td class=\"align-center\">wiki</td>
+			       	         	<td></td>
+			       		</tr>
+			       		");
+
+					$row = remove_magic_quotes(mysql_fetch_row($result));
+					}
+				break;
+			}
+	?>
+	</table>
+
+	</form>
+
+	<hr/>
+
+	<table class="width100">
+	<?php
+		//----- lecture des permissions -----
+		$sql  = "select _IDgrpwr from wiki_page ";
+		$sql .= "where _IDpage = '1' ";
+		$sql .= "limit 1";
+
+		$ret  = mysql_query($sql, $mysql_link);
+		$perm = ( $ret ) ? mysql_fetch_row($ret) : 0 ;
+
+		// bouton édition document
+		$edit = ( ($_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $etp[1]) AND ($perm[0] AND pow(2, $_SESSION["CnxGrp"] - 1)) )
+			? "<a href=\"$link&amp;IDroot=$IDroot&amp;wiki_cmde=createFile\"><img src=\"".$_SESSION["ROOTDIR"]."/images/update.gif\" title=\"". $msg->read($ETP_CREATEDOC) ."\" alt=\"". $msg->read($ETP_CREATEDOC) ."\" /></a>"
+			: "" ;
+
+		// bouton ajout document (attention à l'espace disponible)
+		$add  = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $etp[1] OR ($iswrite AND pow(2, $_SESSION["CnxGrp"] - 1)) )
+			? (($etp[4] AND $etp[5] >= $etp[4])
+				? "&nbsp;"
+				: "<a href=\"$link&amp;IDroot=$IDroot&amp;page_cmde=createFile\"><img src=\"".$_SESSION["ROOTDIR"]."/images/item-add.gif\" title=\"". $msg->read($ETP_ADDOC) ."\" alt=\"". $msg->read($ETP_ADDOC) ."\" /></a>")
+			: "" ;
+
+		// bouton ajout URL
+		$url  = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $etp[1] OR ($iswrite AND pow(2, $_SESSION["CnxGrp"] - 1)) )
+			? "<a href=\"$link&amp;IDroot=$IDroot&amp;page_cmde=createUrl\"><img src=\"".$_SESSION["ROOTDIR"]."/images/world.gif\" title=\"". $msg->read($ETP_ADDURL) ."\" alt=\"". $msg->read($ETP_ADDURL) ."\" /></a>"
+			: "" ;
+
+		// bouton ajout doc server
+		$serv = ( $_SESSION["CnxAdm"] == 255 )
+			? "<a href=\"$link&amp;IDroot=$IDroot&amp;page_cmde=createLink\"><img src=\"".$_SESSION["ROOTDIR"]."/images/server.gif\" title=\"". $msg->read($ETP_ADDILINK) ."\" alt=\"". $msg->read($ETP_ADDILINK) ."\" /></a>"
+			: "" ;
+
+		print("
+			<tr>
+	                  <td class=\"valign-middle align-left\">
+            			$add $edit $url $serv
+	                  </td>
+	                  <td class=\"valign-middle align-right\">
+					[<a href=\"index.php?item=$item\">". $msg->read($ETP_GOBACK) ."</a>]
+	                  </td>
+			</tr>
+   	           	");
+	?>
+	</table>
+
+</div>

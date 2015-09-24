@@ -1,0 +1,1 @@
+O:8:"stdClass":7:{s:2:"id";s:48:"activedirectory-4d84b11d6cff24c81d36c32059cfad4a";s:4:"type";s:15:"activedirectory";s:4:"host";s:11:"172.16.20.1";s:4:"port";i:389;s:11:"login_field";s:17:"userprincipalname";s:18:"ldap_user_id_field";s:17:"distinguishedname";s:2:"dn";s:18:"DC=cnerta,DC=local";}

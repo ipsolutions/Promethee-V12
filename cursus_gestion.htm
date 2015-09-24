@@ -1,0 +1,274 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2004-2007 by Dominique Laporte(C-E-D@wanadoo.fr)
+   Copyright (c) 2006 by Hugues Lecocq(hugues.lecocq@laposte.net)
+   Copyright (c) 2006 by Nordine Zetoutou (nordine.zetoutou@educagri.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : cursus_gestion.htm
+ *		projet   : la page de gestion des modules des cursus
+ *
+ *		version  : 1.0
+ *		auteur   : laporte
+ *		creation : 25/04/04
+ *		modif    : 15/06/06 - par hugues lecocq
+ *                     migration PHP5 
+ *		           17/07/06 - Nordine Zetoutou
+ * 	                 migration des balises HTML en XHTML 1.0 strict
+ */
+
+
+$IDdata   = ( @$_POST["IDdata"] )		// identifiant des répertoires des items descours
+	? $_POST["IDdata"]
+	: @$_GET["IDdata"] ;
+
+$IDmod   = @$_POST["IDmod"];			// identifiant du modérateur
+$IDmat   = @$_POST["IDmat"];			// identifiant de la matière
+$cbwr    = @$_POST["cbwr"];			// droits des rédacteurs
+$cbrd    = @$_POST["cbrd"];			// droits des lecteurs
+$visible = ( @$_POST["visible"] ) ? "N" : "O" ;
+
+$submit  = @$_POST["valid_x"];		// bouton de validation
+?>
+
+
+<?php
+	// initialisation
+	$status = "-";
+	$grpwr  = $grprd = 0;
+
+	// recherche du cursus
+	// NB : pour l'instant seule la formation continue est acessible !!
+	$query  = "select _IDcursus, _titre from cursus ";
+	$query .= "where _visible = 'O' AND _lang = '".$_SESSION["lang"]."' ";
+	$query .= "order by _IDcursus asc limit 1";
+
+	$result = mysql_query($query, $mysql_link);
+	$cursus = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+	// l'utilisateur a validé la saisie
+	if ( $submit ) {
+		// droits des rédacteurs et des lecteurs
+		for ($i = 0; $i < count($cbwr); $i++)
+			if ( strlen($cbwr[$i]) )
+				$grpwr += $cbwr[$i];
+		for ($i = 0; $i < count($cbrd); $i++)
+			if ( strlen($cbrd[$i]) )
+				$grprd += $cbrd[$i];
+
+		$status = $msg->read($CURSUS_MODIFICATION) ." ";
+
+		if ( $IDdata ) {
+			$Query  = "UPDATE cursus_data ";
+			$Query .= "SET _IDmod = '$IDmod', _IDgrpwr = '$grpwr', _IDgrprd= '$grprd', _visible = '$visible' ";
+			$Query .= "where _IDdata = '$IDdata' ";
+			}
+		else {
+			$Query  = "insert into cursus_data ";
+			$Query .= "values('', '$cursus[0]', '$IDmat', '$IDmod', '$grpwr', '$grprd', '$visible')";
+			}
+
+		if ( !mysql_query($Query, $mysql_link) ) {
+			$status .= "<img src=\"".$_SESSION["ROOTDIR"]."/images/bad.gif\" title=\"\" alt=\"\" />";
+			sql_error($mysql_link);
+			}
+		else
+			$status .= "<img src=\"".$_SESSION["ROOTDIR"]."/images/ok.gif\" title=\"\"  alt=\"\" />";
+		}
+
+	// recherche du module des cursus
+	$query  = "select _IDdata, _IDmod, _IDgrpwr, _IDgrprd, _visible ";
+	$query .= "from cursus_data ";
+	$query .= "where _IDcursus = '$cursus[0]' AND _IDmat >= '$IDmat' ";
+	$query .= "limit 1";
+
+	$result = mysql_query($query, $mysql_link);
+	$row    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+	// initialisation
+	if ( $row ) {
+		$IDdata  = $row[0];
+		$IDmod   = $row[1];
+		$grpwr   = $row[2];
+		$grprd   = $row[3];
+		$visible = $row[4];
+		}
+	else {
+		$IDdata  = 0;
+		$IDmod   = 0;
+		$visible = "O";
+		}
+?>
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($CURSUS_MANAGEMENT, $cursus[1])); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+
+	<p><?php print($msg->read($CURSUS_STATUS) . " $status"); ?></p>
+
+	<form id="formulaire" action="index.php" method="post" enctype="multipart/form-data">
+	<?php
+		print("
+			<p class=\"hidden\"><input type=\"hidden\" name=\"item\"    value=\"$item\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"cmde\"    value=\"$cmde\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"IDdata\"  value=\"$IDdata\" /></p>
+			");
+	?>
+
+		<div style="border:#cccccc solid 1px; padding:4px;">
+
+			<table class="width100">
+			  <tr style="background-color:#eeeeee;">
+				<td style="width:33%;"><?php print($msg->read($CURSUS_MODULE)); ?></td>
+				<td style="width:33%;"><?php print($msg->read($CURSUS_CLOSEMODULE)); ?></td>
+				<td style="width:33%;"></td>
+			  </tr>
+	    
+			  <tr>
+				<td>
+					<label for="cursus_IDmat">
+					<select id="cursus_IDmat" name="IDmat" onchange="document.forms.formulaire.submit()">
+					<?php
+						// recherche des modules
+						$query  = "select _IDmat, _titre from campus_data ";
+						$query .= "where _visible = 'O' AND _lang = '".$_SESSION["lang"]."' AND _private = 'N' ";
+						$query .= "order by _titre asc";
+
+						$result = mysql_query($query, $mysql_link);
+						$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+						while ( $row ) {
+							$select = ( $IDmat == $row[0] ) ? "selected=\"selected\"" : "" ;
+
+							print("<option value=\"$row[0]\" $select>$row[1]</option>");
+
+							$row = remove_magic_quotes(mysql_fetch_row($result));
+							}
+					?>
+					</select>
+					</label>
+				</td>
+				<td>
+					<?php printf("<label for=\"visible\"><input type=\"checkbox\" id=\"visible\" name=\"visible\" value=\"O\" %s /></label>", $visible == "N" ? "checked=\"checked\"" : ""); ?>
+				</td>
+				<td></td>
+			  </tr>
+
+		    <tr>
+		      <td style="height:15px;" colspan="3"></td>
+		    </tr>
+
+			  <tr style="background-color:#eeeeee;">
+			      <td><?php print($msg->read($CURSUS_MODO)); ?> *</td>
+			      <td><?php print($msg->read($CURSUS_WRITER)); ?></td>
+			      <td><?php print($msg->read($CURSUS_READER)); ?></td>
+			  </tr>
+	    
+			  <tr>
+				<td class="valign-top">
+					<label for="IDmod">
+					<select id="IDmod" name="IDmod">
+					<option value="0"><?php print($msg->read($CURSUS_NONE)); ?></option>
+					<?php
+						// recherche des modérateurs
+						$result = mysql_query("select _ID, _name, _fname from user_id where _adm & 4 order by _name asc", $mysql_link);
+						$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+						while ( $row ) {
+							$select = ( $IDmod == $row[0] ) ? "selected=\"selected\"" : "" ;
+
+							print("<option value=\"$row[0]\" $select>".formatUserName($row[1], $row[2])."</option>");
+
+							$row = remove_magic_quotes(mysql_fetch_row($result));
+							}
+					?>
+					</select>
+					</label>
+				</td>
+				<td class="valign-top">
+				<?php
+					// recherche des groupes
+					$query  = "select _IDgrp, _ident from user_group ";
+					$query .= "where _visible = 'O' AND _lang = '".$_SESSION["lang"]."' ";
+					$query .= "order by _IDgrp asc";
+
+					$result = mysql_query($query, $mysql_link);
+					$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+					while ( $row ) {
+						$check = ( $grpwr & pow(2, $row[0] - 1) ) ? "checked=\"checked\"" : "" ;
+
+						print("<label for=\"cbwr_$row[0]\"><input type=\"checkbox\" id=\"cbwr_$row[0]\" name=\"cbwr[]\" value=\"". pow(2, $row[0] - 1) ."\" $check />$row[1]</label><br/>");
+
+						$row   = remove_magic_quotes(mysql_fetch_row($result));
+						}
+				?>
+				</td>
+				<td class="valign-top">
+				<?php
+					// recherche des groupes
+					mysql_data_seek($result, 0);
+					$row = remove_magic_quotes(mysql_fetch_row($result));
+
+					while ( $row ) {
+						$check = ( $grprd & pow(2, $row[0] - 1) ) ? "checked=\"checked\"" : "" ;
+
+						print("<label for=\"cbrd_$row[0]\"><input type=\"checkbox\" id=\"cbrd_$row[0]\" name=\"cbrd[]\" value=\"". pow(2, $row[0] - 1) ."\" $check />$row[1]</label><br/>");
+
+						$row = remove_magic_quotes(mysql_fetch_row($result));
+						}
+				?>
+				</td>
+			  </tr>
+			</table>
+
+	</div>
+
+	<div class="x-small">* <?php print($msg->read($CURSUS_DECLARE)); ?></div>
+
+	<hr style="width:80%;" />
+
+		<table class="width100">
+		  <tr>
+		    <td style="width:10%;" class="valign-middle align-center">
+			<?php print("<input type=\"image\" src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/valid.gif\" name=\"valid\" alt=\"".$msg->read($CURSUS_INPUTOK)."\" />"); ?>
+		    </td>
+		    <td class="valign-middle">
+			<?php print($msg->read($CURSUS_MODIFIED)); ?>
+		    </td>
+		  </tr>
+		  <tr>
+		    <td class="valign-middle align-center">
+			<a href="index.php?item=0"><?php print("<img src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/cancel.gif\" title=\"\" alt=\"".$msg->read($CURSUS_INPUTCANCEL)."\" />"); ?></a>
+		    </td>
+		    <td class="valign-middle">
+ 			<?php print($msg->read($CURSUS_QUIT)); ?>
+		    </td>
+		  </tr>
+		</table>
+
+	</form>
+
+</div>

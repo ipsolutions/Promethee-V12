@@ -1,0 +1,150 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2002-2007 by Dominique Laporte(C-E-D@wanadoo.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : page_gauche.htm
+ *		projet   : le menu de gauche
+ *
+ *		version  : 1.0
+ *		auteur   : laporte
+ *		creation : 22/04/07
+ *		modif    : 
+ */
+?>
+
+
+<!-- utilisateur en attente -->
+<?php
+	list($iscreat, $nil) = explode(":", $AUTHUSER);
+?>
+
+
+<!-- serveur en attente -->
+<?php
+	require_once "server/waiting.php";
+
+	serverWaiting();
+?>
+
+<?php
+if($MODETHEME != "portal"){
+	echo $my_logo;
+}
+?>
+
+<?php
+if($_SESSION["CnxGrp"] != 12 && $BTNLEFT == 1)
+{
+	?>
+	<a class="btn btn-primary" href="index.php?item=64" style="color: white; width: 82px; height: 40px; font-size: 11px">
+		<table>
+			<tr>
+				<td style="vertical-align: middle">
+					<img src="images/btn-white-cal.png" style="margin-right: 5px; margin-top: -5px; border: 0" alt="edt" />
+				</td>
+				<td>
+					<strong>Emploi du temps</strong>
+				</td>
+			</tr>
+		</table>
+	</a>
+	<?php
+	$lien_notes = "";
+	if($_SESSION["CnxGrp"] == 1)
+	{
+		$lien_notes = "index.php?item=60&cmde=view&IDeleve=".$_SESSION["CnxID"]."&IDcentre=".$_SESSION["CnxCentre"]."&IDclass=".$_SESSION["CnxClass"];
+	}
+	else
+	{
+		$lien_notes = "index.php?item=60";
+	}
+
+	?>
+	<a class="btn btn-primary" href="<?php echo $lien_notes; ?>" style="color: white; width: 82px; height: 40px; font-size: 11px"><div style="margin-top: 7px"><img src="images/btn-white-note.png" style="margin-right: 5px; border: 0" alt="note" /><strong>Notes</strong></div></a>
+	<a class="btn btn-primary" href="index.php?item=113" style="color: white; width: 82px; height: 40px; font-size: 11px"><div style="margin-top: 8px"><img src="images/btn-white-devoir.png" style="margin-right: 5px; border: 0" alt="devoir" /><strong>Devoirs</strong></div></a>
+	<br /><br />
+<?php
+}
+?>
+
+<?php
+if ( $iscreat ) {
+	require_once "user_waiting.php";
+
+	userWaiting();
+	}
+?>
+
+<?php
+	require_once "page_menu.php";
+
+	$Query  = "select _IDmenu, _ident, _marquee, _order, _img, _backoffice, _sort from config_menu ";
+	$Query .= "where _activate = 'O' ";
+	$Query .= "AND _lang = '".$_SESSION["lang"]."' AND _order > 0 ";
+	$Query .= ( $_SESSION["CnxAdm"] == 255 ) ? "" : "AND (_IDgrprd & ".pow(2, $_SESSION["CnxGrp"] - 1).") " ;
+	$Query .= "order by _order";
+
+	setmenu($Query);
+?>
+
+<?php
+if($_SESSION["CnxAdm"] == 255)
+{
+?>
+<a href="http://www.promethee-solutions.fr/ent-libre" target="_blank" class="btn" style="width: 330px; padding: 0px">
+	<table class="width100">
+		<tr>
+			<td style="width: 40px">
+				<img src="images/logo-pmt-solutions.png" style="border: 0" alt="promethee-solutions" />
+			</td>
+			<td style="color: black; font-size: 12px; vertical-align: middle">
+				Support - Hébergement / Prométhée-Solutions
+			</td>
+		</tr>
+	</table>
+</a>
+<?php
+}
+?>
+
+<br /><br />
+
+<!-- Promotion -->
+<?php
+	print("
+		<div class=\"center\">
+
+		<p style=\"margin-top:0px; margin-bottom:10px;\">
+			<img src=\"".$_SESSION["ROOTDIR"]."/images/gplv3.png\" title=\"GPL3\" alt=\"GPL3\" width=\"80\" /><br />
+			<a href=\"http://validator.w3.org/check?uri=http%3A%2F%2Fwww.promethee-solutions.fr%2Ftest%2F\">
+				<img src=\"".$_SESSION["ROOTDIR"]."/images/w3c.jpg\" title=\"W3C\" alt=\"W3c\" width=\"80\" style=\"margin-top: 4px\" />
+			</a><br />
+			<a href=\"http://www.mozilla-europe.org/".$_SESSION["lang"]."/firefox/\">
+				<img src=\"".$_SESSION["ROOTDIR"]."/images/firefox.png\" title=\"get Firefox\" alt=\"get Firefox\" /></a><br />
+
+			<a href=\"*\" title=\"Prométhée\" onclick=\"popWin('".$_SESSION["ROOTDIR"]."/msg/".$_SESSION["lang"]."/license.txt', '580', '600'); return false;\">
+				<img src=\"".$_SESSION["ROOTDIR"]."/images/promethee.png\" title=\"get Prométhée\" alt=\"get Prométhée\" />
+			</a><br/>
+			<span class=\"x-small\">".$message->read($PAGE_VERSION, $VERSION)."</span>
+		</p>
+
+		</div>");
+?>

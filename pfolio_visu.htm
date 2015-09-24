@@ -1,0 +1,581 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2006-2007 by Dominique Laporte(C-E-D@wanadoo.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : pfolio_visu.htm
+ *		projet   : la page de visualisation des compétences du e-portfolio
+ *
+ *		version  : 1.0
+ *		auteur   : laporte
+ *		creation : 30/10/06
+ *		modif    : 
+ */
+
+
+$onglet   = ( @$_POST["onglet"] )		// indice de l'onglet
+	? (int) $_POST["onglet"]
+	: (int) (@$_GET["onglet"] ? $_GET["onglet"] : 1);
+
+$IDcentre = ( @$_POST["IDcentre"] )		// Identifiant du centre
+	? (int) $_POST["IDcentre"]
+	: (int) (@$_GET["IDcentre"] ? $_GET["IDcentre"] : $_SESSION["CnxCentre"]);
+$IDsel    = ( @$_POST["IDsel"] )		// Identifiant de la classe sélectionnée
+	? (int) $_POST["IDsel"]
+	: (int) (@$_GET["IDsel"] ? $_GET["IDsel"] : $_SESSION["CnxClass"]);
+
+$IDeleve  = ( @$_POST["IDeleve"] )		// Identifiant de l'élève
+	? (int) $_POST["IDeleve"]
+	: (int) (@$_GET["IDeleve"] ? $_GET["IDeleve"] : @$IDeleve) ;
+$ident    = ( @$_POST["ident"] )		// Identifiant de la formation
+	? $_POST["ident"]
+	: @$_GET["ident"] ;
+$IDform   = (int) @$_POST["IDform"];	// Identifiant de la formation
+$mylevel  = (int) @$_POST["mylevel"];	// ID du niveau
+$niveau   = ( @$_POST["niveau"] )		// niveau du domaine de compétences
+	? (int) $_POST["niveau"]
+	: (int) @$_GET["niveau"] ;
+$IDdomain = ( @$_POST["IDdomain"] )		// Identifiant du domaine de compétences
+	? (int) $_POST["IDdomain"]
+	: (int) @$_GET["IDdomain"] ;
+$checkall = @$_POST["IDlevelcheck"];
+?>
+
+
+<?php
+	// recherche de la formation
+	$query  = "select _IDform, _texte, _ident from pfolio_formation ";
+	$query .= "where _ident = '$ident' AND _lang = '".$_SESSION["lang"]."' ";
+	$query .= "limit 1";
+
+	$result = mysql_query($query, $mysql_link);
+	$pfolio = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+	$title  = ( $pfolio )
+            ? $pfolio[1]
+		: $msg->read($PFOLIO_MYSKILL) ;
+
+	// initialisation des domaines de compétences
+	if ( !$IDdomain ) {
+		$query  = "select pfolio._IDskill, pfolio._IDuv ";
+		$query .= "from pfolio, pfolio_uv ";
+		$query .= "where pfolio_uv._lang = '".$_SESSION["lang"]."' ";
+		$query .= "AND pfolio._IDuv = pfolio_uv._IDuv ";
+		$query .= "AND pfolio_uv._IDgrp like '% $IDsel %' ";
+		$query .= ( $pfolio ) ? "AND pfolio_uv._IDform = '$pfolio[0]' " : "" ;
+		$query .= "order by pfolio._IDskill ";
+		$query .= "limit 1";
+
+		$result = mysql_query($query, $mysql_link);
+		$domain = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+		}
+
+     	// validation des compétences
+	if ( @$_POST["valid_x"] ) {
+		$date    = date("Y-m-d H:i:s");
+		$IDlevel = @$_POST["IDlevel"];
+
+		// lecture des élèves
+		$query   = "select _ID from user_id ";
+		$query  .= "where _IDclass = '$IDsel' AND _IDgrp = '1' ";
+		$query  .= "AND _visible = 'O' ";
+		$query  .= "order by _name, _fname";
+
+		$result  = mysql_query($query, $mysql_link);
+		$row     = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+		while ( $row ) {
+			// lecture de la base de données des compétences
+			$query  = "select _IDdata from pfolio_data ";
+			$query .= "where _IDskill = '$IDdomain' ";
+			$query .= "order by _IDdata";
+
+			$return = mysql_query($query, $mysql_link);
+			$myrow  = ( $return ) ? mysql_fetch_row($return) : 0 ;
+
+			while ( $myrow ) {
+				if ( (int) @$IDlevel[$myrow[0]][$row[0]] ) {
+					$level  = (int) $IDlevel[$myrow[0]][$row[0]];
+
+					$query  = "insert into pfolio_items ";
+					$query .= "values('', '$myrow[0]', '$row[0]', '$level', '$date', '".$_SESSION["CnxID"]."', '', '".$_SESSION["CnxIP"]."')";
+
+					mysql_query($query, $mysql_link);
+					}
+
+				$myrow  = mysql_fetch_row($return);
+				}
+
+			$row = mysql_fetch_row($result);
+			}
+		}
+?>
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<strong><?php print($title); ?></strong>
+	</div>
+</div>
+
+<div class="maincontent">
+
+ 		<form id="selection" action="index.php" method="get">
+		<?php
+			print("
+				<p class=\"hidden\"><input type=\"hidden\" name=\"item\"     value=\"$item\" /></p>
+				<p class=\"hidden\"><input type=\"hidden\" name=\"cmde\"     value=\"$cmde\" /></p>
+				<p class=\"hidden\"><input type=\"hidden\" name=\"onglet\"   value=\"$onglet\" /></p>
+				<p class=\"hidden\"><input type=\"hidden\" name=\"ident\"    value=\"$ident\" /></p>
+				<p class=\"hidden\"><input type=\"hidden\" name=\"IDform\"   value=\"$pfolio[0]\" /></p>
+				<p class=\"hidden\"><input type=\"hidden\" name=\"IDeleve\"  value=\"$IDeleve\" /></p>
+				");
+
+			// le menu
+			$init1 = ( $niveau ) ? $niveau : $domain[1] ;
+			$init2 = ( $IDdomain ) ? $IDdomain : $domain[0] ;
+			$link  = "index.php?item=$item&IDcentre=$IDcentre&IDsel=$IDsel&niveau=$init1&IDdomain=$init2&ident=$ident&IDform=$pfolio[0]&IDeleve=$IDeleve&cmde=visu";
+
+			$menu  = "[ ";
+			$menu .= ( $onglet <= 1 )
+				? "<strong>".$msg->read($PFOLIO_BOOK, $pfolio[2])."</strong>"
+				: "<a href=\"".myurlencode("$link&onglet=1")."\">".$msg->read($PFOLIO_BOOK, $pfolio[2])."</a>" ;
+			$menu .= " ]<strong>.</strong>[ ";
+			$menu .= ( $onglet == 2 )
+				? $msg->read($PFOLIO_SKILLACK)
+				: "<a href=\"".myurlencode("$link&onglet=2")."\">".$msg->read($PFOLIO_SKILLACK)."</a>" ;
+			$menu .= " ]<strong>.</strong>[ ";
+			$menu .= ( $onglet == 3 )
+				? $msg->read($PFOLIO_SKILL2VALID)
+				: "<a href=\"".myurlencode("$link&onglet=3")."\">".$msg->read($PFOLIO_SKILL2VALID)."</a>" ;
+			$menu .= " ]<strong>.</strong>[ ";
+			$menu .= ( $onglet == 4 )
+				? "<strong>".$msg->read($PFOLIO_SKILL)."</strong>"
+				: "<a href=\"".myurlencode("$link&onglet=4")."\">".$msg->read($PFOLIO_SKILL)."</a>" ;
+			$menu .= " ] ";
+			$menu .= "<a href=\"".myurlencode("index.php?item=$item&cmde=stat&IDclass=$IDsel")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/stats.gif\" title=\"".$msg->read($PFOLIO_STATS)."\" alt=\"".$msg->read($PFOLIO_STATS)."\" /></a>";
+
+			// affichage de l'aide
+			$query  = "select _IDeval ";
+			$query .= "from pfolio_uv ";
+			$query .= "where _lang = '".$_SESSION["lang"]."' ";
+			$query .= "AND _IDuv = '$niveau' ";
+			$query .= "limit 1";
+
+			$result = mysql_query($query, $mysql_link);
+			$myrow  = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+			print("<div class=\"center\">$menu</div>");
+		?>
+
+		<hr style="width:80%; text-align:center;" />
+		<div style="background-color:#eeeeee; border: 1px solid black; padding: 4px;">
+
+		<table class="width100">
+		  <tr>
+			<td style="width:50%;" class="align-right">
+			    	<?php print($msg->read($PFOLIO_CHOOSECENTER)); ?> 
+			</td>
+			<td style="width:50%;">
+				<label for="IDcentre">
+			  	<select id="IDcentre" name="IDcentre" onchange="document.forms.selection.submit()">
+				<?php
+					// lecture des centres constitutifs
+					$query  = "select _IDcentre, _ident from config_centre ";
+					$query .= "where _visible = 'O' AND _lang = '".$_SESSION["lang"]."' ";
+					$query .= "order by _IDcentre";
+
+					$result = mysql_query($query, $mysql_link);
+					$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+					while ( $row ) {			
+						if ( $IDcentre == $row[0] )
+							print("<option selected=\"selected\" value=\"$row[0]\">$row[1]</option>");
+						else
+							print("<option value=\"$row[0]\">$row[1]</option>");
+
+						$row = remove_magic_quotes(mysql_fetch_row($result));
+						}				
+				?>
+				</select> <img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/home.gif" title="" alt="" />
+				</label>
+			</td>
+		  </tr>
+
+		  <tr>
+			<td class="align-right">
+			  <?php print($msg->read($PFOLIO_CHOOSECLASS)); ?>
+			</td>
+			<td>
+				<label for="IDsel">
+			  	<select id="IDsel" name="IDsel" onchange="document.forms.selection.submit()">
+				<?php
+					// lecture des classes
+					$Query  = "select _IDclass, _ident from campus_classe ";
+					$Query .= "where _visible = 'O' AND _IDcentre = '$IDcentre'";
+
+					// affichage des classes
+					$result = mysql_query($Query, $mysql_link);
+					$cat    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+					print("<option value=\"0\">&nbsp;</option>");
+							
+					while ( $cat ) {
+						// recherche de la formation
+						$query  = "select _IDform from pfolio_uv ";
+						$query .= "where _lang = '".$_SESSION["lang"]."' ";
+						$query .= "AND _IDgrp like '% $cat[0] %' ";
+
+						$return = mysql_query($query, $mysql_link);
+						$nbitem = ( $return ) ? mysql_affected_rows($mysql_link) : 0 ;
+
+						if ( $nbitem )
+							printf("<option value=\"$cat[0]\" %s>$cat[1] ($nbitem)</option>", ($IDsel == $cat[0]) ? "selected=\"selected\"" : "");
+
+						$cat = remove_magic_quotes(mysql_fetch_row($result));
+						}	// endwhile classes
+				  ?>
+				</select> <img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/group.gif" alt="" title="" />
+				</label>
+			</td>
+		  </tr>
+		</table>
+
+		</div>
+
+		</form>
+
+ 		<form id="formulaire" action="index.php" method="post">
+		<?php
+			print("
+				<p class=\"hidden\"><input type=\"hidden\" name=\"item\"     value=\"$item\" /></p>
+				<p class=\"hidden\"><input type=\"hidden\" name=\"cmde\"     value=\"$cmde\" /></p>
+				<p class=\"hidden\"><input type=\"hidden\" name=\"onglet\"   value=\"$onglet\" /></p>
+				<p class=\"hidden\"><input type=\"hidden\" name=\"IDcentre\" value=\"$IDcentre\" /></p>
+				<p class=\"hidden\"><input type=\"hidden\" name=\"IDsel\"    value=\"$IDsel\" /></p>
+				<p class=\"hidden\"><input type=\"hidden\" name=\"ident\"    value=\"$ident\" /></p>
+				<p class=\"hidden\"><input type=\"hidden\" name=\"IDform\"   value=\"$pfolio[0]\" /></p>
+				<p class=\"hidden\"><input type=\"hidden\" name=\"IDeleve\"  value=\"$IDeleve\" /></p>
+				");
+		?>
+
+		<?php
+			// affichage des niveaux
+			$query  = "select _IDuv, _ident, _IDeval, _color, _scale, _IDmod, _IDgrpwr from pfolio_uv ";
+			$query .= "where _lang = '".$_SESSION["lang"]."' ";
+			$query .= ( $onglet == 4 ) ? "" : "AND _IDgrp like '% $IDsel %' " ;
+			$query .= ( $pfolio ) ? "AND pfolio_uv._IDform = '$pfolio[0]' " : "" ;
+			$query .= "order by _IDuv";
+
+			$result = mysql_query($query, $mysql_link);
+			$level  = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+			// initialisation
+			if ( !$niveau )
+				$niveau = (int) $level[0];
+
+			$typeval = $level[2];
+			$coleval = $level[3];
+			$scleval = $level[4];
+			$IDmod   = $level[5];
+			$IDgrpwr = $level[6];
+
+			$select1 = "";
+
+			while ( $level ) {			
+				// lecture du nombre de domaines de compétences
+				$Query  = "select _IDskill from pfolio ";
+				$Query .= "where  _IDuv = '$level[0]' ";
+				$Query .= "AND _visible = 'O' ";
+
+				$return = mysql_query($Query, $mysql_link);
+				$nbitem = ( $return ) ? mysql_affected_rows($mysql_link) : 0 ;
+
+				if ( $niveau == $level[0] ) {
+					$typeval = $level[2];
+					$coleval = $level[3];
+					$scleval = $level[4];
+					$IDmod   = $level[5];
+					$IDgrpwr = $level[6];
+
+					$select1 .= "<option selected=\"selected\" value=\"$level[0]\">$level[1] ($nbitem)</option>";
+					}
+				else
+					$select1 .= "<option value=\"$level[0]\">$level[1] ($nbitem)</option>";
+
+				$level = remove_magic_quotes(mysql_fetch_row($result));
+				}
+
+			// affichage des domaines de compétences
+			$query  = "select _IDskill, _ident from pfolio ";
+			$query .= "where _IDuv = '$niveau' AND _visible = 'O' ";
+			$query .= "order by _IDskill";
+
+			$result = mysql_query($query, $mysql_link);
+			$domain = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+			// initialisation
+			if ( !$IDdomain OR $niveau != $mylevel )
+				$IDdomain = (int) $domain[0];
+
+			$select2 = "";
+
+			while ( $domain ) {
+				// lecture du nombre de compétences
+				$Query  = "select _IDdata from pfolio_data ";
+				$Query .= "where  _IDskill = '$domain[0]' ";
+
+				$return = mysql_query($Query, $mysql_link);
+				$nbitem = ( $return ) ? mysql_affected_rows($mysql_link) : 0 ;
+
+				$texte = ( strlen($domain[1]) > 90 )
+					? substr($domain[1], 0, 90) . "..."
+					: $domain[1] ;
+
+				if ( $IDdomain == $domain[0] )
+					$select2 .= "<option selected=\"selected\" value=\"$domain[0]\">$texte ($nbitem)</option>";
+				else
+					$select2 .= "<option value=\"$domain[0]\">$texte ($nbitem)</option>";
+
+				$domain = remove_magic_quotes(mysql_fetch_row($result));
+				}
+
+			if ( $select1 != "" ) {
+				$text = ( $pfolio[2] == "B2i-C2i" ) ? $msg->read($PFOLIO_GETLEVEL) : $msg->read($PFOLIO_GETMODULE) ;
+				$text = $msg->read($PFOLIO_SELECTDOMAIN, $text);
+
+				print("
+					<table class=\"width100\">
+					  <tr>
+					    <td>
+						<label for=\"niveau\">
+							<select id=\"niveau\" name=\"niveau\" onchange=\"document.forms.formulaire.submit()\">
+							$select1
+							</select> $text
+						</label>
+					    </td>
+					  </tr>
+
+					  <tr>
+					    <td>
+						<label for=\"IDdomain\">
+							<select id=\"IDdomain\" name=\"IDdomain\" onchange=\"document.forms.formulaire.submit()\">
+							$select2
+							</select>
+						</label>
+					    </td>
+					  </tr>
+					</table>");
+				}
+		?>
+
+		<hr style="width:80%; text-align:center;" />
+
+		<?php
+			// lecture des paramètres de configuration
+			$query  = "select config_theme._bgcolor from config_theme, config ";
+			$query .= "where config._ident = '".$_SESSION["CfgIdent"]."' ";
+			$query .= "AND config._lang = '".$_SESSION["lang"]."' ";
+			$query .= "AND config_theme._IDtheme = config._IDtheme";
+
+			$result = mysql_query($query, $mysql_link);
+			$bgcol  = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+			// lecture du mode d'évaluation des compétences
+			$Query  = "select _IDlevel, _ident, _color, _texte from pfolio_level ";
+			$Query .= "where _IDeval = '$typeval' ";
+			$Query .= "AND _lang = '".$_SESSION["lang"]."' ";
+			$Query .= "order by _IDlevel";
+
+			$result = mysql_query($Query, $mysql_link);
+			$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+			$niv    = Array();
+
+			$i = 0;
+			while ( $row ) {
+				$niv[0][$i]   = $row[0];
+				$niv[1][$i]   = $row[1];	// ident
+				$niv[2][$i]   = $row[2];	// color
+				$niv[3][$i++] = $row[3];	// text
+
+				$row = remove_magic_quotes(mysql_fetch_row($result));
+				}
+
+			// lecture de la base de données des compétences
+			$Query  = "select _IDdata, _texte from pfolio_data ";
+			$Query .= "where _IDskill = '$IDdomain' AND _visible = 'O' ";
+			$Query .= "order by _IDdata";
+
+			$result = mysql_query($Query, $mysql_link);
+			$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+			while ( $row ) {
+				print("
+			            <table class=\"width100\">
+			              <tr>
+				          <td style=\"background-color:$bgcol[0]; text-align: justify\" colspan=\"4\">$row[1]</td>
+            			  </tr>
+					");
+
+				// lecture des élèves
+				$Query  = "select distinctrow user_id._ID, user_id._name, user_id._fname ";
+				$Query .= "from user_id";
+				$Query .= ( $onglet == 2 OR $onglet == 4 ) ? ", pfolio_items " : " " ;
+				$Query .= ( $_SESSION["CnxClass"] )
+					? "where user_id._IDclass = '".$_SESSION["CnxClass"]."' "
+					: "where user_id._IDclass = '$IDsel' " ;
+				switch ( $onglet ) {
+					case '2' :	// compétences acquises
+						$Query .= "AND pfolio_items._IDlevel ";
+						$Query .= "AND pfolio_items._IDdata = '$row[0]' ";
+						$Query .= "AND pfolio_items._ID = user_id._ID ";
+						break;
+					case '4' :	// compétences (liste)
+						$Query .= "AND pfolio_items._ID = '0' ";
+						break;
+					case '3' :	// compétences à valider
+					default :	// Livret de compétences
+						break;
+					}
+				$Query  .= "AND user_id._visible = 'O' AND user_id._IDgrp = '1' " ;
+				$Query .= "order by user_id._name, user_id._fname";
+
+				$return = mysql_query($Query, $mysql_link);
+				$myrow  = ( $return ) ? remove_magic_quotes(mysql_fetch_row($return)) : 0 ;
+
+				// affichage des niveaux de maîtrise
+				if ( $onglet == 3 ) {
+					$select  = "<label for=\"IDlevelcheck_$row[0]\">";
+					$select .= "<select id=\"IDlevelcheck_$row[0]\" name=\"IDlevelcheck[$row[0]]\" onchange=\"document.forms.formulaire.submit()\">";
+
+					$select .= "<option value=\"0\">&nbsp;</option>";
+					for ($j = 0; $j < count($niv[0]); $j++) {
+						$ischeck = ( $checkall[$row[0]] == $niv[0][$j] ) ? "selected=\"selected\"" : "" ;
+
+						$select .= "<option value=\"".$niv[0][$j]."\" $ischeck >".$niv[1][$j]."</option>";
+						}
+
+					$select .= "</select>";
+					$select .= "</label>";
+					}
+				else
+					$select  = "";
+
+				// en-tête du tableau
+				if ( $myrow )
+					print("
+			              <tr  style=\"background-color:#C0C0C0;\">
+			                <td class=\"align-center\" style=\"width:1%;\"></td>
+			                <td class=\"align-center\" style=\"width:59%;\">". $msg->read($PFOLIO_NAME) ."</td>
+            			    <td class=\"align-center\" style=\"width:25%;\">". $msg->read($PFOLIO_DATE) ."</td>
+			                <td class=\"align-center\" style=\"width:15%;\">". $msg->read($PFOLIO_LEVEL) ."$select</td>
+            			  </tr>
+						");
+
+				$i = 0;
+				while ( $myrow ) {
+					$bgcolor = ( $i++ % 2 ) ? "item" : "menu" ;
+
+					// lecture compétence
+					$query  = "select _date, _IDlevel from pfolio_items ";
+					$query .= "where _ID = '$myrow[0]' AND _IDdata = '$row[0]' ";
+					$query .= "order by _IDlevel limit 1";
+
+					$res    = mysql_query($query, $mysql_link);
+					$b2i    = ( $res ) ? mysql_fetch_row($res) : 0 ;
+
+					// lien
+					$link   = ( getAccess() == 2 OR $_SESSION["CnxID"] == $myrow[3] )
+						? "<a href=\"".myurlencode("index.php?item=$item&niveau=$niveau&IDdomain=$IDdomain&IDeleve=$myrow[0]&IDclass=$IDsel")."\">$myrow[1] $myrow[2]</a>"
+						: "$myrow[1] $myrow[2]" ;
+
+					$index  = 0;
+					for (; $index < count($niv[0]); $index++)
+						if ( $niv[0][$index] == $b2i[1] ) break;
+
+					$width   = ( $scleval == "O" ) ? (int) ((15 * @$niv[1][$index]) / count($niv[0])) : 15 ;
+					$mycolor = ( $coleval == "O" ) ? "background-color:".@$niv[2][$index].";" : "" ;
+
+					// affichage des niveaux de maîtrise
+					$select  = "<label for=\"IDlevel_$row[0]_$myrow[0]\">";
+					$select .= "<select id=\"IDlevel_$row[0]_$myrow[0]\" name=\"IDlevel[$row[0]][$myrow[0]]\">";
+
+					$select .= "<option value=\"0\">&nbsp;</option>";
+					for ($j = 0; $j < count($niv[0]); $j++) {
+						$ischeck = ( $checkall[$row[0]] == $niv[0][$j] ) ? "selected=\"selected\"" : "" ;
+
+						$select .= "<option value=\"".$niv[0][$j]."\" $ischeck >".$niv[1][$j]."</option>";
+						}
+
+					$select .= "</select>";
+					$select .= "</label>";
+
+					$date    = ( $b2i ) ? date2longfmt($b2i[0]) : "&nbsp;" ;
+
+					$mytext  = ( $coleval == "O" )
+						? ""
+						: @$niv[1][$index] ;
+					$mytext  = ( @$niv[3][$index] )
+						? "<a href=\"#\" class=\"overlib\">$mytext<span>$niv[3][$index]</span></a>"
+						: $mytext ;
+					$mytext .= ( $onglet == 3 AND ($_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $IDmod OR ($IDgrpwr & pow(2, $_SESSION["CnxGrp"] - 1))) )
+						? "$select"
+						: "" ;
+
+					if ( ($onglet == 3 AND !$b2i) OR $onglet != 3 )
+						print("
+							<tr class=\"$bgcolor\">
+							  <td style=\"width:1%;\" class=\"align-center\"><img src=\"".$_SESSION["ROOTDIR"]."/images/smiley/1.gif\" alt=\"\" title=\"\" /></td>
+							  <td style=\"width:59%;\">$link</td>
+           						  <td style=\"width:25%;\" class=\"align-center\">$date</td>
+		      	      		  <td style=\"width:$width%;$mycolor\" class=\"align-center\">$mytext</td>
+            					</tr>
+							");
+
+					$myrow = remove_magic_quotes(mysql_fetch_row($return));
+					}
+
+				print("
+			              <tr>
+			                <td colspan=\"4\"><hr/></td>
+           				  </tr>
+					");
+
+				if ( $onglet == 3 AND ($_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $IDmod OR ($IDgrpwr & pow(2, $_SESSION["CnxGrp"] - 1))) )
+					print("
+				              <tr>
+				                <td colspan=\"3\"></td>
+				                <td class=\"align-center\">
+							<input type=\"image\" src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/valid.gif\" name=\"valid\" alt=\"".$msg->read($PFOLIO_INPUTOK)."\" />
+				                </td>
+            				  </tr>
+						");
+
+				print("</table>");
+
+				$row = remove_magic_quotes(mysql_fetch_row($result));
+				}
+
+			print("<p class=\"hidden\"><input type=\"hidden\" name=\"mylevel\" value=\"$niveau\" /></p>");
+		?>
+		</form>
+
+</div>

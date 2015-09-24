@@ -1,0 +1,568 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2009 by Dominique Laporte(C-E-D@wanadoo.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : ccn_post.htm
+ *		projet   : la page de saisie des messages pour les CCN
+ *
+ *		version  : 1.0
+ *		auteur   : laporte
+ *		creation : 31/10/09
+ *		modif    : 
+ */
+
+
+$IDcentre = ( @$_POST["IDcentre"] )					// Identifiant du centre
+	? (int) $_POST["IDcentre"]
+	: (int) (@$_GET["IDcentre"] ? $_GET["IDcentre"] : $_SESSION["CnxCentre"]);
+$IDmsg    = ( @$_POST["IDmsg"] )     				// identifiant du message			
+	? (int) $_POST["IDmsg"]
+	: (int) @$_GET["IDmsg"] ;
+$IDdst    = ( @$_POST["IDdst"] )     				// identifiant des destinataires			
+	? (int) $_POST["IDdst"]
+	: (int) @$_GET["IDdst"] ;
+$IDgrp    = ( @$_POST["IDgrp"] )     				// identifiant des groupes			
+	? (int) $_POST["IDgrp"]
+	: (int) @$_GET["IDgrp"] ;
+
+$subject  = trim(@$_POST["subject"]);				// sujet du message			
+$texte    = trim(@$_POST["texte"]);					// texte du message			
+$priority = (int) @$_POST["priority"];				// niveau de priorité du message
+$email    = (int) @$_POST["email"];					// copie du message
+
+$submit   = ( @$_POST["submit"] )					// bouton de validation
+	? $_POST["submit"]
+	: @$_GET["submit"] ;
+?>
+
+
+<script type="text/javascript" src="script/edit.js"></script>
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($CCN_FORMFEED)); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+
+<?php
+	//---------------------------------------------------------------------------
+	function sendCopy($method, $from, $to, $subject, $text)
+	{
+		require "globals.php";
+
+		require_once "lib/libmail.php";
+		require_once "include/postit.php";
+
+		switch ( $method ) {
+			case '1' :	// SMS
+				// header sms
+				$header  = "From: ".$_SESSION["CfgIdent"]." <".$_SESSION["CfgEmail"].">\n";
+				$header .= "MIME-Version: 1.0\n";
+				$header .= "Content-type: text/html; charset=$CHARSET\n";
+
+				$texte   = "$subject\n$text";
+
+				$query   = "select _tel from user_id ";
+				$query  .= "where _ID = '$to' ";
+				$query  .= "limit 1";
+
+				$result  = mysql_query($query, $mysql_link);
+				$row     = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+				return ( strlen($row[0]) ) ? mail($SMSPROVIDER, "$SMSPWD :$row[0]", $texte, $header) : 0 ;
+
+			case '2' :	// post-it
+				return sendAlertMessage($to, $subject, $text);
+
+			case '3' :	// email
+				$query  = "select _email from user_id ";
+				$query .= "where _ID = '$to' ";
+				$query .= "limit 1";
+
+				$result = mysql_query($query, $mysql_link);
+				$row    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+				if ( !mysql_numrows($result) OR !strlen($row[0]) )
+					return 0;
+
+				$mymail = new Mail(); 			// create the mail
+
+				// corps du message
+				$texte  = $text;
+				$texte .= "\n--\n";
+				$texte .= $_SESSION["CfgAdr"] . "\n";
+				$texte .= $_SESSION["CfgWeb"];
+
+				$mymail->From("noreply@".$_SESSION["CfgWeb"]);
+				$mymail->To($row[0]);
+				$mymail->Subject($subject);	
+				$mymail->Body($texte, $CHARSET);	// set the body
+
+				return $mymail->Send();			// send the mail
+
+			default:	//
+				return 0;
+			}
+	}
+	//---------------------------------------------------------------------------
+
+	// lecture du droit d'écriture
+	$Query  = "select _IDmod, _IDgrpwr, _IDgrprd, _email, _rss from ccn ";
+	$Query .= "where _IDcentre = '".$_SESSION["CnxCentre"]."' ";
+	$Query .= "limit 1";
+
+	$result = mysql_query($Query, $mysql_link);
+	$auth   = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+	// vérification des autorisations
+	verifySessionAccess($auth[0], 0, $auth[1]);
+
+	// commande de l'utilisateur
+	switch ( $submit ) {
+		case "reply" :
+			$IDmsg   = (int) @$_GET["IDmsg"];
+
+			$query   = "select _title, _text from ccn_items ";
+			$query  .= "where _IDmsg = '$IDmsg' ";
+			$query  .= "AND (_ID = '".$_SESSION["CnxID"]."' OR _IDdest = '".$_SESSION["CnxID"]."') ";
+			$query  .= "limit 1";
+
+			$res     = mysql_query($query, $mysql_link);
+			$row     = ( $res ) ? remove_magic_quotes(mysql_fetch_row($res)) : 0 ;
+
+			$subject = $msg->read($CCN_RE, $row[0]) ;
+			$texte   = "";
+			// on enchaine...
+//			break;
+
+		default :
+			// maj d'une lidie perso
+			$IDlidi  = (int) @$_GET["IDlidi"];
+
+			// affichage destinataire si réponse
+			if ( $IDgrp >= 0 AND $IDdst > 0 ) {
+				$result   = mysql_query("select _name, _fname, _IDgrp, _IDcentre from user_id where _ID = '$IDdst' limit 1", $mysql_link);
+				$row      = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+				$IDgrp    = $row[2];
+				$IDcentre = $row[3];
+				}
+			break;
+		}
+
+	// initialisation
+	$error_dest = $error_subject = $error_texte = 0;
+
+	// l'utilisateur a validé son message
+	if ( @$_POST["valid_x"] ) {
+		// test de la saisie
+		$error_dest    = ( $IDdst ) ? 0 : 1 ;
+		$error_subject = ( strlen($subject) ) ? 0 : 1 ;
+		$error_texte   = ( strlen($texte) )   ? 0 : 1 ;
+
+		if ( !$error_dest AND !$error_subject AND !$error_texte ) {
+			switch ( $IDgrp ) {
+				case -1 :	// lidi automatique
+					$ret     = 0;
+					$idclass = abs($IDdst) - 10000;
+
+					$query   = "select distinctrow _ID from user_id where _visible = 'O' AND _adm ";
+					$query  .= ( $idclass ) ? "AND _IDclass = '$idclass'" : "" ;
+
+					$return  = mysql_query($query, $mysql_link);
+					$myrow   = ( $return  ) ? mysql_fetch_row($return) : 0 ;
+
+					while ( $myrow ) {
+						$id    = ( mysql_query("insert into ccn_items values('', '".$_SESSION["CnxID"]."', '".$_SESSION["CnxIP"]."', '".date("Y-m-d H:i:s")."', '', '$IDmsg', '$IDcentre', '$myrow[0]', '$subject', '$texte', '0', '$priority')", $mysql_link) )
+							? mysql_insert_id()
+							: 0 ;
+
+						if ( $id AND sendCopy($email, $_SESSION["CnxID"], $myrow[0], $subject, $texte) )
+							mysql_query("update ccn_items set _email = '$email' where _IDmsg = '$id' limit 1", $mysql_link);
+
+						$ret   += ( $id ) ? 1 : 0 ;
+
+						$myrow  = mysql_fetch_row($return);
+						}
+					break;
+
+				default :	// envoie à un destinataire
+					$id  = ( mysql_query("insert into ccn_items values('', '".$_SESSION["CnxID"]."', '".$_SESSION["CnxIP"]."', '".date("Y-m-d H:i:s")."', '', '$IDmsg', '$IDcentre', '$IDdst', '$subject', '$texte', '0', '$priority')", $mysql_link) )
+						? mysql_insert_id()
+						: 0 ;
+
+					if ( $id AND sendCopy($email, $_SESSION["CnxID"], $IDdst, $subject, $texte) )
+						mysql_query("update ccn_items set _email = '$email' where _IDmsg = '$id' limit 1", $mysql_link);
+
+					$ret = $id;
+					break;
+				}
+
+			$texte = ( $ret )
+				? $msg->read($CCN_THANX)
+				: $msg->read($CCN_SENDFAIL) ."<br/>". sql_error_value($mysql_link) ;
+
+			print("
+				<div class=\"center\">
+      				<p>$texte<br/>
+				      [<a href=\"".myurlencode("index.php?item=$item&cmde=cmde")."\">".$msg->read($CCN_GOBACK)."</a>]
+				      </p>
+				</div>
+				");
+			}	// endif erreur
+		else {
+			stripslashes($subject);
+			stripslashes($texte);
+			}
+		}	// endif post
+
+	// saisie du formulaire si
+	// - l'utilisateur n'a pas validé OU
+	// - il y a une erreur de saisie => on redemande de compléter le formulaire
+	if ( empty($_POST["valid_x"]) OR $error_dest OR $error_subject OR $error_texte ) {
+
+	    	print("
+		<form id=\"formulaire\" action=\"index.php\" method=\"post\" enctype=\"multipart/form-data\">
+			<p class=\"hidden\"><input type=\"hidden\" name=\"item\"   value=\"$item\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"cmde\"   value=\"$cmde\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"IDmsg\"  value=\"$IDmsg\" /></p>
+			");
+
+		print("    
+		  <table class=\"width100\">
+		    <tr>
+		      <td style=\"width:20%;\" class=\"valign-middle align-right\">
+				". $msg->read($CCN_EXP) ."
+			</td>
+		      <td style=\"width:80%;\" class=\"valign-middle\">
+				". $_SESSION["CnxName"] ."
+			</td>
+		    </tr>
+
+		    <tr>
+		      <td class=\"valign-middle align-right\">
+				". $msg->read($CCN_CENTER) ."
+			</td>
+		      <td class= \"valign-middle\">
+				<label for=\"IDcentre\">
+			  	<select id=\"IDcentre\" name=\"IDcentre\" onchange=\"document.forms.formulaire.submit()\">");
+
+		// lecture des centres constitutifs
+		$query  = "select _IDcentre, _ident from config_centre ";
+		$query .= "where _visible = 'O' AND _lang = '".$_SESSION["lang"]."' ";
+		$query .= "order by _IDcentre";
+
+		$result = mysql_query($query, $mysql_link);
+		$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+		while ( $row ) {			
+			printf("<option value=\"$row[0]\" %s>$row[1]</option>", ($IDcentre == $row[0]) ? "selected=\"selected\"" : "");
+
+			$row = remove_magic_quotes(mysql_fetch_row($result));
+			}				
+
+		print("
+				</select> <img src=\"".$_SESSION["ROOTDIR"]."/images/home.gif\" title=\"\" alt=\"\" />
+				</label>
+			</td>
+		    </tr>");
+
+		// saisie du destinataire
+		if ( $error_dest )
+			print("
+			    <tr>
+			   	   <td class=\"valign-middle\" style=\"text-align: justify\" colspan=\"2\">
+			   	     <span style=\"color:#FF0000;\">". $msg->read($CCN_WARNING) ." ". $msg->read($CCN_ERRDEST) ."</span>
+				   </td>
+			    </tr>
+			    	");
+
+		print("    
+		    <tr>
+		      <td class=\"valign-middle align-right\">
+				".$msg->read($CCN_DEST)."
+			</td>
+			<td>
+			  <label for=\"IDgrp\">
+		  	  <select id=\"IDgrp\" name=\"IDgrp\" onchange=\"document.forms.formulaire.submit()\">
+				<optgroup label=\"". $msg->read($CCN_CHOOSECAT) ."\">");
+
+				// sélection des groupes
+				$query  = "select distinctrow user_group._IDgrp, user_group._ident, ccn._IDgrprd ";
+				$query .= "from user_group, ccn ";
+				switch ( getAccess() ) {
+					case '2' :	// le personnel s'adresse aux élèves
+						$query .= "where user_group._IDcat = '1' ";
+						break;
+					default :	// élèves ou parents s'adrssent au personnel
+						$query .= "where user_group._IDcat = '2' ";
+						break;
+					}
+				$query .= "AND user_group._visible = 'O' AND user_group._lang = '".$_SESSION["lang"]."' ";
+				$query .= "AND (ccn._IDgrprd & pow(2, user_group._IDgrp - 1)) ";
+				$query .= "AND ccn._IDcentre = '$IDcentre' ";
+				$query .= "order by user_group._IDgrp asc";
+
+				$result = mysql_query($query, $mysql_link);
+				$cat    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+				// initialisation
+				if ( !$IDgrp )
+					$IDgrp = (int) $cat[0];
+
+				while ( $cat ) {
+					//---- détermine le nombre d'utilisateurs
+					$query  = "select _ID from user_id ";
+					$query .= "where _IDgrp = '$cat[0]' " ;
+					$query .= "AND _IDcentre = '$IDcentre' " ;
+					$query .= "AND _adm AND _sexe != 'A' ";
+
+					$res    = mysql_query($query, $mysql_link);
+					$nbrow  = ( $res ) ? mysql_numrows($res) : 0 ;
+
+					printf("<option value=\"$cat[0]\" %s>$cat[1] ($nbrow)</option>", ($IDgrp == $cat[0]) ? "selected=\"selected\"" : "");
+
+					$cat = remove_magic_quotes(mysql_fetch_row($result));
+					}	// endwhile catégorie
+
+				print("</optgroup>");
+
+			// seul le personnel a accès aux listes de diffusion
+			if ( getAccess() == 2 ) {
+				print("<optgroup label=\"". $msg->read($CCN_CHOOSELIST) ."\">");
+
+				//---- sélection des listes automatiques
+				$query  = "select distinctrow _IDgrp from user_group, ccn ";
+				$query .= "where _visible = 'O' AND _lang = '".$_SESSION["lang"]."' ";
+				$query .= "AND (_IDgrprd & pow(2, _IDgrp - 1)) ";
+
+				$res    = mysql_query($query, $mysql_link);
+				$nbrow  = ( $res ) ? mysql_numrows($res) : 0 ;
+
+				printf("<option value=\"-1\" %s>". $msg->read($CCN_LISTAUTO, strval($nbrow)) ."</option>", ($IDgrp == -1) ? "selected=\"selected\"" : "");
+
+				print("</optgroup>");
+				}
+
+		print("
+			  </select> <img src=\"".$_SESSION["ROOTDIR"]."/images/group.gif\" title=\"\" alt=\"\" />
+			  </label>$q
+		      </td>
+		    </tr>");
+
+		// affichage Liste de destinataire(s)
+		print("
+		    <tr>
+			<td></td>
+			<td>
+			  <label for=\"IDdst\">
+		  	  <select id=\"IDdst\" name=\"IDdst\">");
+
+		switch ( $IDgrp ) {
+			case -1 :	// lidi automatique (classes)
+				print("<option value=\"0\">". $msg->read($CCN_CHOOSEDEST) ."</option>");
+
+				// sélection des élèves
+				$query  = "select distinctrow _IDgrp, _ident from user_group, ccn ";
+				$query .= "where _IDgrp = '1' ";
+				$query .= "AND _visible = 'O' AND _lang = '".$_SESSION["lang"]."' ";
+				$query .= "AND (_IDgrprd & pow(2, _IDgrp - 1)) ";
+				$query .= "order by _ident" ;
+
+				$res    = mysql_query($query, $mysql_link);
+				$row    = ( $res ) ? remove_magic_quotes(mysql_fetch_row($res)) : 0 ;
+
+				while ( $row ) {
+					$query  = "select distinctrow _ID from user_id where _IDgrp = '$row[0]' ";
+					$query .= "AND _IDcentre = '$IDcentre' " ;
+					$query .= "AND _adm AND _sexe != 'A' ";
+
+					$ret = mysql_query($query, $mysql_link);
+					$nb  = ( $ret ) ? mysql_numrows($ret) : 0 ;
+
+					if ( $nb )
+						printf("<option value=\"-$row[0]\" %s>".$msg->read($CCN_LIDI)." -> $row[1] ($nb)</option>", ($IDdst == -$row[0]) ? "selected=\"selected\"" : "");
+
+					// sélection des classes
+					switch ( getAccess($row[0]) ) {
+						case 1 :	// apprenants
+							if ( $auth[2] & pow(2, 0) ) {
+								$query  = "select _IDclass, _ident from campus_classe ";
+								$query .= "where _visible = 'O' ";
+								$query .= "AND _IDcentre = '$IDcentre' ";
+								$query .= "order by _text";
+								}
+							else
+								$query  = "";
+							break;
+
+						default :	// extérieur
+							$query  = "";
+							break;
+						}
+
+					$sql    = ( strlen($query) ) ? mysql_query($query, $mysql_link) : 0 ;
+					$myrow  = ( $sql ) ? remove_magic_quotes(mysql_fetch_row($sql)) : 0 ;
+
+					while ( $myrow ) {
+						$offset = 10000;
+
+						$ret    = mysql_query("select distinctrow _ID from user_id where _IDclass = '$myrow[0]' AND _visible = 'O' AND _adm", $mysql_link);
+						$nb     = ( $ret ) ? mysql_numrows($ret) : 0 ;
+
+						if ( $nb )
+							printf("<option value=\"".-($myrow[0] + $offset)."\" %s>".$msg->read($CCN_LIDI)." -> $row[1] -> $myrow[1] ($nb)</option>", ($IDdst == -($myrow[0] + $offset)) ? "selected=\"selected\"" : "");
+
+						$myrow  = remove_magic_quotes(mysql_fetch_row($sql));
+						}
+
+					$row = remove_magic_quotes(mysql_fetch_row($res));
+					}
+				break;
+
+			default :	// catégorie
+				print("<option value=\"0\">". $msg->read($CCN_CHOOSEDEST) ."</option>");
+
+				$query  = "select _ID, _name, _fname from user_id ";
+				$query .= "where _IDgrp = '$IDgrp' " ;
+				$query .= "AND _IDcentre = '$IDcentre' " ;
+				$query .= "AND _adm AND _sexe != 'A' ";
+				$query .= "order by _name, _fname";
+
+				$res    = mysql_query($query, $mysql_link);
+				$row    = ( $res ) ? remove_magic_quotes(mysql_fetch_row($res)) : 0 ;
+
+				while ( $row ) {
+					$select = ( $IDdst == $row[0] ) ? "selected=\"selected\"" : "" ;
+
+					print("<option value=\"$row[0]\" $select>".formatUserName($row[1], $row[2])."</option>");
+
+					$row = remove_magic_quotes(mysql_fetch_row($res));
+					}
+				break;
+			}
+
+		print("    
+			  </select>
+			  </label>
+			</td>
+		    </tr>");
+
+		// saisie du sujet
+		if ( $error_subject )
+			print("    
+			    <tr>
+	   			   <td class=\"valign-middle\" style=\"text-align: justify\" colspan=\"2\">
+			   	     <span style=\"color:#FF0000;\">". $msg->read($CCN_WARNING) ." ". $msg->read($CCN_ERRSUBJECT) ."</span>
+				   </td>
+			    </tr>");
+
+		print("    
+		    <tr>
+		      <td class=\"valign-middle align-right\">". $msg->read($CCN_SUBJECT) ."</td>
+		      <td><label for=\"subject\"><input type=\"text\" id=\"subject\" name=\"subject\" size=\"45\" value=\"$subject\" /></label></td>
+		    </tr>
+		    	");
+
+		// saisie du message à poster
+		if ( $error_texte )
+			print("    
+			    <tr>
+			   	   <td class=\"valign-middle\" style=\"text-align: justify\" colspan=\"2\">
+			   	     <span style=\"color:#FF0000;\">". $msg->read($CCN_WARNING) ." ". $msg->read($CCN_ERRMSG) ."</span>
+				   </td>
+			    </tr>");
+
+	    	print("
+		    <tr>
+		      <td class=\"align-right valign-top\">
+		        ". $msg->read($CCN_MESSAGE) ." <a href=\"#\" onclick=\"popWin('".$_SESSION["ROOTDIR"]."/spip_typo.php?lang=".$_SESSION["lang"]."', '450', '350'); return false;\">
+		        <img src=\"".$_SESSION["ROOTDIR"]."/images/spip/aide.gif\" title=\"".$msg->read($CCN_HELP)."\" alt=\"".$msg->read($CCN_HELP)."\" /></a> :
+		      </td>
+		      <td><label for=\"texte\"><textarea id=\"texte\" name=\"texte\" rows=\"10\" cols=\"50\">$texte</textarea></label></td>
+		    </tr>
+		    	");
+
+		// message urgent
+		print("
+		    <tr>
+		      <td class=\"align-right valign-top\">". $msg->read($CCN_PRIORITY) ."</td>
+		      <td class=\"valign-top\">
+				<label for=\"priority\">
+				<select id=\"priority\" name=\"priority\">");
+
+				$list = explode(",", $msg->read($CCN_PRIORITYLEVEL));
+
+				for ($i = 0; $i < count($list); $i++) {			
+					$select = ( $priority == $i ) ? "selected=\"selected\"" : "" ;
+
+					print("<option value=\"$i\" $select>$list[$i]</option>");
+					}				
+
+	    	print("
+				</select>
+				</label>
+				- ". $msg->read($CCN_COPY) ."
+				<label for=\"email\">
+				<select id=\"email\" name=\"email\">");
+
+				$list = Array($msg->read($CCN_NONE), $msg->read($CCN_SMS), $msg->read($CCN_POSTIT), $msg->read($CCN_EMAIL));
+
+				for ($i = 0; $i < count($list); $i++) {			
+					$select = ( $email == $i ) ? "selected=\"selected\"" : "" ;
+
+					print("<option value=\"$i\" $select>$list[$i]</option>");
+					}				
+
+	    	print("
+				</select>
+				</label>
+			</td>
+		    </tr>
+		</table>");
+
+	    	print("
+			<hr style=\"width:80%;\" />
+
+		      <table class=\"width100\">
+		        <tr>
+		           <td style=\"width:20%;\" class=\"valign-middle align-right\">
+					<input type=\"image\" src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/valid.gif\" name=\"valid\" alt=\"".$msg->read($CCN_INPUTOK)."\" />
+		           </td>
+		           <td class= \"valign-middle\">". $msg->read($CCN_SENDPOST) ."</td>
+		        </tr>
+		        <tr>
+		           <td class=\"valign-middle align-right\">
+					<a href=\"".myurlencode("index.php?item=$item")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/cancel.gif\" title=\"\" alt=\"".$msg->read($CCN_INPUTCANCEL)."\" /></a>
+		           </td>
+		           <td class= \"valign-middle\">". $msg->read($CCN_QUIT) ."</td>
+		        </tr>
+		      </table>
+
+			</form>
+			");
+		}	// endif ok
+?>
+
+</div>

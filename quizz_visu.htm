@@ -1,0 +1,110 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2004-2007 by Dominique Laporte(C-E-D@wanadoo.fr)
+   Copyright (c) 2006 by frédéric poyet(frederic.poyet@free.fr)
+   Copyright (c) 2006 by Nordine Zetoutou (nordine.zetoutou@educagri.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : quizz_visu.htm
+ *		projet   : la page de test du quizz
+ *
+ *		version  : 1.0
+ *		auteur   : laporte
+ *		creation : 20/06/04
+ *		modif    : 19/06/06 - par Fred POYET
+ *                     migration php5
+ *		           17/07/06 - Nordine Zetoutou
+ * 	                 migration des balises HTML en XHTML 1.0 strict
+ */
+
+
+$IDuser  = ( @$_POST["IDuser"] )		// ID de l'utilisateur
+	? (int) $_POST["IDuser"]
+	: (int) (@$_GET["IDuser"] ? $_GET["IDuser"] : $_SESSION["CnxID"]) ;
+$IDquizz = ( @$_POST["IDquizz"] )		// ID du quizz
+	? (int) $_POST["IDquizz"]
+	: (int) @$_GET["IDquizz"] ;
+$IDsel   = ( @$_POST["IDsel"] )		// ID de la classe
+	? (int) $_POST["IDsel"]
+	: (int) @$_GET["IDsel"];
+$IDmat   = ( @$_POST["IDmat"] )		// ID de la matière/formation
+	? (int) $_POST["IDmat"]
+	: (int) @$_GET["IDmat"] ;
+$IDdata  = ( @$_POST["IDdata"] )		// Identifiant de la matière
+	? (int) $_POST["IDdata"]
+	: (int) @$_GET["IDdata"] ;
+$norec   = ( @$_POST["norec"] )		// nombre de questions dans le quizz
+	? (int) $_POST["norec"]
+	: (int) @$_GET["norec"] ;
+?>
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($QUIZZ_EXERCICE)); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+
+<?php
+	require_once "include/quizz.php";
+
+	//---- paramètres du quizz
+	$query  = "select _titre, _texte, _back, _visible, _ID, _result, _mandatory, _page, _delay, _IDquizz, _random from quizz ";
+	$query .= "where _IDquizz = '$IDquizz' ";
+	$query .= "limit 1";
+
+	$result = mysql_query($query, $mysql_link);
+	$quizz  = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+	//---- création du profil des utilisateurs
+	$random = random_quizz($IDquizz, (int) $quizz[10]);
+
+	$query  = "insert into quizz_user ";
+	$query .= "values('$IDquizz', '".$_SESSION["CnxID"]."', '".date("Y-m-d H:i:s")."', '$random')";
+
+	mysql_query($query, $mysql_link);
+
+	//---- lecture du profil
+	$query  = "select _date, _random from quizz_user ";
+	$query .= "where _IDquizz = '$IDquizz' AND _IDuser = '".$_SESSION["CnxID"]."' ";
+	$query .= "limit 1";
+
+	$result = mysql_query($query, $mysql_link);
+	$sql    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+	//---- sécurité
+	$IDuser = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $quizz[4] )
+		? $IDuser
+		: $_SESSION["CnxID"] ;
+
+	if ( $quizz[3] == "O" OR $norec == 1 )	
+		require "quizz_visu.php";
+	else
+		print("
+	            <div style=\"text-align:center\">
+				<p>". $msg->read($QUIZZ_CLOSED) ."</p>
+				[<a href=\"".myurlencode("index.php?item=$item&IDmat=$IDmat&IDdata=$IDdata")."\">". $msg->read($QUIZZ_GOBACK) ."</a>]
+	            </div>
+			");
+?>
+
+</div>

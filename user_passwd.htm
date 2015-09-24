@@ -1,0 +1,250 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2008 by Dominique Laporte(C-E-D@wanadoo.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : user_passwd.htm
+ *		projet   : page de gestion des mots de passe des utilisateurs
+ *
+ *		version  : 1.0
+ *		auteur   : laporte
+ *		creation : 12/01/08
+ *		modif    : 
+ */
+
+
+$IDcentre = ( strlen(@$_POST["IDcentre"]) )	// identifiant du centre
+	? (int) $_POST["IDcentre"]
+	: (int) (strlen(@$_GET["IDcentre"]) ? $_GET["IDcentre"] : $_SESSION["CnxCentre"]) ;
+$my_ident = @$_POST["my_ident"];
+$my_pwd   = @$_POST["my_pwd"];
+?>
+
+
+<?php
+	require_once "include/config.php";
+
+	// vérification des autorisations
+	admSessionAccess();
+
+	// initialisation
+	$status = "-";
+
+	// l'utilisateur a validé
+	if ( @$_POST["valid_x"] ) {
+		if ( strlen($my_ident) OR strlen($my_pwd) ) {
+			// mise à jour config.php
+			if ( setConfig("IDENT", "\"".@$_POST["ident"]."\"") )
+				$IDENT = @$_POST["ident"];
+
+			if ( setConfig("AUTOPASSWD", "\"".@$_POST["pwd"]."\"") )
+				$AUTOPASSWD = @$_POST["pwd"];
+
+			// mise à jour des identifiants et des mots de passe
+			$count = $total = 0;
+			$empty = @$_POST["empty"];
+			$cb    = @$_POST["cb"];
+			$group = @$_POST["group"];
+
+			if ( strlen($IDENT) OR strlen($AUTOPASSWD) )
+				for ($i = 0; $i < count($cb); $i++)
+					if ( @$cb[$i] ) {
+						$limit = ( $cb[$i] == 1 ) ? count($group) : 1 ;
+
+						for ($j = 0; $j < $limit; $j++) {
+							$idclass = ( $cb[$i] == 1 ) ? @$group[$j] : 0 ;
+
+							// recherche des comptes
+							$query   = "select _ID from user_id ";
+							$query  .= "where _IDcentre = '$IDcentre' ";
+							$query  .= "AND _IDgrp = '$cb[$i]' ";
+							$query  .= "AND _IDclass = '$idclass' ";
+							$query  .= ( $empty == "O" ) ? "AND _passwd = ''" : "" ;
+
+							$result  = mysql_query($query, $mysql_link);
+							$row     = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+							while ( $row ) {
+								$query  = "update user_id set ";
+								$query .= ( strlen($IDENT) AND strlen($my_ident) ) ? "_ident = '". getUserID($row[0]) ."' " : "" ;
+								$query .= ( strlen($IDENT) AND strlen($my_ident) AND strlen($AUTOPASSWD) AND strlen($my_pwd) ) ? ", " : "" ;
+								$query .= ( strlen($AUTOPASSWD) AND strlen($my_pwd) ) ? "_passwd = '". getUserPassword($row[0]) ."' " : "" ;
+								$query .= "where _ID = '$row[0]' ";
+								$query .= "limit 1";
+
+								if ( mysql_query($query, $mysql_link) )
+									$count++;
+
+								$total++;
+
+								$row = remove_magic_quotes(mysql_fetch_row($result));
+								}
+							}	// endwhile classe
+						}
+
+			$msg->isPlural = (bool) ($count > 1);
+			$status = $msg->read($USER_ACCOUNTUPDATE, "$count/$total");
+			}
+		}
+?>
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($USER_PASWDMANAGEMENT)); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+
+	<p><?php print($msg->read($USER_STATUS) . " $status"); ?></p>
+
+	<form id="formulaire" action="" method="post">
+
+	<hr style="width:80%; text-align:center;" />
+
+        <table class="width100">
+          <tr>
+            <td style="width:25%;" class="align-right">
+			<?php print($msg->read($USER_USERID)); ?>
+		</td>
+            <td>
+			<label for="ident">
+			<input type="text" id="ident" name="ident" value="<?php echo $IDENT; ?>" size="30" />
+			</label>
+			<label for="my_ident"><input type="checkbox" id="my_ident" name="my_ident" value="O" /></label>
+            </td>
+          </tr>
+
+          <tr>
+            <td style="width:25%;" class="align-right">
+			<?php print($msg->read($USER_PASSWORD)); ?>
+		</td>
+            <td>
+			<label for="pwd">
+			<input type="text" id="pwd" name="pwd" value="<?php echo $AUTOPASSWD; ?>" size="30" />
+			</label>
+			<label for="my_pwd"><input type="checkbox" id="my_pwd" name="my_pwd" value="O" /></label>
+            </td>
+          </tr>
+
+          <tr>
+            <td class="align-right">
+			<?php print($msg->read($USER_PASSWDSET)); ?><br />
+			<?php print($msg->read($USER_EMPTYPASSWD)); ?> <label for="empty"><input type="checkbox" id="empty" name="empty" value="O" /></label>
+		</td>
+            <td>
+		<?php
+			// choix des centres
+			$select  = "<label for=\"IDcentre\">";
+			$select .= "<select id=\"IDcentre\" name=\"IDcentre\" onchange=\"document.forms.formulaire.submit()\" style=\"font-size: 9px;\">";
+
+			$Query   = "select _IDcentre, _ident from config_centre ";
+			$Query  .= "where _visible = 'O' AND _lang = '".$_SESSION["lang"]."' ";
+			$Query  .= "order by _ident";
+
+			// affichage des centres
+			$result  = mysql_query($Query, $mysql_link);
+			$row     = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+			while ( $row ) {
+				$check   = ( $IDcentre == $row[0] ) ? "selected=\"selected\"" : "" ;
+
+				$select .= "<option value=\"$row[0]\" $check>$row[1]</option>";
+
+				$row      = remove_magic_quotes(mysql_fetch_row($result));
+				}
+
+			$select .= "</select>";
+			$select .= "</label>";
+
+			// affichage des groupes
+			print("
+				<fieldset style=\"width:80%; border:#cccccc solid 1px;\">
+				<legend>$select</legend>");
+
+			// affichage des catégories
+			$query  = "select _IDgrp, _ident, _IDcat from user_group ";
+			$query .= "where _visible = 'O' AND _lang = '".$_SESSION["lang"]."' ";
+			$query .= "order by _IDgrp";
+
+			$result = mysql_query($query, $mysql_link);
+			$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+			while ( $row ) {
+				$more = ( $row[2] == 1 )
+					? "<span style=\"cursor: pointer;\" onclick=\"$('category')._display.toggle(); return false;\"><img src=\"".$_SESSION["ROOTDIR"]."/images/updown.png\" title=\"". $msg->read($USER_MORE) ."\" alt=\"". $msg->read($USER_MORE) ."\" /></span>"
+					: "" ;
+
+				print("<label for=\"cb_$row[0]\"><input type=\"checkbox\" id=\"cb_$row[0]\" name=\"cb[]\" value=\"$row[0]\" />$row[1]</label>$more<br/>");
+
+				if ( $row[2] == 1 ) {
+					print("<div id=\"category\" style=\"display:none; margin-left:20px;\">");
+
+					// lecture des classes
+					$Query  = "select _IDclass, _ident from campus_classe ";
+					$Query .= "where _visible = 'O' AND _IDcentre = '$IDcentre' ";
+					$Query .= "order by _ident";
+
+					$return = mysql_query($Query, $mysql_link);
+					$grp    = ( $return ) ? remove_magic_quotes(mysql_fetch_row($return)) : 0 ;
+
+					while ( $grp ) {
+						print("<label for=\"group_$grp[0]\"><input type=\"checkbox\" id=\"group_$grp[0]\" name=\"group[]\" value=\"$grp[0]\" checked=\"checked\" /> $grp[1]</label><br />");
+
+						$grp = remove_magic_quotes(mysql_fetch_row($return));
+						}	// endwhile catégorie
+
+					print("</div>");
+					}
+
+				$row = remove_magic_quotes(mysql_fetch_row($result));
+				}	// endwhile groupes
+
+			print("</fieldset>");
+		?>
+		</td>
+          </tr>
+        </table>
+
+	<hr style="width:80%; text-align:center;" />
+
+        <table class="width100">
+          <tr>
+             <td style="width:25%;" class="valign-middle align-right">
+			<?php print("<input type=\"image\" src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/valid.gif\" name=\"valid\" alt=\"".$msg->read($USER_INPUTOK)."\" />"); ?>
+             </td>
+             <td class="valign-middle">
+			<?php print($msg->read($USER_CONFIRM)); ?>
+             </td>
+          </tr>
+          <tr>
+             <td class="valign-middle align-right">
+			<a href="index.php?item=21"><?php print("<img src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/cancel.gif\" title=\"\" alt=\"".$msg->read($USER_INPUTCANCEL)."\" />"); ?></a>
+             </td>
+             <td class="valign-middle">
+			<?php print($msg->read($USER_GOBACK)); ?>
+             </td>
+          </tr>
+        </table>
+
+	</form>
+
+</div>

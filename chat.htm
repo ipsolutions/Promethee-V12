@@ -1,0 +1,89 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2006-2008 by Dominique Laporte(C-E-D@wanadoo.fr)
+   Copyright (c) 2006 by Nordine Zetoutou (nordine.zetoutou@educagri.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : chat.htm
+ *		projet   : dialogue en direct
+ *
+ *		version  : 1.0
+ *		auteur   : laporte
+ *		creation : 18/03/06
+ *		modif    : 17/07/06 - Nordine Zetoutou
+ * 	                 migration des balises HTML en XHTML 1.0 strict
+ */
+
+
+$salon = ( @$_GET["salon"] )		// nom du salon de discussion
+	? $_GET["salon"]
+	: $msg->read($CHAT_SALON) ;
+?>
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($CHAT_CHAT)); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+
+	<?php
+		// si le chat n'existe pas on le crée
+		$Query  = "select _IDmod, _IDgrpwr, _IDgrprd, _start, _end, _refresh from chat ";
+		$Query .= "where _title = '$salon' AND _lang = '".$_SESSION["lang"]."' ";
+		$Query .= "limit 1";
+
+		$result = mysql_query($Query, $mysql_link);
+		$chat   = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+		// vérification des autorisations
+		verifySessionAccess($chat[0], $chat[2]);
+
+		if ( !$chat ) {
+			$Query  = "insert into chat ";
+			$Query .= "values('', '0', '255', '255', '', '', '$salon', '1', '15', '10', 'O', '".$_SESSION["lang"]."')";
+
+			mysql_query($Query, $mysql_link);
+			}
+
+		// attention à la version PHP
+		$version = phpversion();
+
+		if ( strcmp($version, "4.3") < 0 )
+			print("". $msg->read($CHAT_VERSION, strval($version)) ."");
+		else
+			if ( ini_get("output_buffering") == "0" )
+				print("". $msg->read($CHAT_BUFFERING) ."");
+			else {
+				$time = date("H:i:s");
+
+				if ( $DEBUG )
+					print("Output Buffering: ". ini_get("output_buffering") ."<br/>");
+
+				if ( ($chat[3] != "00:00:00" AND $time < $chat[3]) OR ($chat[4] != "00:00:00" AND $time > $chat[4]) )
+					print("". $msg->read($CHAT_ISOPEN, Array($chat[3], $chat[4])) ."<br/>");
+				else
+					require "chat.php";
+				}
+	?>
+
+</div>

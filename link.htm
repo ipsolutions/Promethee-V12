@@ -1,0 +1,346 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2002-2008 by Dominique Laporte(C-E-D@wanadoo.fr)
+   Copyright (c) 2006 by Nordine Zetoutou (nordine.zetoutou@educagri.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : link.htm
+ *		projet   : la page d'affichage des liens
+ *
+ *		version  : 1.0
+ *		auteur   : laporte
+ *		creation : 11/11/05
+ *		modif    : 17/07/06 - Nordine Zetoutou
+ * 	                 migration des balises HTML en XHTML 1.0 strict
+ */
+
+
+$IDgroup = ( strlen(@$_POST["IDgroup"]) )		// ID du e-groupe ou du e-campus (0 : général)
+	? (int) $_POST["IDgroup"]
+	: (int) (strlen(@$_GET["IDgroup"]) ? $_GET["IDgroup"] : @$_SESSION["egroup"]) ;
+$IDparent = ( @$_POST["IDparent"] )
+	? (int) $_POST["IDparent"]
+	: (int) @$_GET["IDparent"] ;
+$IDdata   = ( @$_POST["IDdata"] )
+	? (int) $_POST["IDdata"]
+	: (int) @$_GET["IDdata"] ;
+$newdir   = ( @$_POST["newdir"] )
+	? $_POST["newdir"]
+	: @$_GET["newdir"] ;
+$IDlink   = (int) @$_GET["IDlink"] ;
+$mycmde   =  @$_GET["mycmde"] ;
+
+$submit   = ( @$_POST["submit"] )			// bouton de validation
+	? $_POST["submit"]
+	: @$_GET["submit"] ;
+?>
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($LINK_TITLE)); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+
+	<?php
+		// initialisation
+		$Query  = "select _IDparent, _titre, _IDmod, _IDdata from link_data ";
+		$Query .= "where _lang = '".$_SESSION["lang"]."' ";
+		$Query .= ( $IDparent ) ? "AND _IDdata = '$IDparent' " : "" ;
+		$Query .= "AND _IDgroup = '$IDgroup' ";
+		$Query .= "order by _IDdata limit 1";
+
+		$result = mysql_query($Query, $mysql_link);
+		$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+		$IDroot   = $row[0];
+		$root     = ( $row[1] ) ? $row[1] : $msg->read($LINK_ROOTDIR) ;
+		$IDmod    = $row[2];
+//		$IDparent = $row[3];
+
+		// commande utilisateur
+		if ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $IDmod )
+			switch ( $submit ) {
+				case "rmdir" :	// suppression d'un dossier
+					if ( mysql_query("delete from link_data where (_IDdata = '$IDdata' OR _IDparent = '$IDdata') AND _lang = '".$_SESSION["lang"]."'", $mysql_link) )
+						mysql_query("delete from link where _IDdata = '$IDdata'", $mysql_link);
+					break;
+
+				case "del" :	// suppression d'un lien
+					mysql_query("delete from link where _IDlink = '$IDlink' limit 1", $mysql_link);
+					break;
+
+				case "visible.gif" :
+				case "folder-opened.gif" :
+					if ( $IDlink )
+						mysql_query("update link set _visible = 'N' where _IDlink = '$IDlink' limit 1", $mysql_link);
+					else
+						mysql_query("update link_data set _visible = 'N' where _IDdata= '$IDdata' limit 1", $mysql_link);
+					break;
+
+				case "invisible.gif" :
+				case "folder-lock.jpg" :
+					if ( $IDlink )
+						mysql_query("update link set _visible = 'O' where _IDlink = '$IDlink' limit 1", $mysql_link);
+					else
+						mysql_query("update link_data set _visible = 'O' where _IDdata= '$IDdata' limit 1", $mysql_link);
+					break;
+
+				default :
+					// création d'un dossier
+					if ( $submit == $msg->read($LINK_CREATCMDE) AND strlen($newdir) )
+						mysql_query("insert into link_data values('', '$IDparent', '$IDgroup', '".$_SESSION["CnxID"]."', '$newdir', '', 'O', '".$_SESSION["lang"]."')", $mysql_link);
+
+					// modification d'un dossier
+					if ( $submit == $msg->read($LINK_UPDTCMDE) AND strlen($newdir) )
+						mysql_query("update link_data set _titre = '$newdir' where _IDdata = '$IDdata' limit 1", $mysql_link);
+					break;
+				}
+	?>
+
+		<?php print($IDgroup ? $msg->read($LINK_RECORD) : $msg->read($LINK_DISCLAIMER)); ?>
+
+		<hr style="width:80%;" />
+
+            <table class="width100">
+		<?php
+			switch ( $mycmde ) {
+				case "createDir" :
+					if ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $IDmod ) {
+						$submit = ( strlen($newdir) )
+							? "<input type=\"submit\" value=\"". $msg->read($LINK_UPDTCMDE) ."\" name=\"submit\" />"
+							: "<input type=\"submit\" value=\"". $msg->read($LINK_CREATCMDE) ."\" name=\"submit\" />" ;
+
+						print("
+							<tr>
+							  <td colspan=\"2\">
+								<form action=\"index.php\" method=\"post\">
+									<p class=\"hidden\"><input type=\"hidden\" name=\"item\"     value=\"$item\" /></p>
+									<p class=\"hidden\"><input type=\"hidden\" name=\"IDdata\"   value=\"$IDdata\" /></p>
+									<p class=\"hidden\"><input type=\"hidden\" name=\"IDparent\" value=\"$IDparent\" /></p>
+									<p class=\"hidden\"><input type=\"hidden\" name=\"IDgroup\"  value=\"$IDgroup\" /></p>
+									<p class=\"hidden\"><input type=\"hidden\" name=\"cmde\"     value=\"$cmde\" /></p>
+
+									<p style=\"margin:0px;\">
+									<img src=\"".$_SESSION["ROOTDIR"]."/images/folder-add.gif\" title=\"". $msg->read($LINK_ADDIR) ."\" alt=\"". $msg->read($LINK_ADDIR) ."\" />
+									<label for=\"newdir\"><input type=\"text\" id=\"newdir\" name=\"newdir\" value=\"$newdir\" size=\"30\" /></label> $submit
+									</p>
+								</form>
+							  </td>
+							</tr>
+							");
+						}
+					break;
+
+				default :
+					// affichage en-tête tableau
+					$home = "<a href=\"index.php?item=$item&amp;IDgroup=$IDgroup&amp;IDdata=0\">". $msg->read($LINK_ROOTDIR) ."</a>";
+
+					if ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $IDmod )
+						print("
+					              <tr>
+					                <td style=\"width:10%;\" class=\"align-center\">
+								<a href=\"".myurlencode("index.php?item=$item&IDgroup=$IDgroup&IDdata=$IDdata&IDparent=$IDparent&mycmde=createDir")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/post.gif\" title=\"". $msg->read($LINK_CREATDIR) ."\" alt=\"". $msg->read($LINK_CREATDIR) ."\" /></a>
+					                </td>
+					                <td style=\"width:45%;\">". $msg->read($LINK_CREATDIR) ."</td>
+					                <td class=\"align-right\">[$home]</td>
+					              </tr>
+			              		");
+					else
+						print("
+					              <tr>
+					                <td class=\"align-right\">[$home]</td>
+					              </tr>
+			              		");
+					break;
+				}
+		?>
+            </table>
+
+            <table class="width100">
+              <tr style="background-color:#c0c0c0;">
+                <td style="width:4%;" class="align-center"><img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/folder-closed.gif" title="" alt="" /></td>
+                <td style="width:85%;"><strong><?php print("$root"); ?></strong></td>
+                <td style="width:11%;" class="align-center"><?php print($msg->read($LINK_HIT)); ?></td>
+              </tr>
+
+            <?php
+		if ( $IDparent ) {
+			print("
+				<tr>
+					<td style=\"width:4%\"  class=\"align-center valign-top\"><img src=\"".$_SESSION["ROOTDIR"]."/images/folder-up.gif\" title=\"". $msg->read($LINK_PARENTDIR) ."\" alt=\"". $msg->read($LINK_PARENTDIR) ."\" /></td>
+					<td style=\"width:85%;\">
+						[<a href=\"index.php?item=$item&amp;IDgroup=$IDgroup&amp;IDparent=$IDroot\">". $msg->read($LINK_PARENTDIR) ."</a>]
+					</td>
+					<td style=\"width:11%\"></td>
+				</tr>
+				");
+			}
+
+		//---- lecture des répertoires
+		$Query  = "select _IDdata, _IDparent, _titre, _visible from link_data ";
+		$Query .= "where _lang = '".$_SESSION["lang"]."' ";
+		$Query .= "AND _IDparent = '$IDparent' AND _IDgroup = '$IDgroup' ";
+		$Query .= ( $_SESSION["CnxAdm"] == 255 ) ? "" : "AND _visible = 'O' ";
+		$Query .= "order by _titre" ;
+
+		$result = mysql_query($Query, $mysql_link);
+		$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+		$i = 0;
+		while ( $row ) {
+			$bgcol = ( $i++ % 2 ) ? "item" : "menu" ;
+
+			// suppression du dossier
+			$req  = $msg->read($LINK_DELDIR);
+			$del  = ( $_SESSION["CnxAdm"] == 255 )
+				? "<a href=\"".myurlencode("index.php?item=$item&IDgroup=$IDgroup&IDdata=$row[0]&IDparent=$IDparent&submit=rmdir")."\" onclick=\"return confirmLink(this, '$req');\"><img src=\"".$_SESSION["ROOTDIR"]."/images/corb.gif\" title=\"$req\" alt=\"$req\" /></a>"
+				: "" ;
+
+			// modification du dossier
+			$maj  = ( $_SESSION["CnxAdm"] == 255  OR $_SESSION["CnxID"] == $IDmod )
+				? "<a href=\"".myurlencode("index.php?item=$item&newdir=$row[2]&IDgroup=$IDgroup&IDdata=$row[0]&IDparent=$IDparent&mycmde=createDir")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/stats/post.gif\" title=\"". $msg->read($LINK_UPDTLINK) ."\" alt=\"". $msg->read($LINK_UPDTLINK) ."\" /></a>"
+				: "" ;
+
+			// affichage du dossier
+			$img  = ( $row[3] == "O" )
+				? "folder-opened.gif"
+				: "folder-lock.jpg" ;
+
+			$alt  = ( $row[3] == "O" )
+				? $msg->read($LINK_CLOSEDIR)
+				: $msg->read($LINK_OPENDIR) ;
+
+			$logo = ( $_SESSION["CnxAdm"] == 255  OR $_SESSION["CnxID"] == $IDmod )
+				? "<a href=\"".myurlencode("index.php?item=$item&IDgroup=$IDgroup&IDdata=$row[0]&IDparent=$IDparent&submit=$img")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/$img\" title=\"$alt\" alt=\"$alt\" /></a>"
+				: "<img src=\"".$_SESSION["ROOTDIR"]."/images/folder-closed.gif\" title=\"\" alt=\"\" />" ;
+
+			print("
+				<tr class=\"$bgcol\">
+					<td style=\"width:4%;\"  class=\"align-center valign-top\">$logo</td>
+					<td style=\"width:85%;\">
+						<a href=\"index.php?item=$item&amp;IDgroup=$IDgroup&amp;IDparent=$row[0]\">$row[2]</a> $del $maj<br/>
+					</td>
+					<td style=\"width:11%;\"></td>
+				</tr>
+				");
+
+			$row  = remove_magic_quotes(mysql_fetch_row($result));
+			}
+
+		//---- lecture de la base de données des liens
+		$Query  = "select _IDlink, _titre, _url, _texte, _country, _visible, _IDlicense ";
+		$Query .= "from link ";
+		$Query .= "where _IDgroup = '$IDgroup' ";
+		$Query .= "AND _lang = '".$_SESSION["lang"]."' ";
+		$Query .= "AND _IDdata = '$IDparent' ";
+		$Query .= ( $_SESSION["CnxAdm"] == 255 ) ? "" : "AND _visible = 'O' ";
+		$Query .= "order by _titre" ;
+
+		$result = mysql_query($Query, $mysql_link);
+		$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+		$i = 0;
+		while ( $row ) {
+			$bgcolor = ( $i++ % 2 ) ? "item" : "menu" ;
+
+			// lecture du compteur des téléchargements
+			$res    = mysql_query("select _IDdown, _count from download_data where _file = '$row[2]'", $mysql_link);
+			$down   = ( $res ) ? mysql_fetch_row($res) : 0 ;
+
+			$link   = ( $down[0] )
+				? "<a href=\"#\" onclick=\"popWin('".$_SESSION["ROOTDIR"]."/user_list.php?sid=".$_SESSION["sessID"]."&amp;IDdown=$down[0]&amp;cmde=dwload&amp;lang=".$_SESSION["lang"]."', '450', '200'); return false;\">$down[1]</a>"
+				: "0" ;
+
+			// suppression du lien
+			$req    = $msg->read($LINK_DELLINK);
+			$del    = ( $_SESSION["CnxAdm"] == 255  OR $_SESSION["CnxID"] == $IDmod )
+				? "<a href=\"".myurlencode("index.php?item=$item&cmde=link&IDgroup=$IDgroup&IDlink=$row[0]&IDparent=$IDparent&submit=del")."\" onclick=\"return confirmLink(this, '$req');\"><img src=\"".$_SESSION["ROOTDIR"]."/images/corb.gif\" title=\"$req\" alt=\"\" /></a>"
+				: "" ;
+
+			// modification du lien
+			$maj    = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $row[6] )
+				? "<a href=\"".myurlencode("index.php?item=$item&cmde=gestion&IDgroup=$IDgroup&IDlink=$row[0]&IDparent=$IDparent")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/stats/post.gif\" title=\"". $msg->read($LINK_MODIFICATION) ."\" alt=\"". $msg->read($LINK_MODIFICATION) ."\" /></a>"
+				: "" ;
+
+			// affichage du lien
+			$img    = ( $row[5] == "O" )
+				? "visible.gif"
+				: "invisible.gif" ;
+
+			$alt    = ( $row[5] == "O" )
+				? $msg->read($LINK_NOSHOWLNK)
+				: $msg->read($LINK_SHOWLNK) ;
+
+			$logo   = ( $_SESSION["CnxAdm"] == 255  OR $_SESSION["CnxID"] == $IDmod )
+				? "<a href=\"".myurlencode("index.php?item=$item&IDgroup=$IDgroup&IDlink=$row[0]&IDparent=$IDparent&submit=$img")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/$img\" title=\"$alt\" alt=\"$alt\" /></a>"
+				: "<img src=\"".$_SESSION["ROOTDIR"]."/images/spip/langues/$row[4]\" title=\"$row[4]\" alt=\"$row[4]\" />" ;
+
+			// lecture de la license
+			$res    = mysql_query("select _texte from resource_license where _IDlicense = '$row[6]' AND _lang = '".$_SESSION["lang"]."' limit 1", $mysql_link);
+			$ret    = ( $res ) ? remove_magic_quotes(mysql_fetch_row($res)) : 0 ;
+			$desc   = ( $ret )
+				? $msg->read($LINK_MYLICENSE) . " " . $ret[0]
+				: "" ;
+
+			$ovlib  = ( $desc )
+				? "<span>$desc</span>"
+				: "" ;
+
+			$target = "onclick=\"window.open(this.href, '_blank'); return false;\"";
+
+			print("
+				<tr class=\"$bgcolor\">
+					<td class=\"align-center valign-top\">$logo</td>
+					<td>
+						<a href=\"".myurlencode("index.php?file=$row[2]")."\" class=\"overlib\" $target>$row[1]$ovlib</a> $del $maj<br/>
+						<em>$row[2] &nbsp;</em><br/>$row[3]
+					</td>
+					<td class=\"align-center valign-top\">[$link]</td>
+				</tr>
+				");
+
+			$row  = remove_magic_quotes(mysql_fetch_row($result));
+			}
+            ?>
+            </table>
+
+		<?php
+		if ( $_SESSION["CnxAdm"] == 255  OR $_SESSION["CnxID"] == $IDmod )
+			print("
+		         <table class=\"width100\">
+				<tr>
+					<td class=\"valign-middle\" colspan=\"2\"><hr/></td>
+				</tr>
+				<tr>
+					<td style=\"width:10%;\" class=\"valign-middle align-center\">
+						<a href=\"".myurlencode("index.php?item=$item&cmde=gestion&IDgroup=$IDgroup&IDparent=$IDparent")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/valid.gif\" title=\"\" alt=\"\" /></a>
+					</td>
+					<td class= \"valign-middle\">
+						". $msg->read($LINK_ADDLINK) ."
+					</td>
+			 	</tr>
+		         </table>
+				");
+		?>
+
+</div>

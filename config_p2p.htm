@@ -1,0 +1,502 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2006-2008 by Dominique Laporte(C-E-D@wanadoo.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : config_p2p.htm
+ *		projet   : paramétrage du partage des ressources
+ *
+ *		version  : 1.0
+ *		auteur   : laporte
+ *		creation : 8/12/07
+ *		modif    : 
+ */
+
+
+$IDconf = ( @$_POST["IDconf"] )				// ID de la configuration
+	? (int) $_POST["IDconf"]
+	: (int) @$_GET["IDconf"] ;
+$IDp2p  = ( @$_POST["IDp2p"] )				// ID du serveur P2P
+	? (int) $_POST["IDp2p"]
+	: (int) @$_GET["IDp2p"] ;
+$server = trim(@$_POST["server"]);				// nom du serveur
+$key    = addslashes(trim(@$_POST["key"]));		// clef d'autorisation
+$IDres  = (int) @$_POST["IDres"];				// ID de le ressource
+$sync   = @$_POST["sync"];					// ID de le ressource
+
+$submit = ( @$_GET["submit"] )				// bouton de validation
+	? $_GET["submit"]
+	: @$_POST["valid_x"] ;
+
+//---------------------------------------------------------------------------
+function syncP2P_directory()
+{
+/*
+ * fonction :	détermine les annuaires partagés
+ * out :		liste des utilisateurs
+ */
+	require "globals.php";
+
+	// lecture des annuaires partagés
+	$query  = "select _IDgrp from user_group ";
+	$query .= "where _visible = 'O' AND _lang = '".$_SESSION["lang"]."' ";
+	$query .= "order by _IDgrp asc";
+
+	$result = mysql_query($query, $mysql_link);
+	$row    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+	$share  = "";
+
+	while ( $row ) {
+		// filtrage des ressources autorisées
+		$return = mysql_query("select _IDshare from p2p_share where _IDres = '0' AND _IDcat = '$row[0]' limit 1", $mysql_link);
+		$myrow  = ( $return ) ? mysql_fetch_row($return) : 0 ;
+
+		if ( $myrow ) {
+			//---- lecture de la base de données ----
+			$Query  = "select distinctrow ";
+			$Query .= "user_id._name, user_id._fname, user_id._sexe, user_id._title, user_id._fonction, user_id._email, user_id._tel, user_id._adr, user_id._cp, user_id._city, user_id._lang, ";
+			$Query .= "user_group._ident, ";
+			$Query .= "config_centre._ident ";
+			$Query .= "from user_id, user_group, config_centre ";
+			$Query .= "where user_group._IDgrp = '$row[0]' " ;
+			$Query .= "AND user_group._IDgrp = user_id._IDgrp " ;
+			$Query .= "AND user_group._lang = '".$_SESSION["lang"]."' " ;
+			$Query .= "AND config_centre._IDcentre = user_id._IDcentre " ;
+			$Query .= "AND config_centre._lang = '".$_SESSION["lang"]."' " ;
+			$Query .= "AND user_id._adm" ;
+
+			$return = mysql_query($Query, $mysql_link);
+			$sql    = ( $return ) ? mysql_fetch_row($return) : 0 ;
+
+			while ( $sql ) {
+				$share .= "
+					<input type=\"hidden\" name=\"name[]\"     value=\"$sql[0]\" />
+					<input type=\"hidden\" name=\"fname[]\"    value=\"$sql[1]\" />
+					<input type=\"hidden\" name=\"sex[]\"      value=\"$sql[2]\" />
+					<input type=\"hidden\" name=\"title[]\"    value=\"$sql[3]\" />
+					<input type=\"hidden\" name=\"function[]\" value=\"$sql[4]\" />
+					<input type=\"hidden\" name=\"email[]\"    value=\"$sql[5]\" />
+					<input type=\"hidden\" name=\"tel[]\"      value=\"$sql[6]\" />
+					<input type=\"hidden\" name=\"adr[]\"      value=\"$sql[7]\" />
+					<input type=\"hidden\" name=\"cp[]\"       value=\"$sql[8]\" />
+					<input type=\"hidden\" name=\"city[]\"     value=\"$sql[9]\" />
+					<input type=\"hidden\" name=\"mylang[]\"   value=\"$sql[10]\" />
+					<input type=\"hidden\" name=\"group[]\"    value=\"$sql[11]\" />
+					<input type=\"hidden\" name=\"center[]\"   value=\"$sql[12]\" />";
+
+				$sql    = mysql_fetch_row($return);
+				}
+			}
+
+		$row = mysql_fetch_row($result);
+		}
+
+	return $share;
+}
+//---------------------------------------------------------------------------
+function syncP2P_resource($IDres)
+{
+/*
+ * fonction :	détermine les ressources partagées
+ * out :		liste des ressources
+ */
+	require "globals.php";
+
+	// lecture des ressources partagées
+	$query  = "select distinctrow resource_data._IDcat, resource._titre ";
+	$query .= "from resource_data, resource ";
+	$query .= "where resource_data._IDres = '$IDres' ";
+	$query .= "AND resource_data._IDres = resource._IDres ";
+	$query .= "AND resource_data._lang = '".$_SESSION["lang"]."' AND resource._lang = '".$_SESSION["lang"]."' ";
+	$query .= "order by resource_data._IDcat";
+
+	$result = mysql_query($query, $mysql_link);
+	$row    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+	$share  = "";
+
+	while ( $row ) {
+		// filtrage des ressources autorisées
+		$return = mysql_query("select _IDshare from p2p_share where _IDres = '$IDres' AND _IDcat = '$row[0]' limit 1", $mysql_link);
+		$myrow  = ( $return ) ? mysql_fetch_row($return) : 0 ;
+
+		if ( $myrow ) {
+			//---- lecture de la base de données ----
+			$Query  = "select distinctrow ";
+			$Query .= "resource_items._title, resource_items._file, resource_items._size, resource_items._texte, resource_items._ver, resource_items._ID, resource_items._IP, resource_items._IDlicense, resource_items._IDgrprd, resource_items._usability, ";
+			$Query .= "resource_data._nom, resource_data._lang ";
+			$Query .= "from resource_items, resource_data ";
+			$Query .= "where resource_items._IDcat = '$row[0]' " ;
+			$Query .= "AND resource_items._IDcat = resource_data._IDcat " ;
+			$Query .= "AND (resource_items._IDlicense between '1' AND '13') " ;
+			$Query .= "AND resource_items._visible = 'O' " ;
+
+			$return = mysql_query($Query, $mysql_link);
+			$sql    = ( $return ) ? mysql_fetch_row($return) : 0 ;
+
+			while ( $sql ) {
+				$path   = stripaccent("$DOWNLOAD/ressources/$row[1]/$sql[9]/v$sql[4]-$sql[1]");
+				$texte  = str_replace(Array('<br/>', '"'), Array(' ', '&quot;'), $sql[3]);
+
+				$list   = explode(" ", $sql[8]);
+				$level  = "|";
+
+				for ($i = 0; $i < count($list); $i++) {
+					$Query  = ( $IDres == 2 )
+						? "select _ident from campus_classe where _IDclass = '$list[$i]' limit 1"
+						: "select _ident from user_group where _IDgrp = '$list[$i]' AND _lang = '".$_SESSION["lang"]."' limit 1" ;
+
+					$myret  = mysql_query($Query, $mysql_link);
+					$value  = ( $myret ) ? mysql_fetch_row($myret) : 0 ;
+
+					$level .= strlen($value[0]) ? trim($value[0]) . "|" : "" ;
+					}
+
+				$level  = ( $level == "|" ) ? "" : $level ;
+
+				$share .= "
+					<input type=\"hidden\" name=\"url[]\"        value=\"$path\" />
+					<input type=\"hidden\" name=\"title[]\"      value=\"".str_replace('"', '&quot;', $sql[0]) ."\" />
+					<input type=\"hidden\" name=\"desc[]\"       value=\"$texte\" />
+					<input type=\"hidden\" name=\"format[]\"     value=\"".extension($path)."\" />
+					<input type=\"hidden\" name=\"size[]\"       value=\"$sql[2]\" />
+					<input type=\"hidden\" name=\"author[]\"     value=\"".getUserName($sql[5], false)."\" />
+					<input type=\"hidden\" name=\"resource[]\"   value=\"$row[1]\" />
+					<input type=\"hidden\" name=\"category[]\"   value=\"$sql[10]\" />
+					<input type=\"hidden\" name=\"license[]\"    value=\"$sql[7]\" />
+					<input type=\"hidden\" name=\"usability[]\"  value=\"$sql[9]\" />
+					<input type=\"hidden\" name=\"mylang[]\"     value=\"$sql[11]\" />
+					<input type=\"hidden\" name=\"level[]\"      value=\"$level\" />";
+
+				$sql    = mysql_fetch_row($return);
+				}
+			}
+
+		$row = mysql_fetch_row($result);
+		}
+
+	return $share;
+}
+//---------------------------------------------------------------------------
+function legend($IDres)
+{
+	/*
+	 * fonction :	affiche les ressources à partager
+	 * in :		IDres : id de la ressource
+	 */
+
+	require "globals.php";
+
+	if ( $IDres ) {
+		// affichage des catégories
+		$query  = "select _IDcat, _nom from resource_data ";
+		$query .= "where _IDres = '$IDres' AND _visible = 'O' ";
+		$query .= "AND _lang = '".$_SESSION["lang"]."' ";
+		$query .= "order by _nom";
+		}
+	else {
+		// recherche des groupes
+		$query  = "select _IDgrp, _ident from user_group ";
+		$query .= "where _visible = 'O' AND _lang = '".$_SESSION["lang"]."' ";
+		$query .= "order by _IDgrp asc";
+		}
+
+	$result = mysql_query($query, $mysql_link);
+	$cat    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+	while ( $cat ) {			
+		mysql_query("select _IDshare from p2p_share where _IDres = '$IDres' AND _IDcat = '$cat[0]' limit 1", $mysql_link);
+
+		$check = ( mysql_affected_rows($mysql_link) ) ? "checked=\"checked\"" : "" ;
+		$value = ($IDres * 10000) + $cat[0];
+
+		print("<label for=\"cb_$cat[0]\"><input type=\"checkbox\" id=\"cb_$cat[0]\" name=\"cb[]\" value=\"$value\" $check />$cat[1]</label><br/>");
+
+		$cat = remove_magic_quotes(mysql_fetch_row($result));
+		}	// endwhile catégorie
+}
+//---------------------------------------------------------------------------
+?>
+
+
+<?php
+	require_once "include/config.php";
+
+	// vérification des autorisations
+	admSessionAccess();
+
+	// l'utilisateur a validé
+	if ( $submit )
+		switch ( $submit ) {
+			case "new" :
+				break;
+
+			case "del" :
+				mysql_query("delete from p2p where _IDp2p = '$IDp2p' limit 1", $mysql_link);
+				break;
+
+			default :
+				// réinitialisation des serveurs
+				mysql_query("update p2p set _visible = 'N'", $mysql_link);
+
+				if ( $server == "" )
+					mysql_query("update p2p set _visible = 'O', _key = '$key' where _IDp2p = '$IDp2p' limit 1", $mysql_link);
+				else
+					mysql_query("insert into p2p values('', '$server', '$key', 'O')");
+
+				// réinitialisation du partage
+				mysql_query("delete from p2p_share where _IDres = '$IDres'", $mysql_link);
+
+				$cb = @$_POST["cb"];
+				for ($i = 0; $i < count($cb); $i++)
+					if ( @$cb[$i] ) {
+						$idres = (int) ($cb[$i] / 10000);
+						$idcat = (int) ($cb[$i] - ($idres * 10000));
+
+						mysql_query("insert into p2p_share values('', '$idres', '$idcat')", $mysql_link);
+						}
+				break;
+			}
+?>
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($CONFIG_CONFIGP2P)); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+
+        <table class="width100">
+          <tr>
+            <td style="width:100%;" class="align-center">
+			<span class="menucfg">
+			<img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/options.png" title="" alt="" />
+			<?php print("<a href=\"index.php?item=$item&amp;IDconf=$IDconf\">". $msg->read($CONFIG_OPTION) ."</a>"); ?>
+			</span>
+
+			<span class="menucfg">
+			<img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/config.png" title="" alt="" />
+			<?php print("<a href=\"index.php?item=$item&amp;cmde=skin&amp;IDconf=$IDconf\">". $msg->read($CONFIG_TUNE) ."</a>"); ?>
+			</span>
+
+			<span class="menucfg">
+			<img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/database.gif" title="" alt="" />
+			<?php print("<a href=\"index.php?item=$item&amp;cmde=dba&amp;IDconf=$IDconf\">". $msg->read($CONFIG_DATABASE) ."</a>"); ?>
+			</span>
+
+			<span class="menucfg">
+			<img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/personnaliser.gif" title="" alt="" />
+			<?php print("<a href=\"index.php?item=$item&amp;cmde=kwords&amp;IDconf=$IDconf\">". $msg->read($CONFIG_KEYWORDS) ."</a>"); ?>
+			</span>
+
+			<span class="menucfg">
+			<img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/liste.png" title="" alt="" />
+			<?php print("<a href=\"index.php?item=$item&amp;cmde=menu&amp;IDconf=$IDconf\">". $msg->read($CONFIG_MENU) ."</a>"); ?>
+			</span>
+
+			<span style="margin:5px; padding:2px; border-style:solid; border-color:#000000; border-width:1px; background-color:#eeeeee;">
+			<img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/p2p.png" title="" alt="" /> <?php print($msg->read($CONFIG_P2P)) ?>
+			</span>
+			
+			<span class="menucfg">
+			<?php print("<a href=\"index.php?item=$item&amp;cmde=edt&amp;IDconf=$IDconf\">". $msg->read($CONFIG_EDT) ."</a>"); ?>
+			</span>
+            </td>
+          </tr>
+        </table>
+
+	<hr />
+
+        <table class="width100">
+          <tr>
+            <td style="width:30%;" class="align-right">
+			<?php print($msg->read($CONFIG_SYNCHRO)); ?>
+		</td>
+            <td>
+			<?php
+				// initialisation
+				if ( !$IDp2p ) {
+					$result = mysql_query("select _IDp2p from p2p order by _server limit 1", $mysql_link);
+					$row    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+					$IDp2p  = $row[0];
+					}
+
+				// recherches du serveur et de sa clef
+				$result   = mysql_query("select _server, _key from p2p where _IDp2p = '$IDp2p' limit 1", $mysql_link);
+				$myrow    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+				$disabled = ( strlen($myrow[1]) ) ? "" : "disabled=\"disabled\"" ;
+
+				$connect  = "<input type=\"submit\" value=\"".$msg->read($CONFIG_RUNSYNCHRO)."\" style=\"font-size:9px;\" $disabled />";
+				$connect .= ( strlen($myrow[1]) ) ? "<input type=\"hidden\" name=\"key\" value=\"$myrow[1]\" />" : "" ;
+				$connect .= ( strlen($myrow[1]) )
+					? ($IDres ? syncP2P_resource($IDres) : syncP2P_directory())
+					: "" ;
+
+				$mycmde   = ( $IDres ) ? "share" : "share_user" ;
+
+				print("
+					<form id=\"connect\" action=\"$myrow[0]/server.php?cmde=$mycmde&amp;lang=".$_SESSION["lang"]."\" method=\"post\" >
+						<div>$connect</div>
+					</form>");
+ 			?>
+		</td>
+          </tr>
+        </table>
+
+	<form id="formulaire" action="index.php" method="post">
+	<?php
+		print("
+			<p class=\"hidden\"><input type=\"hidden\" name=\"item\"     value=\"$item\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"cmde\"     value=\"$cmde\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"IDconf\"   value=\"$IDconf\" /></p>
+			");
+	?>
+
+        <table class="width100">
+          <tr>
+            <td style="width:30%;" class="align-right">
+			<?php print($msg->read($CONFIG_SERVER)); ?>
+		</td>
+            <td>
+			<label for="IDp2p">
+			<?php
+				if ( $submit == "new" )
+					print("<input type=\"text\" id=\"IDp2p\" name=\"server\" size=\"30\" />");
+				else {
+					print("
+						<select id=\"IDp2p\" name=\"IDp2p\" onchange=\"document.forms.formulaire.submit()\">
+							<option value=\"-1\">&nbsp;</option>");
+
+					// recherches des serveurs
+					$result = mysql_query("select _IDp2p, _server from p2p order by _server", $mysql_link);
+					$row    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+					// initialisation
+					if ( !$IDp2p )
+						$IDp2p  = $row[0];
+
+					// ajouter un serveur
+					$add    = "<a href=\"".myurlencode("index.php?item=$item&cmde=$cmde&IDconf=$IDconf&submit=new")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/ajouter.gif\" title=\"\" alt=\"+\" /></a>";
+
+					// supprimer un serveur
+					$del    = ( $IDp2p > 0 )
+						? "<a href=\"".myurlencode("index.php?item=$item&cmde=$cmde&IDconf=$IDconf&IDp2p=$IDp2p&submit=del")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/corb.gif\" title=\"\" alt=\"X\" /></a>"
+						: "" ;
+
+					while ( $row ) {
+						$select = ( $IDp2p == $row[0] ) ? "selected=\"selected\"" : "" ;
+
+						print("<option value=\"$row[0]\" $select >$row[1]</option>");
+
+						$row = mysql_fetch_row($result);
+						}
+
+					print("</select> $add $del");
+					}
+			?>
+			</label>
+            </td>
+          </tr>
+
+          <tr>
+            <td style="width:30%;" class="align-right">
+			<?php print($msg->read($CONFIG_KEY)); ?>
+		</td>
+            <td>
+			<label for="key"><input type="text" id="key" name="key" value="<?php echo $myrow[1]; ?>" size="15" /></label>
+			<a href="#" onclick="popWin('<?php print(str_replace("'", "\'", myurlencode("$myrow[0]/server.php?key=$myrow[1]&lang=".$_SESSION["lang"]."&ident=".$_SESSION["CfgIdent"]."&address=".$_SESSION["CfgAdr"]."&zip=".$_SESSION["CfgZip"]."&city=".$_SESSION["CfgCity"]."&tel=".$_SESSION["CfgTel"]."&fax=".$_SESSION["CfgFax"]."&url=".$_SESSION["CfgWeb"]."&admin=".$_SESSION["CfgAdmin"]))); ?>', '470', '560'); return false;">
+			<img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/ip.gif" title="<?php  print($msg->read($CONFIG_GETKEY)); ?>" alt="<?php  print($msg->read($CONFIG_GETKEY)); ?>" />
+			</a>
+            </td>
+          </tr>
+
+          <tr>
+            <td class="align-right">
+			<?php print($msg->read($CONFIG_SHARING)); ?>
+		</td>
+            <td>
+			<?php
+				$select  = "<select id=\"IDres\" name=\"IDres\" onchange=\"document.forms.formulaire.submit()\">";
+
+				$check   = ( $IDres ) ? "" : "selected=\"selected\"" ;
+				$select .= "<option value=\"0\" $check >". $msg->read($CONFIG_DIRECTORY) ."</option>";
+
+				$select .= "<optgroup label=\"". $msg->read($CONFIG_MYDOC) ."\">";
+
+				// recherche du dossier
+				$query   = "select _IDres, _titre from resource ";
+				$query  .= "where _internal = 'N' AND _lang = '".$_SESSION["lang"]."' AND _visible = 'O' ";
+				$query  .= "order by _titre";
+
+				$result  = mysql_query($query, $mysql_link);
+				$row     = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+				while ( $row ) {
+					$check   = ( $IDres == $row[0] ) ? "selected=\"selected\"" : "" ;
+
+					$select .= "<option value=\"$row[0]\" $check >$row[1]</option>";
+
+					$row     = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+					}
+
+				$select .= "</optgroup>";
+				$select .= "</select>";
+
+				print("
+					<fieldset style=\"width:80%; border:#cccccc solid 1px;\">
+					<legend>$select</legend>");
+
+					legend($IDres);
+
+				print("</fieldset>");
+			?>
+		</td>
+          </tr>
+        </table>
+
+	<hr/>
+
+        <table class="width100">
+          <tr>
+             <td style="width:10%;" class="valign-middle align-center">
+			<?php print("<input type=\"image\" src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/valid.gif\" name=\"valid\" alt=\"".$msg->read($CONFIG_INPUTOK)."\" />"); ?>
+             </td>
+             <td class="valign-middle">
+			<?php print($msg->read($CONFIG_VALIDATE)); ?>
+             </td>
+          </tr>
+          <tr>
+             <td class="valign-middle align-right">
+			<a href="index.php"><?php print("<img src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/cancel.gif\" title=\"\" alt=\"".$msg->read($CONFIG_INPUTCANCEL)."\" />"); ?></a>
+             </td>
+             <td class="valign-middle">
+			<?php print($msg->read($CONFIG_GOHOME)); ?>
+             </td>
+          </tr>
+        </table>
+
+	</form>
+
+</div>

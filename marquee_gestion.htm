@@ -1,0 +1,163 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2007 by Dominique Laporte(C-E-D@wanadoo.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : marquee_gestion.htm
+ *		projet   : la page de gestion des annonces défilantes
+ *
+ *		version  : 1.0
+ *		auteur   : laporte
+ *		creation : 20/05/06
+ *		modif    :  4/11/07
+ */
+
+
+$nbitem  = (int) @$_POST["nbitem"];
+$cbox    = @$_POST["cbox"];
+?>
+
+
+<?php
+	// l'utilisateur a validé la saisie
+	if ( @$_POST["valid_x"] ) {
+		$status = $msg->read($MARQUEE_MODIFICATION) ." ";
+
+		if ( !mysql_query("update marquee set _visible = 'N' where _lang = '".$_SESSION["lang"]."'", $mysql_link) ) {
+			$status .= "<img src=\"".$_SESSION["ROOTDIR"]."/images/bad.gif\" title=\"\" alt=\"\" />";
+			sql_error($mysql_link);
+			}
+		else {
+			$status .= "<img src=\"".$_SESSION["ROOTDIR"]."/images/ok.gif\" title=\"\"  alt=\"\" />";
+
+			for ($i = 0; $i < count($cbox); $i++)
+				if ( @$cbox[$i] ) {
+					$Query  = "UPDATE marquee ";
+					$Query .= "SET _item = '$nbitem', _visible = 'O' ";
+					$Query .= "where _IDitem = '".$cbox[$i]."' ";
+					$Query .= "limit 1";
+
+					mysql_query($Query, $mysql_link);
+					}
+			}
+		}
+	// initialisation
+	else
+		$status = "-";
+?>
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($MARQUEE_MANAGER)); ?><br/>
+		<?php print($msg->read($MARQUEE_FORMFEED)); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+
+	<p><?php print($msg->read($MARQUEE_STATUS) . " $status"); ?></p>
+
+	<form id="formulaire" action="" method="post">
+
+	<div style="border:#cccccc solid 1px; padding:4px;">
+
+		  <table class="width100">
+		    <tr style="background-color:#eeeeee;">
+		      <td style="width:33%;" class="valign-top">
+	                <?php print($msg->read($MARQUEE_NBNEWS)); ?>
+		      </td>
+		      <td style="width:33%;"  class="valign-top">
+	                <?php print($msg->read($MARQUEE_SERVICE)); ?>
+		      </td>
+		      <td style="width:33%;"></td>
+		    </tr>
+
+		    <tr>
+		      <td class="valign-top">
+				<label for="nbitem">
+				<select id="nbitem" name="nbitem">
+				<?php
+					// recherche du nombre d'items
+					$query  = "select _item from marquee ";
+					$query .= "where _lang = '".$_SESSION["lang"]."' ";
+					$query .= "limit 1";
+
+					$result = mysql_query($query, $mysql_link);
+					$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+					for ($i = 1; $i < 5; $i++) {
+						$select = ( $i == $row[0] ) ? "selected=\"selected\"" : "" ;
+
+						print("<option $select value=\"$i\">$i</option>");
+						}
+				?>
+				</select>
+				</label>
+		      </td>
+		      <td class="valign-top">
+			<?php
+				// recherche des services
+				$query  = "select _text, _visible, _IDitem from marquee ";
+				$query .= "where _lang = '".$_SESSION["lang"]."' ";
+				$query .= "order by _IDitem";
+
+				$result = mysql_query($query, $mysql_link);
+				$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+				while ( $row ) {
+					$check = ( $row[1] == "O" ) ? "checked=\"checked\"" : "" ;
+
+					print("<label for=\"cbox_$row[2]\"><input type=\"checkbox\" id=\"cbox_$row[2]\" name=\"cbox[]\" value=\"$row[2]\" $check /> $row[0]</label><br/>");
+
+					$row   = remove_magic_quotes(mysql_fetch_row($result));
+					}
+             	?>
+		      </td>
+		      <td></td>
+		    </tr>
+		  </table>
+
+	</div>
+
+	<hr style="width:80%;" />
+
+         <table class="width100">
+           <tr>
+              <td style="width:10%;" class="valign-middle align-center">
+              	<?php print("<input type=\"image\" src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/valid.gif\" name=\"valid\" alt=\"".$msg->read($MARQUEE_INPUTOK)."\" />"); ?>
+              </td>
+              <td class="valign-middle">
+              	<?php print($msg->read($MARQUEE_MODIFY)); ?>
+              </td>
+           </tr>
+           <tr>
+              <td class="valign-middle align-center">
+              	<a href="index.php"><?php print("<img src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/cancel.gif\" title=\"\" alt=\"".$msg->read($MARQUEE_INPUTCANCEL)."\" />"); ?></a>
+              </td>
+              <td class="valign-middle">
+              	<?php print($msg->read($MARQUEE_BACK)); ?>
+              </td>
+           </tr>
+         </table>
+
+	</form>
+
+</div>

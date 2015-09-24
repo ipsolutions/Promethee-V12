@@ -1,0 +1,465 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2009 by Dominique Laporte (C-E-D@wanadoo.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : fil_wall.htm
+ *		projet   : la page du mur d'annonces pour les e-groupes
+ *
+ *		version  : 1.0
+ *		auteur   : laporte
+ *		creation : 23/02/09
+ *		modif    : 
+ */
+
+
+$IDfil   = ( @$_POST["IDfil"] )				// identifiant des fils
+	? (int) $_POST["IDfil"]
+	: (int) @$_GET["IDfil"] ;
+$IDgroup = ( @$_POST["IDgroup"] )				// identifiant e-groupe
+	? (int) $_POST["IDgroup"]
+	: (int) @$_GET["IDgroup"] ;
+$year    = ( @$_POST["year"] )
+	? (int) $_POST["year"]
+	: (int) (@$_GET["year"] ? $_GET["year"] : date("Y")) ;
+$month   = ( @$_POST["month"] )
+	? (int) $_POST["month"]
+	: (int) (@$_GET["month"] ? $_GET["month"] : date("m")) ;
+$day     = ( @$_POST["day"] )
+	? (int) $_POST["day"]
+	: (int) (@$_GET["day"] ? $_GET["day"] : date("d")) ;
+$title   = addslashes(trim(@$_POST["title"]));		// titre de l'item du flash
+$texte   = addslashes(trim(@$_POST["texte"]));		// texte de l'item du flash
+$img     = @$_POST["img"];					// image de l'item du flash
+$post    = ( @$_POST["post"] ) ? "O" : "N" ;		// authoriser les commentaires
+$persist = ( @$_POST["persist"] ) ? "O" : "N" ;		// FIL persistant
+$idgroup = (int) @$_POST["idgroup"];				// autorisation
+
+$submit  = ( @$_POST["submit"] )				// bouton de validation
+	? $_POST["submit"]
+	: @$_GET["submit"] ;
+?>
+
+
+<script type="text/javascript" src="script/edit.js"></script>
+
+
+<?php
+	// initialisation
+	$error  = 0;
+	$status = ( $IDfil )
+		? $msg->read($FIL_MODIFICATION)
+		: $msg->read($FIL_NEW) ;
+
+	// les connexions anonymes n'ont pas le droit de poster des annonces
+	if ( $_SESSION["CnxSex"] != "A" )
+		switch ( $submit ) {
+			case "valider" :
+				// test d'erreur sur champs non renseignés
+				$error = ( !strlen($title) OR !strlen($texte) ) ? 1 : 0 ;
+
+				if ( !$error ) {
+					$status = $msg->read($FIL_INSERT) . " ";
+
+					$Query  = "insert into flash_fil ";
+					$Query .= "values('', '-$IDgroup', '$idgroup', '$year-$month-$day', '', '', '".$_SESSION["CnxID"]."', '".$_SESSION["CnxIP"]."', '0', '$title', '$texte', '$img', '0', '$post', '$persist')";
+
+					if ( !mysql_query($Query, $mysql_link) ) {
+						$status .= "<img src=\"".$_SESSION["ROOTDIR"]."/images/bad.gif\" title=\"\" alt=\"\" />";
+
+						mysql_error($mysql_link);
+						}
+					else {
+						$status .= "<img src=\"".$_SESSION["ROOTDIR"]."/images/ok.gif\" title=\"\" alt=\"\" />";
+
+						// transfert d'une Pièce Jointe
+						$file = @$_FILES["UploadPJ"]["tmp_name"];
+
+						if ( $file AND authfile(@$_FILES["UploadPJ"]["name"]) ) {
+							$ext    = extension(@$_FILES["UploadPJ"]["name"]);
+
+							$Query  = "insert into flash_filpj ";
+							$Query .= "values('', '".mysql_insert_id()."', '".@$_FILES["UploadPJ"]["name"]."', '".@$_FILES["UploadPJ"]["size"]."')";
+
+							if ( mysql_query($Query, $mysql_link) ) {
+								// fichier destination
+								$dest = "$DOWNLOAD/fil/". mysql_insert_id() .".$ext";
+
+								// copie du fichier temporaire -> répertoire de stockage
+								if ( move_uploaded_file($file, $dest) )
+									mychmod($dest, $CHMOD);
+								}
+							}
+
+						// alimentation flux rss
+						$query  = "insert into rss_items ";
+						$query .= "values('', '0', '$title', '', '$texte', '".addslashes(getUserName($_SESSION["CnxID"], false))."', '".addslashes($msg->read($FIL_RSSFEED))."', '".date("Y-m-d H:i:s")."', '".$_SESSION["lang"]."')";
+
+						mysql_query($query, $mysql_link);
+						}
+					}
+				break;
+
+			case "update" :
+				$status = $msg->read($FIL_MODIFICATION) . " ";
+
+				$Query  = "update flash_fil ";
+				$Query .= "set _title = '$title', _texte = '$texte', _IDgroup ='$idgroup', _img = '$img', _date = '$year-$month-$day', _post = '$post', _persistent = '$persist' ";
+				$Query .= "where _IDfil = '$IDfil' ";
+				$Query .= ( $_SESSION["CnxAdm"] == 255 ) ? "" : "AND _ID = '".$_SESSION["CnxID"]."' " ;
+				$Query .= "limit 1";
+
+				if ( ! mysql_query($Query, $mysql_link) ) {
+					$status .= "<img src=\"".$_SESSION["ROOTDIR"]."/images/bad.gif\" title=\"\" alt=\"\" />";
+					mysql_error($mysql_link);
+					}
+				else
+					$status .= "<img src=\"".$_SESSION["ROOTDIR"]."/images/ok.gif\" title=\"\" alt=\"\" />";
+				break;
+
+			default :
+				break;
+			}
+
+	$Query  = "select _IDflash, _title, _texte, _img, _IDgroup, _date, _post, _persistent ";
+	$Query .= "from flash_fil where _IDfil = '$IDfil' ";
+	$Query .= "limit 1";
+
+	$result = mysql_query($Query, $mysql_link);
+	$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+	if ( $row AND !$error ) {
+		// initialisation des champs de saisie
+		$IDflash = $row[0];
+		$title   = $row[1];
+		$texte   = htmlspecialchars($row[2]);
+		$img     = ( $row ) ? $row[3] : "defaut.png" ;
+		$grpid   = (int) $row[4];
+		$day     = substr($row[5], 8, 2);
+		$post    = $row[6];
+		$persist = $row[7];
+		}
+	else {
+		$grpid   = 0;
+		$title   = $texte = "";
+		$post    = "N";
+		$persist = "N";
+		}
+?>
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($FIL_WALLTITLE)); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+
+	<table class="width100">
+	    <tr>
+	      <td style="width:15%;" class="align-right"><?php print($msg->read($FIL_STATUS)); ?></td>
+	      <td style="width:85%"><?php print("$status"); ?></td>
+	    </tr>
+	</table>
+
+	<hr style="width:80%;" />
+
+	<form id="formulaire" action="index.php" method="post" enctype="multipart/form-data">	  
+	<?php
+		print("
+			<p class=\"hidden\"><input type=\"hidden\" name=\"item\"      value=\"$item\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"cmde\"      value=\"$cmde\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"IDgroup\"   value=\"$IDgroup\" /></p>
+			");
+
+		if ( $IDfil )
+			print("
+				<p class=\"hidden\"><input type=\"hidden\" name=\"IDfil\"   value=\"$IDfil\" /></p>
+				<p class=\"hidden\"><input type=\"hidden\" name=\"submit\"  value=\"update\" /></p>
+				");
+		else
+			print("
+				<p class=\"hidden\"><input type=\"hidden\" name=\"submit\"  value=\"valider\" /></p>
+				");
+	?>
+
+	<table class="width100">
+	   <tr>
+	     <td style="width:10%;"></td>
+	     <td style="width:80%;">
+
+		  <table class="width100">
+		    <tr style="background-color:#eeeeee;">
+		      <td style="width:50%;"><?php print($msg->read($FIL_THEME)); ?></td>
+		      <td style="width:50%;"><strong><?php print($msg->read($FIL_DATE)); ?></strong></td>
+		    </tr>
+
+		    <tr>
+		      <td>
+				<label for="img">
+				<select id="img" name="img">
+				<?php
+					// recherche des images
+					$myDir = @opendir("images/spip/annonces");
+
+					// lecture du répertoire
+					while ( $entry = readdir($myDir) ) {
+						switch ( extension($entry) ) {
+							case "png" :
+							case "gif" :
+							case "jpg" :
+								if ( $img == $entry )
+									print("<option selected=\"selected\" value=\"$entry\">$entry</option>");
+								else
+									print("<option value=\"$entry\">$entry</option>");
+								break;
+
+							default :
+								break;
+							}
+				              }
+
+					closedir($myDir);
+				?>
+				</select>
+				</label>
+		      </td>
+		      <td>
+				<?php
+					$mois = explode(",", $msg->read($FIL_MONTHFULL));
+
+					// sélection du jour
+					print("<label for=\"day\">");
+					print("<select id=\"day\" name=\"day\">");
+					for ($i = 1; $i <= getmaxdays($year, $month); $i++) {
+						$select = ( $day == $i ) ? "selected=\"selected\"" : "" ;
+						print("<option $select value=\"$i\">$i</option>");
+						}
+				    	print("</select>");
+				    	print("</label>");
+
+					print(" - ");
+
+					// sélection du mois
+					print("<label for=\"month\">");
+					print("<select id=\"month\" name=\"month\">");
+					for ($i = 1; $i <= 12; $i++) {
+						$select = ( $month == $i ) ? "selected=\"selected\"" : "" ;
+						print("<option $select value=\"$i\">".$mois[$i - 1]."</option>");
+						}
+				    	print("</select>");
+				    	print("</label>");
+
+					// sélection de l'année
+					print("<label for=\"year\">");
+					print("<select id=\"year\" name=\"year\">");
+					for ($i = date("Y"); $i <= date("Y") + 1; $i++) {
+						$select = ( $year == $i ) ? "selected=\"selected\"" : "" ;
+						print("<option $select value=\"$i\">$i</option>");
+						}
+				    	print("</select>");
+				    	print("</label>");
+				?>
+		      </td>
+		    </tr>
+
+		<?php
+			// intitulé non renseigné
+			if ( $error AND !strlen($title) )
+				print("
+				    <tr>
+				      <td colspan=\"2\">
+						<span style=\"color:#FF0000;\">". $msg->read($FIL_ERRIDENT) ."</span>
+					</td>
+				    </tr>
+					");
+		?>
+
+		    <tr style="background-color:#eeeeee;">
+		      <td colspan="2">
+				<?php print($msg->read($FIL_IDENT)); ?>
+		      </td>
+		    </tr>
+
+		    <tr>
+		      <td colspan="2">
+				<?php print("<label for=\"title\"><input type=\"text\" id=\"title\" name=\"title\" size=\"50\" value=\"$title\" /></label>"); ?>
+		      </td>
+		    </tr>
+
+		  <?php
+		  	// texte non renseigné
+			  if ( $error AND !strlen($texte) )
+			  	print("
+				    <tr>
+					<td colspan=\"2\">
+						<span style=\"color:#FF0000;\">". $msg->read($FIL_ERRTEXT) ."</span>
+					</td>
+				    </tr>
+					");
+		  ?>
+
+		    <tr style="background-color:#eeeeee;">
+		      <td colspan="2">
+				<?php print($msg->read($FIL_TEXT)); ?>
+				<a href="#" onclick="popWin('spip_typo.php?lang=<?php print($_SESSION["lang"]); ?>', '450', '350'); return false;">
+				<img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/spip/aide.gif" title="<?php print($msg->read($FIL_HELP)); ?>" alt="<?php print($msg->read($FIL_HELP)); ?>" />
+				</a>
+			</td>
+		    </tr>
+
+		    <tr>
+		      <td colspan="2">
+				<?php print("<label for=\"texte\"><textarea id=\"texte\" name=\"texte\" rows=\"10\" cols=\"40\">$texte</textarea></label>"); ?>
+		      </td>
+		    </tr>
+
+		    <tr>
+		      <td colspan="2">
+			<?php
+				// affichage des smileys d'édition
+				$result = mysql_query("select _code, _ident from smileys where _type = 'T'", $mysql_link);
+				$smile  = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+				while ( $smile ) {
+					print("
+						<img src=\"".$_SESSION["ROOTDIR"]."/images/smiley/forum/$smile[1].gif\" title=\" code: $smile[0] \" alt=\" code: $smile[0] \" 
+						onclick=\"Javacript:ajoutsmile('$smile[0]')\" style=\"cursor: hand;\" />
+						");
+				
+					$smile = ( $result ) ? mysql_fetch_row($result) : 0 ;
+					}
+			?>
+	            </td>
+      	    </tr>
+
+		<?php
+		      $check1 = ( $post == "O" ) ? "checked=\"checked\"" : "" ;
+		      $check2 = ( $persist == "O" ) ? "checked=\"checked\"" : "" ;
+
+		    	print("
+	  		    <tr style=\"background-color:#eeeeee;\">
+			      <td colspan=\"2\" class=\"align-left\">".$msg->read($FIL_ATTACHMENT)."
+			      </td>
+			    </tr>
+
+			    <tr>
+			      <td colspan=\"2\">
+					<input type=\"file\" name=\"UploadPJ\" size=\"80\" style=\"font-size:9px;\" />
+					<p class=\"hidden\"><input type=\"hidden\" name=\"MAX_FILE_SIZE\" value=\"$FILESIZE\" /></p>
+			      </td>
+			    </tr>
+
+	  		    <tr style=\"background-color:#eeeeee;\">
+			      <td class=\"align-left\">
+
+
+".$msg->read($FIL_AUTH)."</td>
+			      <td class=\"align-left\">
+
+
+".$msg->read($FIL_VISUALIZATION)."</td>
+			    </tr>
+
+			    <tr>
+			      <td style=\"width:50%\">
+		           		<label for=\"post\"><input type=\"checkbox\" id=\"post\" name=\"post\" value=\"O\" $check1 />
+					".$msg->read($FIL_COMMENT)."
+					</label>
+					<br/>
+		           		<label for=\"persist\"><input type=\"checkbox\" id=\"persist\" name=\"persist\" value=\"O\" $check2 />
+					".$msg->read($FIL_PERSISTENT)."
+					</label>
+			      </td>
+			      <td>
+					<label for=\"idgroup\">
+					<select id=\"idgroup\" name=\"idgroup\">");
+
+					// lecture du e-groupe
+					$Query  = "select egroup._ident, egroup._IDparent, egroup_data._ident ";
+					$Query .= "from egroup, egroup_data ";
+					$Query .= "where egroup_data._IDdata = '$IDgroup' ";
+					$Query .= "AND egroup._IDgroup = egroup_data._IDgroup ";
+					$Query .= "AND egroup._lang = '".$_SESSION["lang"]."' ";
+					$Query .= "limit 1";
+
+					$result = mysql_query($Query, $mysql_link);
+					$group  = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+					// lecture du thème
+					$Query  = "select _ident from egroup ";
+					$Query .= "where _IDgroup = '$group[1]' ";
+					$Query .= "AND egroup._lang = '".$_SESSION["lang"]."' ";
+					$Query .= "limit 1";
+
+					$result = mysql_query($Query, $mysql_link);
+					$myrow  = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+					$list   = explode(",", $msg->read($FIL_AUTHSELECT, Array($group[2], $group[0], $myrow[0])));
+					$value  = Array(0, -$group[1], $group[1]);
+
+					for ($i = 0; $i < count($list); $i++) {
+						$select = ( $grpid == $value[$i] ) ? "selected=\"selected\"" : "" ;
+
+						print("<option value=\"$value[$i]\" $select>$list[$i]</option>");
+						}
+
+		    	print("
+					</select>
+					</label>
+			      </td>
+			    </tr>");
+		?>
+		  </table>
+
+	     </td>
+	     <td style="width:10%;"></td>
+	   </tr>
+	  </table>
+
+	<hr style="width:80%;" />
+
+         <table class="width100">
+           <tr>
+              <td style="width:10%;" class="valign-middle align-center">
+              	<?php print("<input type=\"image\" src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/valid.gif\" name=\"valid\" alt=\"".$msg->read($FIL_INPUTOK)."\" />"); ?>
+              </td>
+              <td class="valign-middle">
+              	<?php print($IDfil ? $msg->read($FIL_UPDATE) : $msg->read($FIL_APPEND)); ?>
+              </td>
+           </tr>
+
+           <tr>
+              <td class="valign-middle align-center">
+			<?php
+				print("<a href=\"".myurlencode("index.php?item=$item&IDgroup=$IDgroup&year=$year&month=$month&day=$day")."\">");
+			 ?>
+              	<?php print("<img src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/cancel.gif\" title=\"\" alt=\"".$msg->read($FIL_INPUTCANCEL)."\" />"); ?></a>
+              </td>
+              <td class="valign-middle">
+			<?php print($msg->read($FIL_BACKTOWALL)); ?>
+              </td>
+           </tr>
+         </table>
+
+	</form>
+
+</div>

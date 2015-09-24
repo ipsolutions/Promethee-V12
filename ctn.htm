@@ -1,0 +1,601 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2005-2010 by Dominique Laporte(C-E-D@wanadoo.fr)
+   Copyright (c) 2006 by Nordine Zetoutou (nordine.zetoutou@educagri.fr)
+   Copyright (c) 2010 by Jérémy CORNILLEAU (jeremy.cornilleau@gmail.com)
+   Copyright (c) 2010 by Alexandre MAHE (alexandre.mahe@oxydia.com)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : ctn.htm
+ *		projet   : la page des cahiers de texte numériques
+ *
+ *		version  : 1.0
+ *		auteur   : laporte
+ *		creation : 23/10/05
+ *		modif    : 17/07/06 - Nordine Zetoutou
+ * 	                 migration des balises HTML en XHTML 1.0 strict
+ */
+
+
+$IDcentre = ( @$_POST["IDcentre"] )				// Identifiant du centre
+	? (int) $_POST["IDcentre"]
+	: (int) (@$_GET["IDcentre"] ? $_GET["IDcentre"] : $_SESSION["CnxCentre"]) ;
+$IDclass  = ( strlen(@$_POST["IDclass"]) )		// sélection de la classe
+	? (int) $_POST["IDclass"]
+	: (int) (@$_GET["IDclass"] ? $_GET["IDclass"] : $_SESSION["CnxClass"]) ;
+$IDgroup  = ( @$_POST["IDgroup"] )				// sélection du e-groupe
+	? (int) $_POST["IDgroup"]
+	: (int) @$_GET["IDgroup"] ;
+$IDmat    = ( @$_POST["IDmat"] )				// ID de la matière
+	? (int) $_POST["IDmat"]
+	: (int) @$_GET["IDmat"] ;
+$IDitem   = (int) @$_GET["IDitem"];				// ID de l'item du CTN
+$year     = (int) @$_POST["year"];
+$skpage   = ( @$_GET["skpage"] )				// n° de la page affichée
+	? (int) $_GET["skpage"]
+	: 1 ;
+$skshow   = ( @$_GET["skshow"] )				// n° du flash info
+	? (int) $_GET["skshow"]
+	: 1 ;
+
+$submit    = ( @$_POST["submit"] )				// bouton de validation
+	? $_POST["submit"]
+	: @$_GET["submit"] ;
+
+// réinitialisation
+if ( @$_GET["salon"] == "" )
+	$_SESSION["CampusName"] = "";
+?>
+
+
+<?php
+	require_once $_SESSION["ROOTDIR"]."/include/ctn.php";
+
+	// vérification des droits
+	$query  = "select _IDmod, _IDgrpwr, _IDgrprd, _month, _limited, _IDctn, _common, _rss, _sndmail from ctn ";
+	$query .= "where _IDclass = '$IDclass' AND _IDgroup = '$IDgroup' ";
+	$query .= "limit 1";
+
+	$result = mysql_query($query, $mysql_link);
+	$auth   = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+	// vérification des autorisations
+	if ( $IDclass )
+		verifySessionAccess($auth[0], $auth[2]);
+
+	// l'utilisateur a cliqué sur un lien
+	switch ( $submit ) {
+		case "del" :
+			$Query  = "DELETE from ctn_items ";
+			$Query .= "where _IDitem = '$IDitem' ";
+			$Query .= ( $_SESSION["CnxAdm"] == 255 OR ($auth[6] == "O" AND ($auth[1] AND pow(2, $_SESSION["CnxGrp"] - 1))) )
+				? ""
+				: "AND _ID = '".$_SESSION["CnxID"]."' " ;
+			$Query .= "limit 1";
+
+			if ( !mysql_query($Query, $mysql_link) )
+				sql_error($mysql_link);
+			else {
+				$Query  = "DELETE from ctn_data ";
+				$Query .= "where _IDitem = '$IDitem' ";
+
+				mysql_query($Query, $mysql_link);
+
+				$Query  = "SELECT _IDpj, _ext from ctn_pj ";
+				$Query .= "where _IDitem = '$IDitem' ";
+
+				$result = mysql_query($Query, $mysql_link);
+				$row    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+				while ( $row ) {
+					$Query  = "DELETE from ctn_pj ";
+					$Query .= "where _IDpj = '$row[0]' ";
+					$Query .= "limit 1";
+
+					if ( mysql_query($Query, $mysql_link) )
+						@unlink("$DOWNLOAD/ctn/$row[0].$row[1]");
+
+					$row = mysql_fetch_row($result);
+					}
+				}
+			break;
+
+		case "visible" :
+		case "invisible" :
+			$Query  = "update ctn_items ";
+			$Query .= ( $submit == "visible" ) ? "set _visible = 'O' " : "set _visible = 'N' " ;
+			$Query .= "where _IDitem = '$IDitem' ";
+			$Query .= ( $_SESSION["CnxAdm"] == 255 OR ($auth[6] == "O" AND ($auth[1] AND pow(2, $_SESSION["CnxGrp"] - 1))) )
+				? ""
+				: "AND _ID = '".$_SESSION["CnxID"]."' " ;
+
+			if ( !mysql_query($Query, $mysql_link) )
+				sql_error($mysql_link);
+			break;
+
+		default :
+			if ( @$_POST["import"] == $msg->read($CTN_IMPORT) )
+				import_ctn($IDcentre, @$_FILES["UploadFile"]);
+
+			// affichage automatique
+			$Query  = "update ctn_items ";
+			$Query .= "set _visible = 'O' ";
+			$Query .= "where _date <= '".date("Y-m-d H:i:s")."' ";
+
+			@mysql_query($Query, $mysql_link);
+
+			// lecture des droits
+			$Query  = "select _IDmod, _IDgrpwr from campus_data ";
+			$Query .= "where _titre = '".$_SESSION["CampusName"]."' ";
+
+			$result = mysql_query($Query, $mysql_link);
+			$who    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+			break;
+		}
+?>
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($CTN_CTN)); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+
+	<p>
+	<?php print($msg->read($CTN_DISCLAIMER, myurlencode("index.php?item=13&cmde=agenda&IDcentre=$IDcentre&IDclass=$IDclass&IDgroup=$IDgroup"))); ?>
+	</p>
+
+	<form id="formulaire" action="" method="post" enctype="multipart/form-data">
+
+	      <hr style="width:80%;" />
+
+		<table class="width100">
+		  <tr>
+		    <td style="width:50%;" class="align-right">
+		    	<?php print($msg->read($CTN_CHOOSECENTER)); ?> 
+		    </td>
+		    <td style="width:50%;">
+			<label for="IDcentre">
+		  	<select id="IDcentre" name="IDcentre" onchange="document.forms.formulaire.submit()">
+			<?php
+				// lecture des centres constitutifs
+				$query  = "select _IDcentre, _ident from config_centre ";
+				$query .= "where _visible = 'O' AND _lang = '".$_SESSION["lang"]."' ";
+				$query .= "order by _IDcentre";
+
+				$result = mysql_query($query, $mysql_link);
+				$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+				while ( $row ) {
+					printf("<option value=\"$row[0]\" %s>$row[1]</option>", $IDcentre == $row[0] ? "selected=\"selected\"" : "");
+
+					$row = remove_magic_quotes(mysql_fetch_row($result));
+					}
+			?>
+			</select> <img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/home.gif" title="" alt="" />
+			</label>
+		    </td>
+		  </tr>
+
+		  <tr>
+		    <td class="align-right">
+			<?php print($msg->read($CTN_CHOOSECLASS)); ?>
+		    </td>
+		    <td>
+			<label for="IDclass">
+		  	<select id="IDclass" name="IDclass" onchange="document.forms.formulaire.submit()">
+				<option selected="selected" value="0">&nbsp;</option>
+			<?php
+				// affichage des classes
+				$query  = "select distinctrow ctn._IDclass, campus_classe._ident, ctn._IDctn ";
+				$query .= "from ctn, campus_classe ";
+				$query .= "where campus_classe._visible = 'O' ";
+				$query .= "AND ctn._IDgroup = '$IDgroup' ";
+				$query .= "AND campus_classe._IDcentre = '$IDcentre' ";
+				$query .= "AND campus_classe._IDclass = ctn._IDclass ";
+				$query .= "AND (ctn._IDgrprd & ". pow(2, $_SESSION["CnxGrp"] - 1) .") " ;
+				$query .= ( getAccess() != 2 AND $auth[4] == "O" ) ? "AND campus_classe._IDclass = '".$_SESSION["CnxClass"]."' " : "" ;
+				$query .= "order by campus_classe._ident";
+
+				$result = mysql_query($query, $mysql_link);
+				$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+				while ( $row ) {
+					$query  = "select _IDitem from ctn_items ";
+					$query .= "where _IDctn = '$row[2]' ";
+					$query .= ( $_SESSION["CnxAdm"] == 255 OR ($auth[6] == "O" AND ($auth[1] AND pow(2, $_SESSION["CnxGrp"] - 1))) )
+						? ""
+						: "AND (ctn_items._visible = 'O' OR ctn_items._ID = '".$_SESSION["CnxID"]."')" ;
+
+					$myret  = mysql_query($query, $mysql_link);
+					$nbitem = ( $myret ) ? mysql_affected_rows($mysql_link) : 0 ;
+
+					printf("<option value=\"$row[0]\" %s>$row[1] ($nbitem)</option>", $IDclass == $row[0] ? "selected=\"selected\"" : "");
+
+					$row = remove_magic_quotes(mysql_fetch_row($result));
+					}
+			?>
+			</select>
+			<?php
+				print(( getAccess() == 2 )
+					? "<span style=\"cursor: pointer;\" onclick=\"$('import')._display.toggle(); return false;\"><img src=\"".$_SESSION["ROOTDIR"]."/images/post-in.gif\" title=\"". $msg->read($CTN_IMPORT) ."\" alt=\"". $msg->read($CTN_IMPORT) ."\" /></span> "
+		          		: "<img src=\"".$_SESSION["ROOTDIR"]."/images/group.gif\" title=\"\" alt=\"\" /> ");
+
+				if ( $_SESSION["CnxAdm"] == 255 )
+					print("<a href=\"".myurlencode("index.php?item=$item&IDmat=$IDmat&IDgroup=$IDgroup&IDcentre=$IDcentre&cmde=gestion")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/ajouter.gif\" title=\"". $msg->read($CTN_NEWCTN) ."\" alt=\"". $msg->read($CTN_NEWCTN) ."\" /></a>");
+			?>
+			</label>
+		    </td>
+		  </tr>
+
+		  <tr>
+		    <td>
+		    </td>
+		    <td>
+			<div id="import" style="display:none;">
+			<?php
+				print("
+					<input type=\"hidden\" name=\"MAX_FILE_SIZE\" value=\"$FILESIZE\" />
+					<input type=\"file\" name=\"UploadFile\" size=\"40\" style=\"font-size:9px; margin-bottom:5px;\" />
+					<input type=\"submit\" name=\"import\" value=\"".$msg->read($CTN_IMPORT)."\" style=\"font-size:9px; margin-bottom:5px;\" />");
+			?>
+			</div>
+		    </td>
+		  </tr>
+		</table>
+
+		<hr style="width:80%;" />
+
+		<?php
+			// affichage bouton "ajouter"
+			$add_button = ( $IDclass AND ($_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $auth[0] OR $auth[1] & pow(2, $_SESSION["CnxGrp"] - 1)) )
+				? "<a href=\"".myurlencode("index.php?item=$item&IDcentre=$IDcentre&IDmat=$IDmat&IDgroup=$IDgroup&IDclass=$IDclass&cmde=post")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/post.gif\" title=\"\" alt=\"\" /></a>"
+				: "" ;
+			$add_text   = ( $IDclass AND ($_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $auth[0] OR $auth[1] & pow(2, $_SESSION["CnxGrp"] - 1)) )
+				? $msg->read($CTN_VALIDATE)
+				: "" ;
+
+			// $button_print créé le 16/05/10
+			// Modifications : Jérémy CORNILLEAU et Alexandre MAHE
+			$button_print = (  $IDclass != 0 )
+				? "<a href=\"".myurlencode($_SESSION["ROOTDIR"]."/ctn_pdf.php?sid=".$_SESSION["sessID"]."&IDcentre=$IDcentre&IDclass=$IDclass&IDmat=$IDmat&IDgroup=$IDgroup")."\" onclick=\"window.open(this.href, '_blank'); return false;\">
+					<img src=\"".$_SESSION["ROOTDIR"]."/images/print.gif\" title=\"". $msg->read($CTN_PRINT) ."\" alt=\"". $msg->read($CTN_PRINT) ."\" />
+					</a>"
+				: "" ;
+
+			$rss_flux = ( $auth[7] == "O" )
+				? "<a href=\"".$_SESSION["ROOTDIR"]."/ctn_rss.php\" onclick=\"window.open(this.href, '_blank'); return false;\">
+					<img src=\"".$_SESSION["ROOTDIR"]."/images/rss.png\" title=\"". $msg->read($CTN_RSS) ."\" alt=\"". $msg->read($CTN_RSS) ."\" />
+					</a>"
+				: "" ;
+
+	         	print("
+		            <table class=\"width100\">
+		              <tr>
+		                <td style=\"width:10%;\" class=\"valign-middle\">$add_button</td>
+		                <td class= \"valign-middle\">$add_text</td>
+		                <td class=\"align-right valign-middle\" style=\"width:1%; white-space:nowrap;\">$button_print $rss_flux</td>
+		              </tr>
+		            </table>
+		            ");
+
+			// les années scolaires
+			$query  = "select min(_date), max(_date) from ctn_items ";
+			$query .= "where _IDctn = '$auth[5]' ";
+			$query .= ( $IDmat ) ? "AND _IDmat = '$IDmat' " : "" ;
+
+			$return = mysql_query($query, $mysql_link);
+			$myrow  = ( $return ) ? mysql_fetch_row($return ) : 0 ;
+
+			if ( $myrow ) {
+				$min     = strval(substr($myrow[0], 0, 4));
+				$max     = strval(substr($myrow[1], 0, 4));
+
+				// initialisation
+				if ( !$year )
+					$year = $max;
+
+				$select  = "<label for=\"year\">";
+				$select .= "<select id=\"year\" name=\"year\" onchange=\"document.forms.formulaire.submit()\" style=\"font-size:9px;\">";
+
+				for ($k = $max; $k >= $min; $k--)
+					if ( $year == $k )
+						$select .= "<option value=\"$k\" selected=\"selected\">$k</option>";
+					else
+						$select .= "<option value=\"$k\">$k</option>";
+
+				$select .= "</select>";
+				$select .= "</label>";
+				}
+			else
+				$select  = "&nbsp;";
+
+			print("
+		            <table class=\"width100\">
+		              <tr style=\"background-color:#C0C0C0;\">
+		                <td class=\"align-center\" style=\"width:1%;\"><img src=\"".$_SESSION["ROOTDIR"]."/images/group.gif\" title=\"\" alt=\"\" /></td>
+		                <td class=\"align-center\" style=\"width:16%;\">$select</td>
+		              ");
+
+				$query  = "select distinctrow campus_data._IDmat, campus_data._titre ";
+				$query .= "from ctn_items, campus_data ";
+				$query .= "where ctn_items._IDctn = '$auth[5]' ";
+				$query .= "AND campus_data._visible = 'O' AND campus_data._lang = '".$_SESSION["lang"]."' ";
+				$query .= ( getAccess() != 2 ) ? "AND ctn_items._IDmat = campus_data._IDmat " : "" ;
+				$query .= ( getAccess() != 2 ) ? "AND ctn_items._visible = 'O' " : "" ;
+				$query .= "order by campus_data._titre";
+
+				$return = mysql_query($query, $mysql_link);
+				$myrow  = ( $return ) ? remove_magic_quotes(mysql_fetch_row($return)) : 0 ;
+
+				print("
+					<td  style=\"width:49%;\">
+					  <label for=\"ctn_IDmat\">
+						<select id=\"ctn_IDmat\" name=\"IDmat\" onchange=\"document.forms.formulaire.submit()\" style=\"font-size:9px;\">
+						  <option value=\"0\">&nbsp;</option>");
+
+				while ( $myrow ) {
+					$query  = "select _IDitem from ctn_items ";
+					$query .= "where _IDctn = '$auth[5]' ";
+					$query .= "AND _IDmat = '$myrow[0]' ";
+					$query .= ( $_SESSION["CnxAdm"] == 255 OR ($auth[6] == "O" AND ($auth[1] AND pow(2, $_SESSION["CnxGrp"] - 1))) )
+						? ""
+						: "AND (ctn_items._visible = 'O' OR ctn_items._ID = '".$_SESSION["CnxID"]."')" ;
+
+					$myret  = mysql_query($query, $mysql_link);
+					$nbitem = ( $myret ) ? mysql_affected_rows($mysql_link) : 0 ;
+
+					// on affiche que les ctn renseignés
+					if ( getAccess() == 2 OR $nbitem )
+						if ( $myrow[0] == $IDmat )
+							print("<option value=\"$myrow[0]\" selected=\"selected\">$myrow[1] ($nbitem)</option>");
+						else
+							print("<option value=\"$myrow[0]\">$myrow[1] ($nbitem)</option>");
+
+					$myrow = remove_magic_quotes(mysql_fetch_row($return));
+					}
+
+				print("
+						</select>
+					  </label>
+					</td>");
+
+			print("
+		                <td class=\"align-center\" style=\"width:10%;\">". $msg->read($CTN_CLASS) ."</td>
+		                <td class=\"align-center\" style=\"width:8%;\">". $msg->read($CTN_DELAY) ."</td>
+		                <td class=\"align-center\" style=\"width:8%;\">". $msg->read($CTN_ABS) ."</td>
+		                <td class=\"align-center\" style=\"width:8%;\">". $msg->read($CTN_HIT) ."</td>
+		                <td class=\"align-center\" style=\"width:8%;\">". $msg->read($CTN_TYPE) ."</td>
+		              </tr>
+		              ");
+
+			// lecture de la base de données
+			$query  = "select distinctrow ";
+			$query .= "ctn_items._IDitem, ctn_items._title, ctn_items._date, ctn_items._delay, ctn_items._ID, ctn_items._visible, ctn_items._IP, ctn._IDclass, ctn_items._IDmat, ctn_items._IDmat, ";
+			$query .= "ctn._IDgrprd, ctn._IDgroup, ctn_items._type ";
+			$query .= "from ctn, ctn_items ";
+			$query .= "where ctn_items._date <= '$year-12-31' ";
+//			$query .= "AND (ctn._IDgrprd & ". pow(2, $_SESSION["CnxGrp"] - 1) .") " ;
+			$query .= "AND ctn._IDctn = '$auth[5]' " ;
+			$query .= "AND ctn_items._IDctn = ctn._IDctn " ;
+			$query .= ( $IDmat ) ? "AND ctn_items._IDmat = '$IDmat' " : "" ;
+			$query .= ( $_SESSION["CnxAdm"] == 255 OR ($auth[6] == "O" AND ($auth[1] AND pow(2, $_SESSION["CnxGrp"] - 1))) )
+				? ""
+				: "AND (ctn_items._visible = 'O' OR ctn_items._ID = '".$_SESSION["CnxID"]."') " ;
+			$query .= "order by ctn_items._date desc";
+
+			// détermination du nombre de pages
+			$result = mysql_query($query, $mysql_link);
+			$nbelem = ( $result ) ? mysql_affected_rows($mysql_link) : 0 ;
+
+			$page   = $nbelem;
+			$show   = 1;
+
+			if ( $nbelem ) {
+				$page  = ( $page % $MAXPAGE )
+					? (int) ($page / $MAXPAGE) + 1
+					: (int) ($page / $MAXPAGE) ;
+
+				$show  = ( $page % $MAXSHOW )
+					? (int) ($page / $MAXSHOW) + 1
+					: (int) ($page / $MAXSHOW) ;
+
+				// initialisation
+				$i     = 1;
+				$first = 1 + (($skpage - 1) * $MAXPAGE);
+				
+				// se positionne sur la page ad hoc
+				mysql_data_seek($result, $first - 1);
+				$row   = remove_magic_quotes(mysql_fetch_row($result));
+
+				while ( $row AND $i <= $MAXPAGE ) {
+					$bgcol = ( $i % 2 ) ? "item" : "menu" ;
+
+					// image
+					$image = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $row[4] OR ($auth[6] == "O" AND ($auth[1] AND pow(2, $_SESSION["CnxGrp"] - 1))) )
+						? ($row[5] == "O"
+							? "<a href=\"".myurlencode("index.php?item=$item&IDmat=$IDmat&IDclass=$IDclass&IDgroup=$IDgroup&IDitem=$row[0]&submit=invisible")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/visible.gif\" title=\"". $msg->read($CTN_NOSHOW) ."\" alt=\"". $msg->read($CTN_NOSHOW) ."\" /></a>"
+							: "<a href=\"".myurlencode("index.php?item=$item&IDmat=$IDmat&IDclass=$IDclass&IDgroup=$IDgroup&IDitem=$row[0]&submit=visible")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/invisible.gif\" title=\"". $msg->read($CTN_SHOW) ."\" alt=\"". $msg->read($CTN_SHOW) ."\" /></a>")
+						: "<img src=\"".$_SESSION["ROOTDIR"]."/images/file.gif\" title=\"\" alt=\"\" />" ;
+
+					// texte descriptif
+					$texte = ( strlen($row[1]) > 35 )
+						? substr($row[1], 0, 35) . "..."
+						: $row[1] ;
+					$texte = str_replace("<br/>", " ", $texte);
+
+					// détermination du nombre de pièces jointes
+					$query  = "select _IDpj from ctn_pj ";
+					$query .= "where _IDitem = '$row[0]' AND _type = '0' ";
+					$query .= "limit 1";
+
+					$return = mysql_query($query, $mysql_link);
+					$nbpj   = ( $return ) ? mysql_affected_rows($mysql_link) : 0 ;
+
+					$pj     = ( mysql_affected_rows($mysql_link) )
+						? "<img src=\"".$_SESSION["ROOTDIR"]."/images/pj.gif\" title=\"".$msg->read($CTN_ATTACHMENT)." x$nbpj\" alt=\"".$msg->read($CTN_ATTACHMENT)." x$nbpj\" />"
+						: "" ;
+
+					// détermination du nombre de devoirs et controle
+					$addon  = "";
+					$list   = explode(",", $msg->read($CTN_TODO));
+
+					for ($j = 1, $k = 0; $j <= count($list); $j++, $k++) {
+						// devoir ou controle
+						$query  = "select _IDdata from ctn_data ";
+						$query .= "where _IDitem = '$row[0]' AND _type = '$j' ";
+
+						$return = mysql_query($query, $mysql_link);
+						$nbret  = ( $return ) ? mysql_numrows($return) : 0 ;
+
+						// les pièces jointes
+						$query  = "select _IDpj from ctn_pj ";
+						$query .= "where _IDitem = '$row[0]' AND _type = '$j' ";
+
+						$return = mysql_query($query, $mysql_link);
+						$nbfile = ( $return ) ? mysql_numrows($return) : 0 ;
+
+						$icon   = ( $k ) ? "H" : "B" ;
+						$addon .= ( $nbret )
+							? "<img src=\"".$_SESSION["ROOTDIR"]."/images/$icon.gif\" title=\"$list[$k] x$nbfile\" alt=\"$list[$k] x$nbfile\" />"
+							: "" ;
+						}
+
+					// lecture des absences
+					$query  = "select _IDitem from absent_items ";
+					$query .= "where _IDctn = '$row[0]' ";
+
+					mysql_query($query, $mysql_link);
+					$absent = mysql_affected_rows($mysql_link);
+
+					// lecture des logs de visualisation
+					$query  = "select _ID from ctn_vu ";
+					$query .= "where _IDitem = '$row[0]' ";
+
+					mysql_query($query, $mysql_link);
+					$vus    = mysql_affected_rows($mysql_link);
+
+					// pour savoir qui a visualisé le cahier de texte
+					$lien = ( $vus )
+						? "<a href=\"#\" onclick=\"popWin('".$_SESSION["ROOTDIR"]."/user_list.php?sid=".$_SESSION["sessID"]."&amp;IDitem=$row[0]&amp;cmde=ctn&amp;lang=".$_SESSION["lang"]."', '450', '200'); return false;\">$vus</a>"
+						: "0" ;
+
+					// suppression des post
+					$req  = $msg->read($CTN_CONFIRM);
+					$del  = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $row[4] OR ($auth[6] == "O" AND ($auth[1] AND pow(2, $_SESSION["CnxGrp"] - 1))) )
+						? "<a href=\"".myurlencode("index.php?item=$item&IDmat=$IDmat&IDclass=$row[7]&IDgroup=$IDgroup&IDitem=$row[0]&submit=del")."\" onclick=\"return confirmLink(this, '$req');\"><img src=\"".$_SESSION["ROOTDIR"]."/images/corb.gif\" title=\"". $msg->read($CTN_DELETE) ."\" alt=\"". $msg->read($CTN_DELETE) ."\" /></a>"
+						: "" ;
+
+					// modification des post
+					$maj  = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $row[4] OR ($auth[6] == "O" AND ($auth[1] AND pow(2, $_SESSION["CnxGrp"] - 1))) )
+						? "<a href=\"".myurlencode("index.php?item=$item&IDmat=$row[8]&IDclass=$row[7]&IDgroup=$IDgroup&IDitem=$row[0]&cmde=post")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/stats/post.gif\" title=\"". $msg->read($CTN_UPDATE) ."\" alt=\"". $msg->read($CTN_UPDATE) ."\" /></a>"
+						: "" ;
+
+					// accès par date
+					list($mdate, $mtime) = explode(" ", $row[2]);
+					list($year, $month, $day) = explode("-", $mdate);
+					$month = $month - 1;
+
+					// accès protégé en lecture
+					$link = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $auth[0] OR ($row[9] AND pow(2, $_SESSION["CnxGrp"] - 1)) )
+						? "<a href=\"".myurlencode("index.php?item=$item&IDclass=$row[7]&IDgroup=$IDgroup&IDmat=$row[8]&year=$year&month=$month&day=$day&skpage=$skpage&skshow=$skshow&cmde=show")."\">$texte</a>"
+						: $texte ;
+
+					// affichage des classes
+					$query  = "select _ident from campus_classe ";
+					$query .= "where _IDclass = '$row[7]' ";
+					$query .= "limit 1";
+
+					$return = mysql_query($query, $mysql_link);
+					$myrow  = ( $return ) ? remove_magic_quotes(mysql_fetch_row($return)) : 0 ;
+
+					// affichage des matières
+					$query  = "select _titre from campus_data ";
+					$query .= "where _lang = '".$_SESSION["lang"]."' ";
+					$query .= "AND _IDmat = '$row[8]' ";
+					$query .= "limit 1";
+
+					$return = mysql_query($query, $mysql_link);
+					$title  = ( $return ) ? remove_magic_quotes(mysql_fetch_row($return)) : 0 ;
+					$type = ($row[12] == 0) ? "contenu du cours" : "à faire";
+					
+					print("
+						<tr class=\"$bgcol\">
+   		   			        <td>$image</td>
+   	   		   			  <td class=\"align-center\">".date2longfmt($row[2])."</td>
+	      		    		  <td>
+							<span class=\"x-small\"><strong>$title[0]</strong> - </span>$link $addon $pj $maj $del<br />
+							<span class=\"x-small\">". getUserName($row[4]) ." ". _getHostName($row[6]) ."</span>
+						  </td>
+   	   		   			  <td class=\"align-center\">$myrow[0]</td>
+   	   		   			  <td class=\"align-center\">". str_replace(":", $msg->read($CTN_HOUR), $row[3]) ."</td>
+   	   		   			  <td class=\"align-center\">$absent</td>
+   	   		   			  <td class=\"align-center\">$lien</td>
+   	   		   			  <td class=\"align-center\">".$type."</td>
+						</tr>
+       					");
+
+					$i++;
+					$row = remove_magic_quotes(mysql_fetch_row($result));
+					}	// endwhile ressource
+				}	// endif nbelem
+					
+			print("
+           			</table>
+				");
+
+		// bouton précédent
+		$where = $skshow - 1;
+		if ( $skshow == 1 )
+			$prev = "";
+		else {
+			$skpg = 1 + (($skshow - 2) * $MAXSHOW);
+			$prev = "[<a href=\"".myurlencode("index.php?item=$item&skpage=$skpg&skshow=$where&IDmat=$IDmat&IDclass=$IDclass&IDgroup=$IDgroup&salon=".$_SESSION["CampusName"])."\">".$msg->read($CTN_PREV)."</a>]";
+			}
+
+		// liens directs sur n° de page
+		$start = 1 + (($skshow - 1) * $MAXSHOW);
+		$end   = $skshow * $MAXSHOW;
+
+		$choix = ( $skpage == $start )
+			? "<img src=\"".$_SESSION["ROOTDIR"]."/images/nav_left.gif\"  title=\"\" alt=\"\" /><strong>$start</strong><img src=\"".$_SESSION["ROOTDIR"]."/images/nav_right.gif\" title=\"»\" alt=\"»\" />"
+			: "<a href=\"".myurlencode("index.php?item=$item&skpage=$start&skshow=$skshow&IDmat=$IDmat&IDclass=$IDclass&IDgroup=$IDgroup&salon=".$_SESSION["CampusName"])."\">$start</a>" ;
+
+		for ($j = $start + 1; $j <= $end AND $j <= $page; $j++)
+			$choix .= ( $skpage == $j )
+				? "|<img src=\"".$_SESSION["ROOTDIR"]."/images/nav_left.gif\" title=\"«\" alt=\"«\" /><strong>$j</strong><img src=\"".$_SESSION["ROOTDIR"]."/images/nav_right.gif\" title=\"»\" alt=\"»\" />"
+				: "|<a href=\"".myurlencode("index.php?item=$item&skpage=$j&skshow=$skshow&IDmat=$IDmat&IDclass=$IDclass&IDgroup=$IDgroup&salon=".$_SESSION["CampusName"])."\">$j</a>" ;
+
+		// bouton suivant
+		$where = $skshow + 1;
+		$next  = ( $skshow == $show )
+			? ""
+			: "[<a href=\"".myurlencode("index.php?item=$item&skpage=$j&skshow=$where&IDmat=$IDmat&IDclass=$IDclass&IDgroup=$IDgroup&salon=".$_SESSION["CampusName"])."\">".$msg->read($CTN_NEXT)."</a>]" ;
+		?>
+
+      <hr/>
+
+	<?php if ( $nbelem ) print("<div style=\"text-align:center;\">$prev $choix $next</div>"); ?>
+
+	</form>
+
+</div>

@@ -1,0 +1,286 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2007 by Dominique Laporte(C-E-D@wanadoo.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : egroup.htm
+ *		projet   : la page de visualisation des e-groupes
+ *
+ *		version  : 1.0
+ *		auteur   : laporte
+ *		creation : 18/02/07
+ *		modif    : 
+ */
+
+
+// masquage du menu des e-groupes
+if ( @$_GET["IDdata"] < 0 )
+	$_SESSION["egroup"] = 0;
+
+$IDitem  = ( @$_POST["IDitem"] )		// ID du type de thème
+	? (int) $_POST["IDitem"]
+	: (int) @$_GET["IDitem"] ;
+$IDgroup = ( @$_POST["IDgroup"] )		// ID du thème
+	? (int) $_POST["IDgroup"]
+	: (int) @$_GET["IDgroup"] ;
+$ident   = addslashes(trim(@$_POST["ident"]));
+
+$submit  = ( @$_POST["valid"] )		// bouton de validation
+	? $_POST["valid"]
+	: @$_GET["valid"] ;
+?>
+
+
+<?php
+	// réservé à l'admin
+	if ( $_SESSION["CnxAdm"] == 255 )
+		switch ( $submit ) {
+			case "Ok" :
+				if ( $ident ) {
+					// insertion/modification du groupe
+					if ( $IDgroup ) {
+						$Query  = "UPDATE egroup ";
+						$Query .= "SET _ident = '$ident' ";
+						$Query .= "where _IDgroup = '$IDgroup' ";
+						$Query .= "limit 1";
+						}
+					else {
+						// date de création du groupe
+						$date   = date("Y-m-d H:i:s");
+
+						$Query  = "insert into egroup ";
+						$Query .= "values('', '$IDitem', '0', '0', '0', '255', '$date', '', '$ident', '', 'N', 'O', '".$_SESSION["lang"]."')";
+						}
+
+					mysql_query($Query, $mysql_link);
+					}
+				break;
+
+			case "visible" :
+			case "invisible" :
+				$Query  = "UPDATE egroup_items ";
+				$Query .= ( $submit == "visible" ) ? "SET _visible = 'N' " : "SET _visible = 'O' " ;
+				$Query .= "where _IDitem = '$IDitem' ";
+
+				mysql_query($Query, $mysql_link);
+				break;
+
+			default :
+				break;
+			}
+?>
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($EGROUP_EGROUPLIST)); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+
+		<form id="selection" action="index.php?item=17&amp;IDitem=<?php echo $IDitem; ?>" method="post">
+			<p class="hidden"><input type="hidden" name="valid" value="#" /></p>
+
+			<div style="background-color:#eeeeee; padding:2px;">
+			<?php print($msg->read($EGROUP_WELCOME)); ?>
+	
+				<label for="IDitem">
+				<select id="IDitem" name="IDitem" onchange="document.forms.selection.submit()" style="font-size: 9px;">
+				<?php
+					// recherche des thèmes
+					$query  = "select _IDitem, _ident, _visible from egroup_items ";
+					$query .= "where _lang = '".$_SESSION["lang"]."' ";
+					$query .= ( $_SESSION["CnxAdm"] == 255 ) ? "" : "AND _visible = 'O' " ;
+					$query .= "order by _IDitem";
+
+					$result = mysql_query($query, $mysql_link);
+					$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+					if ( !$IDitem )
+						$IDitem = (int) $row[0];
+
+					$image  = "";
+
+					while ( $row ) {
+						if ( $IDitem == $row[0] ) {
+							$image  = ( $row[2] == "O" ) ? "visible" : "invisible" ;
+							$image  = ( $_SESSION["CnxAdm"] == 255 )
+								? "<a href=\"index.php?item=$item&amp;IDitem=$IDitem&amp;valid=$image\"><img src=\"".$_SESSION["ROOTDIR"]."/images/$image.gif\" title=\"\" alt=\"\" /></a>"
+								: "" ;
+
+							$select = "selected=\"selected\"";
+							}
+						else
+							$select = "";
+
+						print("<option value=\"$row[0]\" $select>$row[1]</option>");
+
+						$row = remove_magic_quotes(mysql_fetch_row($result));
+						}
+				?>
+				</select> <?php print($image); ?>
+				</label>
+			</div>
+		</form>
+
+		<table class="width100">
+		<?php
+			$ident  = "";
+			$date   = date("Y-m-d H:i:s");
+
+			// lecture des groupes génériques
+			$Query  = "select _IDgroup, _ident, _comment from egroup ";
+			$Query .= "where _visible = 'O' AND _IDparent = '0' ";
+			$Query .= "AND _IDitem = '$IDitem' ";
+			$Query .= "AND _lang='". $_SESSION["lang"] ."' ";
+			$Query .= "order by _ident";
+
+			$result = mysql_query($Query, $mysql_link);
+			$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+			$count  = 1;
+
+			while ( $row ) {
+				// pour savoir le nombre de groupes spécialisés
+				$Query  = "select _IDgroup from egroup ";
+				$Query .= "where _IDparent = '$row[0]' AND _visible = 'O' ";
+				$Query .= "AND _IDitem = '$IDitem' ";
+				$Query .= "AND _lang = '".$_SESSION["lang"]."' ";
+
+				$return = mysql_query($Query, $mysql_link);
+				$nb     = ( $return ) ? mysql_affected_rows($mysql_link) : 0 ;				
+
+				// lecture des groupes spécialisées
+				$Query  = "select _IDgroup, _ident from egroup ";
+				$Query .= "where _IDparent = '$row[0]' AND _visible = 'O' ";
+				$Query .= "AND _IDitem = '$IDitem' ";
+				$Query .= "AND _lang = '".$_SESSION["lang"]."' ";
+				$Query .= "order by _IDgroup limit 3";
+
+				$return = mysql_query($Query, $mysql_link);
+				$grp    = ( $return ) ? remove_magic_quotes(mysql_fetch_row($return)) : 0 ;
+
+				if ( $count % 2 )
+					print("<tr class=\"align-left valign-top\">");
+
+				$href   = ( $nb ) ? myurlencode("index.php?item=$item&cmde=visu&IDitem=$IDitem&IDparent=$row[0]") : "#" ;
+
+				print("
+					<td style=\"width:1%;\" class=\"valign-top\">
+					  <a href=\"$href\">
+					  <img src=\"".$_SESSION["ROOTDIR"]."/images/doc.jpg\" title=\"".str_replace("&", "&amp;", $row[1])."\" alt=\"".str_replace("&", "&amp;", $row[1])."\" />
+					  </a>
+					</td>");
+
+				// modification des thèmes
+				$update = ( $_SESSION["CnxAdm"] == 255 )
+					? "<a href=\"".myurlencode("index.php?item=$item&IDitem=$IDitem&IDgroup=$row[0]&valid=update")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/stats/post.gif\" title=\"". $msg->read($EGROUP_MODIFY) ."\" alt=\"". $msg->read($EGROUP_MODIFY) ."\" /></a>"
+					: "" ;
+
+				$ident  = ( $row[0] == $IDgroup ) ? $row[1] : $ident ;
+
+				print("<td style=\"width:49%;\" class=\"valign-top\">");
+				print("<strong>".str_replace("&", "&amp;", $row[1])."</strong> ($nb) $update<br/>");
+
+				if ( $row[2] )
+					print("<span class=\"x-small\">$row[2]</span><br/>");
+
+				while ( $grp ) {
+					// pour savoir le nombre de groupes spécialisés
+					$query  = "select _IDdata from egroup_data ";
+					$query .= "where _IDgroup = '$grp[0]' AND _visible = 'O' ";
+					$query .= "AND (_valid = '0000-00-00 00:00:00' OR _valid > '$date')";
+
+					$ret    = mysql_query($query, $mysql_link);
+					$nb     = ( $ret ) ? mysql_affected_rows($mysql_link) : 0 ;				
+
+					print("<a href=\"".myurlencode("index.php?item=$item&cmde=visu&IDitem=$IDitem&IDparent=$row[0]&IDgroup=$grp[0]")."\">$grp[1]</a> ($nb)");
+
+					if ( $grp = remove_magic_quotes(mysql_fetch_row($return)) )
+						print(", ");
+					}
+
+				// seul l'admin peut ajouter un groupe
+				if ( $_SESSION["CnxAdm"] == 255 )
+					print("...<a href=\"".myurlencode("index.php?item=$item&cmde=gestion&IDitem=$IDitem&IDparent=$row[0]")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/add.gif\" title=\"". $msg->read($EGROUP_ADDGROUP) ."\" alt=\"\" /></a>");
+				else
+					print("...");
+
+				if ( $count % 2 == 0 )
+					print("<br/><br/>");
+				print("</td>");
+
+				if ( $count % 2 == 0 )
+					print("</tr>");
+
+				$row = remove_magic_quotes(mysql_fetch_row($result));
+				$count++;
+				}
+
+			if ( $count % 2 == 0 )
+				print("<td></td></tr>");
+		?>
+		</table>
+
+		<?php
+		// seul l'admin peut créer un thème
+		if ( $_SESSION["CnxAdm"] == 255 ) {
+			print("
+		            <table class=\"width100\">
+				  <tr>
+		                <td><hr/></td>
+				  </tr>");
+
+			switch ( $submit ) {
+				case "new" :
+				case "update" :
+					print("
+						  <tr>
+				                <td>
+							<form id=\"formulaire\" action=\"index.php?item=17&amp;IDitem=$IDitem&amp;valid=$submit\" method=\"post\">
+								<p class=\"hidden\"><input type=\"hidden\" name=\"IDgroup\" value=\"$IDgroup\" /></p>
+								<p class=\"hidden\"><input type=\"hidden\" name=\"IDitem\"  value=\"$IDitem\" /></p>
+
+								<p style=\"margin:0px;\">
+								<label for=\"ident\"><input type=\"text\" id=\"ident\" name=\"ident\" size=\"30\" value=\"$ident\" /></label>
+								<input type=\"submit\" value=\"Ok\" name=\"valid\" />
+								</p>
+							</form>
+						    </td>
+						  </tr>");
+					break;
+
+				default :
+					print("
+			      	        <tr>
+				                <td style=\"width:10%;\" class=\"valign-middle\">
+							<a href=\"".myurlencode("index.php?item=$item&IDitem=$IDitem&valid=new")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/post.gif\" title=\"\" alt =\"\" /></a>
+				                </td>
+				                <td class= \"valign-middle\">". $msg->read($EGROUP_ADDTHEME) ."</td>
+				              </tr>");
+					break;
+				}
+
+			print("</table>");
+			}
+	      ?>
+
+</div>

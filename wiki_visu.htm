@@ -1,0 +1,222 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2003-2008 by Dominique Laporte(C-E-D@wanadoo.fr)
+   Copyright (c) 2006 by FG (persofg@gmail.com)
+   Copyright (c) 2006 by Nordine Zetoutou (nordine.zetoutou@educagri.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : wiki_visu.htm
+ *		projet   : la page de visualisation des documents wiki
+ *
+ *		version  : 1.0
+ *		auteur   : laporte
+ *		creation : 20/12/03
+ *		modif    : 18/06/05 par FG
+ *                     migration -> PHP5
+ * 		           17/07/06 - par Nordine Zetoutou
+ * 	                 migration des balises HTML en XHTML 1.0 strict
+ */
+
+
+$IDgroup   = ( @$_POST["IDgroup"] )
+	? (int) $_POST["IDgroup"]
+	: (int) @$_GET["IDgroup"] ;
+$IDroot    = ( @$_POST["IDroot"] )
+	? (int) $_POST["IDroot"]
+	: (int) @$_GET["IDroot"] ;
+$IDpage    = ( @$_POST["IDpage"] )
+	? (int) $_POST["IDpage"]
+	: (int) @$_GET["IDpage"] ;
+
+$wiki_cmde = ( @$_POST["wiki_cmde"] )
+	? $_POST["wiki_cmde"]
+	: @$_GET["wiki_cmde"] ;
+$wiki_tag  = ( @$_POST["wiki_tag"] )
+	? $_POST["wiki_tag"]
+	: @$_GET["wiki_tag"] ;
+$wiki_text = ( @$_POST["wiki_text"] )
+	? $_POST["wiki_text"]
+	: @$_GET["wiki_text"] ;
+$wiki_html = ( @$_POST["wiki_html"] )
+	? $_POST["wiki_html"]
+	: @$_GET["wiki_html"] ;
+
+$markup    = ( @$_POST["markup"] )
+	? $_POST["markup"]
+	: @$_GET["markup"] ;
+$prev_tag  = ( @$_POST["prev_tag"] )
+	? $_POST["prev_tag"]
+	: @$_GET["prev_tag"] ;
+$next_tag  = ( @$_POST["next_tag"] )
+	? $_POST["next_tag"]
+	: @$_GET["next_tag"] ;
+?>
+
+
+<?php
+	//----- lecture du répertoire courant -----
+	$Query  = "select _ident, _IDmod, _IDgrpwr, _IDgrprd from wiki_page ";
+//	$Query .= "where _IDpage = '$IDroot' ";
+//	$Query .= "order by _date";
+	$Query .= "where _lang = '".$_SESSION["lang"]."' ";
+	$Query .= "limit 1";
+
+	$result = mysql_query($Query, $mysql_link);
+	$dir    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+	// lecture du propriétaire du répertoire
+	$owner  = getUserName($dir[1], false);
+?>
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat; height: 25px;\">
+	<div style="text-align: center;"><?php print("<strong>$dir[0]</strong>"); ?></div>
+	<div class="x-small" style="float: left;"><?php print($msg->read($WIKI_OWNER, $owner)); ?></div>
+</div>
+
+<div class="maincontent">
+
+	<?php
+		@require_once "include/wiki.php";
+
+		$wk = @new wiki;
+
+		// défilement des documents
+		if ( strlen($next_tag) OR strlen($prev_tag) ) {
+			$Query  = ( strlen($next_tag) )
+				? "select _IDpage from wiki where _tag > '$next_tag' AND _ver = '$IDroot' AND _current = 'O' order by _IDpage asc limit 1"
+				: "select _IDpage from wiki where _tag < '$prev_tag' AND _ver = '$IDroot' AND _current = 'O' order by _IDpage desc limit 1" ;
+
+			$result = mysql_query($Query, $mysql_link);
+			$row    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+			$IDpage = ( $row ) ? $row[0] : $IDpage ;
+			}
+
+		// éditeur avancé
+		if ( $wiki_html ) {
+			$query  = "update wiki ";
+			$query .= "set _raw = 'N' ";
+			$query .= ( $wiki_tag ) ? "where _tag = '$wiki_tag' " : "where _IDpage = '$IDpage' " ;
+			$query .= "limit 1";
+
+			mysql_query($query, $mysql_link);
+			}
+
+		// initialisation des variables de l'objet wiki
+		$query        = "select _tag, _ver, _title, _raw, _IDpage from wiki ";
+		$query       .= ( $wiki_tag ) ? "where _tag = '$wiki_tag' " : "where _IDpage = '$IDpage' " ;
+		$query       .= "limit 1";
+
+		$result       = mysql_query($query, $mysql_link);
+		$row          = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+		@$wk->tag     = ( $row ) ? $row[0] : $wiki_tag ;
+//		@$wk->version = "$item.$IDroot";
+		@$wk->version = "$IDroot";
+		@$wk->owner   = ( $owner != "??" ) ? $owner : $_SESSION["CnxName"] ;
+		@$wk->admin   = (bool) ( $_SESSION["CnxAdm"] == 255 OR $dir[1] == $_SESSION["CnxID"] );
+		@$wk->user    = (bool) ( $dir[2] & pow(2, $_SESSION["CnxGrp"] - 1));
+		@$wk->link    = myurlencode("index.php?item=$item&cmde=visu&IDgroup=$IDgroup&IDroot=$IDroot&IDpage=$IDpage");
+		@$wk->raw     = ( $row ) ? $row[3] : "O" ;
+
+		if ( $dir[3] & pow(2, $_SESSION["CnxGrp"] - 1))
+			switch ( $wiki_cmde ) {
+				case "next" :
+					@$wk->nextPage($IDpage);
+					break;
+
+				case "prev" :
+					@$wk->prevPage($IDpage);
+					break;
+
+				case "lock" :
+					@$wk->setLock($IDpage);
+					@$wk->show();
+					break;
+
+				case "del" :
+					@$wk->delete($IDpage);
+					@$wk->show();
+					break;
+
+				case "valid" :
+					@$wk->validate($IDpage);
+					@$wk->show();
+					break;
+
+				case "edit" :
+					@$wk->cols  = 75;
+					@$wk->rows  = 30;
+					@$wk->title = $msg->read($WIKI_INPUT);
+
+					if ( $wiki_tag )
+						@$wk->editTag($wiki_tag);
+					else
+						@$wk->edit($IDpage, $markup);
+					break;
+
+				case "insert" :
+					$wiki_banner = @$wk->banner($IDpage);
+					$wiki_footer = @$wk->footer($IDpage);
+
+					if ( $wiki_banner )
+						$wiki_banner .= ( strrpos($wiki_banner, "\n") == strlen($wiki_banner) - 1 ) ? "" : "\n" ;
+					if ( $wiki_footer )
+						$wiki_footer .= ( strrpos($wiki_footer, "\n") == strlen($wiki_footer) - 1 ) ? "" : "\n" ;
+					if ( $wiki_text )
+						$wiki_text .= ( strrpos($wiki_text, "\n") == strlen($wiki_text) - 1 ) ? "" : "\n" ;
+
+					if ( @$wk->insert($row[2], $wiki_banner.$wiki_text.$wiki_footer, $_SESSION["CnxName"]) )
+						@$wk->attachment();
+					@$wk->show();
+					break;
+
+				case "del_attach" :
+					@$wk->del_attach((int) @$_GET["IDpj"]);
+				default :	// affichage du texte
+					@$wk->show();
+					break;
+				}
+
+		// boutons suivant/précédent
+		$prev = myurlencode("index.php?item=$item&IDgroup=$IDgroup&IDroot=$IDroot&IDpage=$IDpage&cmde=visu&prev_tag=$wk->tag");
+		$next = myurlencode("index.php?item=$item&IDgroup=$IDgroup&IDroot=$IDroot&IDpage=$IDpage&cmde=visu&next_tag=$wk->tag");
+
+		// lien retour
+		$back = ( strncmp(strtolower(@$wk->tag), "wikipage", 8) )
+			? "index.php?item=45&cmde=visu"
+			: "index.php?item=$item&IDgroup=$IDgroup&IDroot=$IDroot" ;
+
+		print("
+			<table class=\"width100\">
+		         <tr>
+				<td class= \"valign-middle\">
+					[<a href=\"".myurlencode($back)."\">".$msg->read($WIKI_GOBACK)."</a>]
+				</td>
+				<td class=\"valign-middle align-right\">
+					".$msg->read($WIKI_NEXTPREV, Array($prev, $next))."
+				</td>
+			  </tr>
+			</table>
+			");
+	?>
+
+</div>

@@ -1,0 +1,710 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2005-2007 by Dominique Laporte(C-E-D@wanadoo.fr)
+   Copyright (c) 2006 by Nordine Zetoutou (nordine.zetoutou@educagri.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : absent_new.htm
+ *		projet   : la page de saisie des absences
+ *
+ *		version  : 1.0
+ *		auteur   : laporte
+ *		creation : 7/01/05
+ *		modif    : 17/07/06 - Nordine Zetoutou
+ * 	                 migration des balises HTML en XHTML 1.0 strict
+ */
+
+
+$IDcentre = ( @$_POST["IDcentre"] )			// Identifiant du centre
+	? (int) $_POST["IDcentre"]
+	: (int) $_SESSION["CnxCentre"] ;
+$IDsel    = ( @$_POST["IDsel"] )			// ID de la catégorie
+	? (int) $_POST["IDsel"]
+	: (int) @$_GET["IDsel"] ;
+$IDitem   = ( @$_POST["IDitem"] )			// ID de l'absence
+	? (int) $_POST["IDitem"]
+	: (int) @$_GET["IDitem"] ;
+
+$year     = ( @$_POST["year"] )
+	? (int) $_POST["year"]
+	: (int) @$_GET["year"] ;
+$month    = ( @$_POST["month"] )
+	? (int) $_POST["month"]
+	: (int) @$_GET["month"] ;
+$day      = ( @$_POST["day"] )
+	? (int) $_POST["day"]
+	: (int) @$_GET["day"] ;
+$hour     = (int) @$_POST["hour"];
+$minute   = (int) @$_POST["minute"];
+
+$start    = @$_POST["start"];
+$end      = @$_POST["end"];
+
+$y_end    = (int) @$_POST["y_end"];
+$m_end    = (int) @$_POST["m_end"];
+$d_end    = (int) @$_POST["d_end"];
+$h_end    = (int) @$_POST["h_end"];
+$min_end  = (int) @$_POST["min_end"];
+
+$IDabs    = (int) @$_POST["IDabs"];			// ID de l'utilisateur
+$IDdata   = (int) @$_POST["IDdata"];		// ID du motif
+$texte    = addslashes(trim(@$_POST["texte"]));
+$display  = ( @$_POST["display"] ) ? "O" : "N" ;
+$cb1      = ( @$_POST["cb1"] ) ? "O" : "N" ;
+$cb2      = ( @$_POST["cb2"] ) ? "O" : "N" ;
+$cb3      = ( @$_POST["cb3"] ) ? "O" : "N" ;
+$delay    = (int) @$_POST["delay"];			// affichage différé ou immédiat
+
+$submit   = @$_POST["valid_x"];			// bouton validation
+?>
+
+
+<script type="text/javascript" src="script/edit.js"></script>
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($ABSENT_FORMFEED)); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+<?php
+	// lecture de la base de données
+	$query  = "select _IDmod, _IDgrpwr, _autoval, _IDgrp from absent ";
+	$query .= "where _IDcentre = '$IDcentre' ";
+	$query .= ( $IDsel ) ? "AND _IDgrp = '$IDsel' " : "order by _IDgrp asc " ;
+	$query .= "limit 1";
+
+	$result = mysql_query($query, $mysql_link);
+	$auth   = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+	// vérification des autorisations
+	verifySessionAccess($auth[0], $auth[1]);
+
+	// initialisation
+	$idgrp   = ( $IDsel ) ? $IDsel : $auth[3] ;
+	$start   = ( !$start ) ? date("Y-m-d") : $start ;
+	$end     = ( !$end ) ? date("Y-m-d") : $end ;
+	$hour    = ( !$hour ) ? date("H") : $hour ;
+	$h_end   = ( !$h_end ) ? date("H") : $h_end ;
+	$minute  = ( !$minute ) ? date("i") - (date("i") % 5) : $minute ;
+	$min_end = ( !$min_end ) ? date("i") - (date("i") % 5) : $min_end ;
+	$myfile  = "";
+
+/**************************************
+	if ( !$year )
+		$year   = date("Y");
+	else
+		$year   = ( $year < date("Y") ) ? date("Y") : $year ;
+
+	if ( !$month )
+		$month  = (int) date("m");
+	else
+		$month  = (int) (( $year == date("Y") AND $month < date("m") ) ? date("m") : $month );
+
+	if ( !$day )
+		$day    = (int) date("d");
+	else
+		$day    = (int) ( $year == date("Y") AND $month == date("m") AND $day < date("d") ) ? date("d") : $day ;
+
+	if ( !$hour )
+		$hour   = (int) date("H");
+	else
+		$hour   = (int) (( $year == date("Y") AND $month == date("m") AND $day == date("d") AND $hour < date("H") ) ? date("H") : $hour );
+
+	if ( $minute < 0 )
+		$minute = roundup(date("i"));
+	else
+		$minute = ( $year == date("Y") AND $month == date("m") AND $day == date("d") AND $hour == date("H") AND $minute < date("i") ) ? roundup(date("i")) : $minute ;
+**************************************/
+
+	if ( @$_POST["idcat"] )
+		@list($IDsel, $IDabs) = explode(":", $_POST["idcat"]);
+
+	// l'utilisateur a posté son message
+	if ( $submit AND $IDabs ) {
+		// date de création du message
+		$date     = date("Y-m-d H:i:s");
+
+		// transfert d'une Pièce Jointe
+		$file     = @$_FILES["UploadPJ"]["name"];
+
+		// dates début et fin dans l'agenda
+		$start    = "$start $hour:$minute";
+		$end      = "$end $h_end:$min_end";
+
+		$valid    = ( $auth[2] == "O" ) ? "O" : "A" ;
+
+		$visible  = ( $cb1 == "O" ) ? "O" : "N" ;
+		$calendar = ( $cb2 == "O" ) ? "O" : "N" ;
+
+		if ( $IDitem ) {
+			$Query   = "update absent_items ";
+			$Query  .= "set _IDabs = '$IDabs', _IDdata = '$IDdata', _texte = '$texte', _display = '$display', ";
+			$Query  .= "_start = '$start', _end = '$end', _visible = '$visible', _calendar = '$calendar', _date = '$date', _delay = '$delay' ";
+			$Query  .= "where _IDitem = '$IDitem' ";
+			$Query  .= "limit 1";
+			}
+		else {
+			$Query   = "insert into absent_items ";
+			$Query  .= "values('', '$IDdata', '0', '".$_SESSION["CnxID"]."', '".$_SESSION["CnxIP"]."', '$date', '$IDsel', '$IDabs', '$start', '$end', '$texte', '', '$display', '$calendar', '$delay', '', '', '0', '', '$visible', '$valid', '$file')";
+
+			// affichage dans le calendrier
+			if ( $cb2 == "O" ) {
+				// lecture du groupe ou de la personne absente
+				$return = ( getAccess($idgrp) == 1 )
+					? mysql_query("select _ident from campus_classe where _IDclass = '$IDabs' limit 1", $mysql_link)
+					: mysql_query("select _name, _fname, _sexe from user_id where _ID = '$IDabs' limit 1", $mysql_link) ;
+				$myrow  = ( $return ) ? remove_magic_quotes(mysql_fetch_row($return)) : 0 ;
+
+				switch ( @$myrow[2] ) {
+					case "H" : $title = $msg->read($ABSENT_SEXM); break;
+					case "F" : $title = $msg->read($ABSENT_SEXF); break;
+					default  : $title = "";                       break;
+					}
+
+				$name = ( getAccess($idgrp) == 1 ) ? $myrow[0] : formatUserName($myrow[0], $myrow[1]) ;
+
+				$text = "<strong>$title $name</strong> ". $msg->read($ABSENT_FROMTO, Array(date2longfmt($start), date2longfmt($end))) .".<br/>$texte";
+				$date = explode(" ", $start);
+
+				$sql  = "insert into flash_fil ";
+				$sql .= "values('', '0', '0', '$date[0] 00:00:00', '', '', '".$_SESSION["CnxID"]."', '".$_SESSION["CnxIP"]."', '255', '".$msg->read($ABSENT_SUBJECT)."', '$text', 'alert.png', '0', 'N', 'N')";
+
+				@mysql_query($sql, $mysql_link);
+				}
+			}
+
+		if ( !mysql_query($Query, $mysql_link) )
+			sql_error($mysql_link);
+		else {
+			$IDitem = ( $IDitem ) ? $IDitem : mysql_insert_id() ;
+
+			// transfert d'une Pièce Jointe
+			if (  @$file AND authfile(@$file) ) {
+				// fichier destination
+				$dest = "$DOWNLOAD/absent/$IDitem-$file";
+
+				// copie du fichier temporaire -> répertoire de stockage
+				copy(@$_FILES["UploadPJ"]["tmp_name"], $dest);
+				}
+
+			// on avertit le modérateur
+			if ( $auth[2] == "N" AND $auth[0] )
+				sendAlertMessage(
+					$auth[0],
+					$msg->read($ABSENT_SUBJECT),
+					$msg->read($ABSENT_PENDING, Array($_SESSION["CnxName"], date2longfmt($start))) );
+
+			print("
+				<p class=\"center\">
+     					". $msg->read($ABSENT_THANX) ."<br/>
+					[<a href=\"".myurlencode("index.php?item=$item&cmde=visu&year=$year&month=$month&day=$day")."\">". $msg->read($ABSENT_BACK2LIST) ."</a>]
+				</p>
+				");
+			}
+		}
+	else
+		if ( $IDitem ) {
+			// lecture de l'annonce
+			$query   = "select _start, _end, _IDabs, _texte, _visible, _calendar, _IDgrp, _delay, _IDdata, _display, _file from absent_items ";
+			$query  .= "where _IDitem = '$IDitem' ";
+			$query  .= "limit 1";
+
+			$result  = mysql_query($query, $mysql_link);
+			$row     = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+			$year    = (int) ( @$_POST["year"] )   ? $_POST["year"]   : substr($row[0], 0, 4) ;
+			$month   = (int) ( @$_POST["month"] )  ? $_POST["month"]  : substr($row[0], 5, 2) ;
+			$day     = (int) ( @$_POST["day"] )    ? $_POST["day"]    : substr($row[0], 8, 2) ;
+			$hour    = (int) ( @$_POST["hour"] )   ? $_POST["hour"]   : substr($row[0], 11, 2) ;
+			$minute  = (int) ( @$_POST["minute"] ) ? $_POST["minute"] : substr($row[0], 14, 2) ;
+
+			$y_end   = (int) ( @$_POST["y_end"] )   ? $_POST["y_end"]   : substr($row[1], 0, 4);
+			$m_end   = (int) ( @$_POST["m_end"] )   ? $_POST["m_end"]   : substr($row[1], 5, 2);
+			$d_end   = (int) ( @$_POST["d_end"] )   ? $_POST["d_end"]   : substr($row[1], 8, 2);
+			$h_end   = (int) ( @$_POST["h_end"] )   ? $_POST["h_end"]   : substr($row[1], 11, 2);
+			$min_end = (int) ( @$_POST["min_end"] ) ? $_POST["min_end"] : substr($row[1], 14, 2);
+
+			list($start, $nil) = explode(" ", $row[0]);
+			list($end, $nil)   = explode(" ", $row[1]);
+			$IDabs   = (int) $row[2];
+			$texte   = $row[3];
+			$cb1     = $row[4];
+			$cb2     = $row[5];
+			$IDsel   = (int) $row[6];
+			$delay   = (int) $row[7];
+			$IDdata  = (int) $row[8];
+			$display = $row[9];
+			$myfile  = $row[10];
+			}
+
+	// saisie du formulaire si
+	// - l'utilisateur n'a pas validé OU
+	// - il y a une erreur de saisie => on redemande de compléter le formulaire
+	if ( !$submit ) {
+
+		print("
+ 		  <form id=\"formulaire\" name=\"formulaire\" action =\"index.php\" method=\"post\" enctype=\"multipart/form-data\">
+			<p class=\"hidden\"><input type=\"hidden\" name=\"item\"    value=\"$item\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"cmde\"    value=\"$cmde\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"IDsel\"   value=\"$IDsel\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"IDitem\"  value=\"$IDitem\" /></p>
+
+		<table class=\"width100\">
+		  <tr>
+			<td style=\"width:50%;\" class=\"align-right\">
+			    	". $msg->read($ABSENT_CHOOSECENTER) ." 
+			</td>
+			<td style=\"width:50%;\">
+				<label for=\"IDcentre\">
+				<select id=\"IDcentre\" name=\"IDcentre\" onchange=\"document.forms.formulaire.submit()\">");
+
+					// lecture des centres constitutifs
+					$query  = "select _IDcentre, _ident from config_centre ";
+					$query .= "where _visible = 'O' AND _lang = '".$_SESSION["lang"]."' ";
+					$query .= "order by _IDcentre";
+
+					$result = mysql_query($query, $mysql_link);
+					$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+					while ( $row ) {			
+						printf("<option value=\"$row[0]\" %s>$row[1]</option>", ($IDcentre == $row[0]) ? "selected=\"selected\"" : "");
+
+						$row = remove_magic_quotes(mysql_fetch_row($result));
+						}				
+
+		print("
+				</select> <img src=\"".$_SESSION["ROOTDIR"]."/images/home.gif\" title=\"\" alt=\"\" />
+				</label>
+			</td>
+		  </tr>
+
+		  <tr>
+			<td class=\"align-right\">". $msg->read($ABSENT_CHOOSECAT) ."</td>
+			<td>
+			  <label for=\"idcat\">
+			  <select id=\"idcat\" name=\"idcat\">");
+
+				// recherche des groupes
+				$query  = "select _IDgrp, _ident from user_group ";
+				$query .= "where _visible = 'O' AND _lang = '".$_SESSION["lang"]."' ";
+				$query .= "AND _IDcat != '3' ";
+				$query .= ( $IDsel ) ? "AND _IDgrp = '$IDsel' " : "" ;
+				$query .= "order by _IDgrp, _ident asc";
+
+				$result = mysql_query($query, $mysql_link);
+				$cat    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+				while ( $cat ) {
+					print("<optgroup label=\"$cat[1]\">");
+
+					if ( getAccess($cat[0]) == 1 ) {
+						$query  = "select _IDclass, _ident from campus_classe ";
+						$query .= "where _IDcentre = '$IDcentre' ";
+						$query .= "AND _visible = 'O' ";
+						$query .= "order by _ident";
+						}
+					else {
+						$query  = "select _ID, _name, _fname from user_id ";
+						$query .= "where _IDgrp = '$cat[0]' AND _IDcentre = '$IDcentre' ";
+						$query .= "AND _adm ";
+						$query .= "order by _name";
+						}
+
+					$return = mysql_query($query, $mysql_link);
+					$row    = ( $return ) ? remove_magic_quotes(mysql_fetch_row($return)) : 0 ;
+
+					while ( $row ) {
+						$value  = "$cat[0]:$row[0]";	
+						$name   = ( getAccess($cat[0]) == 1 ) ? $row[1] : formatUserName($row[1], $row[2]) ;
+						$select = ( $IDsel == $cat[0] AND $IDabs == $row[0] ) ? "selected=\"selected\"" : "" ;
+
+						print("<option value=\"$value\" $select>$name</option>");
+
+						$row  = remove_magic_quotes(mysql_fetch_row($return));
+						}
+	
+					print("</optgroup>");
+
+					$cat = remove_magic_quotes(mysql_fetch_row($result));
+					}	// endwhile catégorie
+
+		print("
+			  </select> <img src=\"".$_SESSION["ROOTDIR"]."/images/group.gif\" title=\"\" alt=\"\" />
+			  </label>
+			</td>
+		  </tr>
+		</table>");
+
+	print("<hr style=\"width:80%;\" />");
+
+	//----- motif absence -----
+    	print("
+	  <table class=\"width100\">
+	    <tr>
+	      <td style=\"width:19%;\" class=\"valign-middle align-right\">". $msg->read($ABSENT_MOTIF) ."</td>
+	      <td style=\"width:81%;\">
+			<label for=\"IDdata\">
+		  	<select id=\"IDdata\" name=\"IDdata\">");
+
+			// liste des motifs
+			$query  = "select _IDdata, _texte from absent_data ";
+			$query .= "where _visible = 'O' AND _lang = '".$_SESSION["lang"]."' ";
+			$query .= "order by _texte";
+
+			$result = mysql_query($query, $mysql_link);
+			$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+			while ( $row ) {			
+				if ( $IDdata == $row[0] )
+					print("<option selected=\"selected\" value=\"$row[0]\">$row[1]</option>");
+				else
+					print("<option value=\"$row[0]\">$row[1]</option>");
+
+				$row = remove_magic_quotes(mysql_fetch_row($result));
+				}
+
+	    	print("
+				</select>
+				</label>
+		      </td>
+		    </tr>
+		    	");
+
+		//----- date de début -----
+	    	print("
+		    <tr>
+		      <td class=\"valign-middle align-right\">". $msg->read($ABSENT_FROM) ."</td>
+		      <td>
+		    	");
+
+		// sélection de la date
+		print("<label for=\"date_start\">");
+		print("<input type=\"text\" id=\"date_start\" name=\"start\" size=\"10\" value=\"$start\" />");
+	    	print("</label>");
+
+		// calendrier surgissant
+		CalendarPopup("start", "document.formulaire.start");
+
+		// sélection de l'heure
+		print("<label for=\"hour\">");
+		print("<select id=\"hour\" name=\"hour\">");
+		for ($i = 0; $i < 24; $i++) {
+			$select = ( $hour == $i ) ? "selected=\"selected\"" : "" ;
+			print("<option $select value=\"$i\">$i</option>");
+			}
+    		print("</select>");
+	    	print("</label>");
+
+		print(" ".$msg->read($ABSENT_HOUR)." ");
+
+		//sélection des minutes
+		print("<label for=\"minute\">");
+		print("<select id=\"minute\" name=\"minute\">");
+		for ($i = 0; $i < 60; $i += 5) {
+			$select = ( $minute == $i ) ? "selected=\"selected\"" : "" ;
+			print("<option $select value=\"$i\">$i</option>");
+			}
+	    	print("</select>");
+	    	print("</label>");
+
+/**************************************
+		$mois = array_merge(Array(''), explode(",", $msg->read($ABSENT_MONTHFULL)));
+
+		// sélection de l'année
+		print("<label for=\"year\">");
+		print("<select id=\"year\" name=\"year\" onchange=\"document.forms.formulaire.submit()\">");
+		for ($i = date("Y"); $i < date("Y") + 3; $i++) {
+			$select = ( $year == $i ) ? "selected=\"selected\"" : "" ;
+			print("<option $select value=\"$i\">$i</option>");
+			}
+	    	print("</select>");
+	    	print("</label>");
+
+		// sélection du mois
+		print("<label for=\"month\">");
+		print("<select id=\"month\" name=\"month\" onchange=\"document.forms.formulaire.submit()\">");
+		$start = (int) ( $year == date("Y") ? date("m") : 1 );
+		for ($i = $start; $i <= 12; $i++) {
+			$select = ( $month == $i ) ? "selected=\"selected\"" : "" ;
+			print("<option $select value=\"$i\">$mois[$i]</option>");
+			}
+	    	print("</select>");
+	    	print("</label>");
+
+		// sélection du jour
+		print("<label for=\"day\">");
+		print("<select id=\"day\" name=\"day\" onchange=\"document.forms.formulaire.submit()\">");
+		$start = (int) ( $year == date("Y") AND $month == date("m") ) ? date("d") : 1 ;
+		for ($i = $start; $i <= getmaxdays($year, $month); $i++) {
+			$select = ( $day == $i ) ? "selected=\"selected\"" : "" ;
+			print("<option $select value=\"$i\">$i</option>");
+			}
+	    	print("</select>");
+	    	print("</label>");
+
+		print(" - ");
+
+		// sélection de l'heure
+		print("<label for=\"hour\">");
+		print("<select id=\"hour\" name=\"hour\" onchange=\"document.forms.formulaire.submit()\">");
+		$start = (int) ( $year == date("Y") AND $month == date("m") AND $day == date("d") ) ? date("H") : 1 ;
+		for ($i = $start; $i < 24; $i++) {
+			$select = ( $hour == $i ) ? "selected=\"selected\"" : "" ;
+			print("<option $select value=\"$i\">$i</option>");
+			}
+    		print("</select>");
+	    	print("</label>");
+
+		print(" ".$msg->read($ABSENT_HOUR)." ");
+
+		//sélection des minutes
+		print("<label for=\"minute\">");
+		print("<select id=\"minute\" name=\"minute\" onchange=\"document.forms.formulaire.submit()\">");
+		$start = ( $year == date("Y") AND $month == date("m") AND $day == date("d") AND $hour == date("H") ) ? roundup(date("i")) : 0 ;
+		for ($i = $start; $i < 60; $i += 5) {
+			$select = ( $minute == $i ) ? "selected=\"selected\"" : "" ;
+			print("<option $select value=\"$i\">$i</option>");
+			}
+	    	print("</select>");
+	    	print("</label>");
+**************************************/
+
+	    	print("
+		      </td>
+		    </tr>
+		    	");
+
+		//----- date de fin -----
+	    	print("
+		    <tr>
+		      <td class=\"valign-middle align-right\">". $msg->read($ABSENT_TO) ."</td>
+		      <td>
+		    	");
+
+		// sélection de la date
+		print("<label for=\"date_end\">");
+		print("<input type=\"text\" id=\"date_end\" name=\"end\" size=\"10\" value=\"$end\" />");
+	    	print("</label>");
+
+		// calendrier surgissant
+		CalendarPopup("end", "document.formulaire.end");
+
+		// sélection de l'heure
+		print("<label for=\"h_end\">");
+		print("<select id=\"h_end\" name=\"h_end\">");
+		for ($i = 0; $i < 24; $i++) {
+			$select = ( $h_end == $i ) ? "selected=\"selected\"" : "" ;
+			print("<option $select value=\"$i\">$i</option>");
+			}
+    		print("</select>");
+	    	print("</label>");
+
+		print(" ".$msg->read($ABSENT_HOUR)." ");
+
+		//sélection des minutes
+		print("<label for=\"min_end\">");
+		print("<select id=\"min_end\" name=\"min_end\">");
+		for ($i = 0; $i < 60; $i += 5) {
+			$select = ( $min_end == $i ) ? "selected=\"selected\"" : "" ;
+			print("<option $select value=\"$i\">$i</option>");
+			}
+	    	print("</select>");
+	    	print("</label>");
+
+/**************************************
+		// sélection de l'année
+		print("<label for=\"y_end\">");
+		print("<select id=\"y_end\" name=\"y_end\" onchange=\"document.forms.formulaire.submit()\">");
+		$y_end = ( $y_end < $year ) ? $year : $y_end ;
+		for ($i = $year; $i < date("Y") + 3; $i++) {
+			$select = ( $y_end == $i ) ? "selected=\"selected\"" : "" ;
+			print("<option $select value=\"$i\">$i</option>");
+			}
+	    	print("</select>");
+	    	print("</label>");
+
+		// sélection du mois
+		print("<label for=\"m_end\">");
+		print("<select id=\"m_end\" name=\"m_end\" onchange=\"document.forms.formulaire.submit()\">");
+		$m_end = ( $y_end == $year AND $m_end < $month ) ? $month : $m_end ;
+		$start = ( $y_end == $year ) ? $month : 1 ;
+		for ($i = $start; $i <= 12; $i++) {
+			$select = ( $m_end == $i ) ? "selected=\"selected\"" : "" ;
+			print("<option $select value=\"$i\">$mois[$i]</option>");
+			}
+	    	print("</select>");
+	    	print("</label>");
+
+		// sélection du jour
+		print("<label for=\"d_end\">");
+		print("<select id=\"d_end\" name=\"d_end\" onchange=\"document.forms.formulaire.submit()\">");
+		$d_end = ( $y_end == $year AND $m_end == $month AND $d_end < $day ) ? $day : $d_end ;
+		$start = ( $y_end == $year AND $m_end == $month ) ? $day : 1 ;
+		for ($i = $start; $i <= getmaxdays($y_end, $m_end); $i++) {
+			$select = ( $d_end == $i ) ? "selected=\"selected\"" : "" ;
+			print("<option $select value=\"$i\">$i</option>");
+			}
+    		print("</select>");
+	    	print("</label>");
+
+		print(" - ");
+
+		// sélection de l'heure
+		print("<label for=\"h_end\">");
+		print("<select id=\"h_end\" name=\"h_end\" onchange=\"document.forms.formulaire.submit()\">");
+		$h_end = ( $y_end == $year AND $m_end == $month AND $d_end == $day AND $h_end < $hour ) ? $hour : $h_end ;
+		$start = ( $y_end == $year AND $m_end == $month AND $d_end == $day ) ? $hour : 1 ;
+		for ($i = $start; $i < 24; $i++) {
+			$select = ( $h_end == $i ) ? "selected=\"selected\"" : "" ;
+			print("<option $select value=\"$i\">$i</option>");
+			}
+   	 	print("</select>");
+	    	print("</label>");
+
+		print(" ".$msg->read($ABSENT_HOUR)." ");
+
+		// sélection des minutes
+		print("<label for=\"min_end\">");
+		print("<select id=\"min_end\" name=\"min_end\">");
+		$min_end = ( $y_end == $year AND $m_end == $month AND $d_end == $day AND $h_end == $hour AND $min_end < $minute ) ? $minute : $min_end ;
+		$start   = ( $y_end == $year AND $m_end == $month AND $d_end == $day AND $h_end == $hour ) ? $minute : 0 ;
+		for ($i = $start; $i < 60; $i += 5) {
+			$select = ( $min_end == $i ) ? "selected=\"selected\"" : "" ;
+			print("<option $select value=\"$i\">$i</option>");
+			}
+   	 	print("</select>");
+	    	print("</label>");
+**************************************/
+
+	    	print("
+		      </td>
+		    </tr>
+		    	");
+
+		$check = ( $display == "O" ) ? "checked=\"checked\"" : "" ;
+
+  	  	print("
+		    <tr>
+		      <td class=\"align-right valign-top\">
+		        ". $msg->read($ABSENT_MESSAGE) ." <a href=\"#\" onclick=\"popWin('".$_SESSION["ROOTDIR"]."/spip_typo.php?lang=".$_SESSION["lang"]."', '450', '350'); return false;\">
+		        <img src=\"".$_SESSION["ROOTDIR"]."/images/spip/aide.gif\" title=\"". $msg->read($ABSENT_HELP) ."\" alt=\"". $msg->read($ABSENT_HELP) ."\" /></a><br/>
+		        <img src=\"".$_SESSION["ROOTDIR"]."/images/visible.gif\" title=\"". $msg->read($ABSENT_VISIBLE) ."\" alt=\"". $msg->read($ABSENT_VISIBLE) ."\" />
+	      	  <label for=\"display\"><input type=\"checkbox\" id=\"display\" name=\"display\" value=\"O\" $check /></label>
+		      </td>
+		      <td><label for=\"texte\"><textarea id=\"texte\" name=\"texte\" rows=\"5\" cols=\"45\">$texte</textarea></label></td>
+		    </tr>
+		    	");
+
+	// affichage des smileys d'édition
+    	print("
+	    <tr>
+	      <td class=\"valign-middle align-right\"><strong>Smileys :</strong></td>
+	      <td>");
+
+		$res   = mysql_query("select _code, _ident from smileys where _type = 'T'", $mysql_link);
+		$smile = ( $res ) ? mysql_fetch_row($res) : 0 ;
+
+		while ( $smile ) {
+			print("
+				<img src=\"".$_SESSION["ROOTDIR"]."/images/smiley/forum/$smile[1].gif\" title=\" code: $smile[0] \" 
+				onclick=\"Javacript:ajoutsmile('$smile[0]')\" style=\"cursor: hand;\" alt=\" code: $smile[0] \"  />
+				");
+				
+			$smile = ( $res ) ? mysql_fetch_row($res) : 0 ;
+			}
+
+    	print("
+	      </td>
+	    </tr>");
+
+	// priorité de l'annonce
+	$check1  = ( $cb1 == "O" ) ? "checked=\"checked\"" : "" ;
+	$check2  = ( $cb2 == "O" ) ? "checked=\"checked\"" : "" ;
+
+	$check3  = ( $cb3 == "O" ) ? "checked=\"checked\"" : "" ;
+
+	// délais de l'affichage
+	$list    = explode(",", $msg->read($ABSENT_DELAY));
+
+	$select  = "<label for=\"delay\">";
+	$select .= "<select id=\"delay\" name=\"delay\">";
+	for ($i = 0; $i < count($list); $i++)
+		$select .= ( $delay == $i ) ? "<option selected=\"selected\" value=\"$i\">$list[$i]</option>" : "<option value=\"$i\">$list[$i]</option>" ;
+	$select .= "</select>";
+	$select .= "</label>";
+
+	if ( $myfile ) {
+		// pièce jointe en téléchargement
+		$path  = "$DOWNLOAD/absent/$IDitem-$myfile";
+
+		$target = "onclick=\"window.open(this.href, '_blank'); return false;\"";
+		$lien   = myurlencode("index.php?file=$path");
+
+		$attach = $msg->read($ABSENT_ATTACHED, Array($lien, $target));
+		}
+	else
+		$attach =
+			"<p class=\"hidden\"><input type=\"hidden\" name=\"MAX_FILE_SIZE\" value=\"$FILESIZE\" /></p>".
+			"<input type=\"file\" name=\"UploadPJ\" style=\"font-size:9px; margin-bottom:5px;\" />";
+
+    	print("
+		    <tr>
+		      <td class=\"align-right valign-top\">". $msg->read($ABSENT_PRIORITY) ."</td>
+		      <td>
+	      		<label for=\"cb1\"><input type=\"checkbox\" id=\"cb1\" name=\"cb1\" value=\"O\" $check1 /></label> ". $msg->read($ABSENT_SHOWHOME) ." $select<br />
+				<label for=\"cb2\"><input type=\"checkbox\" id=\"cb2\" name=\"cb2\" value=\"O\" $check2 /></label> ". $msg->read($ABSENT_SHOWCAL) ."<br />
+				<label for=\"cb3\"><input type=\"checkbox\" id=\"cb3\" name=\"cb3\" value=\"O\" $check3 /></label> ". $msg->read($ABSENT_WORKTODO) ."
+		      </td>
+		    </tr>
+
+		    <tr>
+		      <td class=\"align-right valign-top\">". $msg->read($ABSENT_JUSTIFY) ."</td>
+		      <td>
+				$attach
+		      </td>
+		    </tr>
+
+		  </table>");
+
+	print("<hr style=\"width:80%;\" />");
+
+    	print("
+         <table class=\"width100\">
+           <tr>
+              <td style=\"width:10%;\" class=\"valign-middle align-center\">
+              	<input type=\"image\" src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/valid.gif\" name=\"valid\" alt=\"".$msg->read($ABSENT_INPUTOK)."\" />
+              </td>
+              <td class= \"valign-middle\">". $msg->read($ABSENT_RECORD) ."</td>
+           </tr>
+           <tr>
+              <td class=\"valign-middle align-center\">
+              	<a href=\"".myurlencode("index.php?item=$item&cmde=visu&year=$year&month=$month&day=$day&IDsel=$IDsel")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/cancel.gif\" title=\"\" alt=\"".$msg->read($ABSENT_INPUTCANCEL)."\" /></a>
+              </td>
+              <td class= \"valign-middle\">". $msg->read($ABSENT_BACK2LIST) ."</td>
+           </tr>
+         </table>");
+
+	print("</form>");
+	}
+?>
+</div>

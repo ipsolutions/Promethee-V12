@@ -1,0 +1,365 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2009 by Dominique Laporte(C-E-D@wanadoo.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : notes.htm
+ *		projet   : la page de visualisation des bulletins
+ *
+ *		version  : 1.0
+ *		auteur   : laporte
+ *		creation : 6/12/09
+ *		modif    : 
+ */
+
+
+$IDcentre = ( @$_POST["IDcentre"] )			// Identifiant du centre
+	? (int) $_POST["IDcentre"]
+	: (int) (@$_GET["IDcentre"] ? $_GET["IDcentre"] : $_SESSION["CnxCentre"]) ;
+
+$name     = ( @$_POST["name"] )			// nom alpha
+	? $_POST["name"]
+	: @$_GET["name"] ;
+$IDclass  = ( strlen(@$_POST["IDclass"]) )	// Identifiant de la classe
+	? (int) $_POST["IDclass"]
+	: (int) @$_GET["IDclass"] ;
+$year     = ( strlen(@$_POST["year"]) )		// année
+	? (int) $_POST["year"]
+	: (int) @$_GET["year"] ;
+$period   = ( strlen(@$_POST["period"]) )		// trimestre
+	? (int) $_POST["period"]
+	: (int) (@$_GET["period"] ? $_GET["period"] : 1) ;
+
+$skpage   = ( @$_GET["skpage"] )			// n° de la page affichée
+	? (int) $_GET["skpage"]
+	: 1 ;
+$skshow   = ( @$_GET["skshow"] )			// n° du flash info
+	? (int) $_GET["skshow"]
+	: 1 ;
+
+$submit   = @$_POST["valid_x"];			// bouton validation
+?>
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($NOTES_TITLE)); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+
+	<?php
+		// lecture des droits
+		$Query  = "select _IDgrpwr, _IDgrprd, _period, _IDmod, _month from notes ";
+		$Query .= "where _IDcentre = '".$_SESSION["CnxCentre"]."' ";
+		$Query .= "limit 1";
+
+		$result = mysql_query($Query, $mysql_link);
+		$auth   = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+		// vérification des autorisations
+		verifySessionAccess(0, $auth[1]);
+
+		// intialisation
+		if ( !$year ) {
+			list($y, $m) = explode("-", date("Y-m"));
+			$year = ( $auth[4] > $m ) ? $y - 1 : date("Y");
+			}
+
+		$href = "IDcentre=$IDcentre&name=$name&IDclass=$IDclass&year=$year&period=$period";
+	?>
+
+	<form id="formulaire" action="index.php" method="post">
+	<?php
+		print("
+			<p class=\"hidden\"><input type=\"hidden\" name=\"item\"   value=\"$item\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"cmde\"   value=\"$cmde\" /></p>
+			");
+	?>
+
+		<table  class="width100">
+		  <tr>
+			<td style="width:50%;" class="align-right">
+				<?php print($msg->read($NOTES_CHOOSECENTER)); ?>
+			</td>
+			<td style="width:50%;">
+				<label for="IDcentre">
+			  	<select id="IDcentre" name="IDcentre" onchange="document.forms.formulaire.submit()">
+				<?php
+					// lecture des centres constitutifs
+					$query  = "select _IDcentre, _ident from config_centre ";
+					$query .= "where _visible = 'O' AND _lang = '".$_SESSION["lang"]."' ";
+					$query .= "order by _IDcentre";
+
+					$result = mysql_query($query, $mysql_link);
+					$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+					while ( $row ) {			
+						printf("<option value=\"$row[0]\" %s>$row[1]</option>", ($IDcentre == $row[0]) ? "selected=\"selected\"" : "");
+
+						$row = remove_magic_quotes(mysql_fetch_row($result));
+						}				
+				?>
+				</select> <img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/home.gif" title="" alt="" />
+				</label>
+			</td>
+		  </tr>
+		</table>
+	</form>
+
+	<hr/>
+
+	<?php
+		print("
+		   <form id=\"selection\" action=\"index.php?item=60\" method=\"post\">
+			<p class=\"hidden\"><input type=\"hidden\" name=\"IDcentre\" value=\"$IDcentre\" /></p>
+
+			<table class=\"width100\">
+			  <tr>
+	                <td style=\"width:35%; border-radius: 4px 0 0 4px; padding-top: 10px\" colspan=\"2\" class=\"btn-primary align-center\">
+			  	<label for=\"name\">
+			  	<select id=\"name\" name=\"name\" onchange=\"document.forms.selection.submit()\">");
+
+		// accès par ordre alphabétique
+            $alpha = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
+		printf("<option value=\"\" %s>". $msg->read($NOTES_ALL) ."</option>", ($name == "") ? "selected=\"selected\"" : "");
+		for ($i = 0; $i < 26; $i++)
+			printf("<option value=\"".$alpha[$i]."\" %s>".$alpha[$i]."</option>", ($alpha[$i] == $name) ? "selected=\"selected\"" : "");
+
+		print("
+			  	</select>
+			  	</label>
+	                </td>");
+
+		print("
+	                <td style=\"width:25%; padding-top: 10px\" class=\"btn-primary align-center\">
+			  	<label for=\"IDclass\">
+			  	<select id=\"IDclass\" name=\"IDclass\" onchange=\"document.forms.selection.submit()\">");
+
+				// affichage des classes
+				$Query  = "select _IDclass, _ident from campus_classe ";
+				$Query .= "where _IDcentre = '$IDcentre' ";
+				$Query .= "AND _visible = 'O' ";
+				$Query .= "order by _IDclass";
+
+				$result = mysql_query($Query, $mysql_link);
+				$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+				print("<option value=\"0\">". $msg->read($NOTES_ALLSELECT) ."</option>");
+
+				while ( $row ) {			
+					printf("<option value=\"$row[0]\" %s>$row[1]</option>", ($IDclass == $row[0]) ? "selected=\"selected\"" : "");
+
+					$row = remove_magic_quotes(mysql_fetch_row($result));
+					}	// endwhile classe
+
+		print("
+			  	</select>
+			  	</label>
+	                </td>");
+
+		print("
+	                <td style=\" width:15%; padding-top: 10px\" class=\"btn-primary align-center\">
+			  	<label for=\"year\">
+			  	<select id=\"year\" name=\"year\" onchange=\"document.forms.selection.submit()\">");
+
+				// affichage des années
+				$Query  = "select distinctrow notes_data._year from notes_data, campus_classe ";
+				$Query .= "where campus_classe._IDcentre = '$IDcentre' ";
+				$Query .= "AND campus_classe._visible = 'O' ";
+				$Query .= "AND campus_classe._IDclass = notes_data._IDclass ";
+				$Query .= ( $IDclass ) ? "AND campus_classe._IDclass = '$IDclass' " : "" ;
+				$Query .= "order by _year";
+
+				$result = mysql_query($Query, $mysql_link);
+				$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+				if ( mysql_numrows($result) == 0 )
+					print("<option value=\"$year\">$year</option>");
+
+				while ( $row ) {			
+					printf("<option value=\"$row[0]\" %s>$row[0]</option>", ($year == $row[0]) ? "selected=\"selected\"" : "");
+
+					$row = remove_magic_quotes(mysql_fetch_row($result));
+					}	// endwhile années
+
+		print("
+			  	</select>
+			  	</label>
+	                </td>");
+
+		$list   = explode (",", $msg->read($NOTES_PERIODLIST));
+		$quater = substr(@$list[$auth[2]], 0, 1);
+
+		print("
+	                <td style=\" width:15%; padding-top: 10px\" class=\"btn-primary align-center\">
+			  	<label for=\"period\">
+			  	<select id=\"period\" name=\"period\" onchange=\"document.forms.selection.submit()\">");
+
+				// les trimestres
+				for ($i = 1; $i < 4; $i++)
+					printf("<option value=\"$i\" %s>$quater$i</option>", ($i == $period) ? "selected=\"selected\"" : "");
+
+		print("
+			  	</select>
+			  	</label>
+	                </td>
+	                <td style=\" width:10%; border-radius: 0 4px 4px 0; padding-top: 10px\" class=\"btn-primary align-center\">
+				". $msg->read($NOTES_HIT) ."
+	                </td>
+			</tr>
+			");
+
+		// affichage des élèves
+		$query  = "select _name, _fname, _ID, _IDclass ";
+		$query .= "from user_id ";
+		$query .= "where _visible = 'O' ";
+		$query .= "AND _IDgrp = '1' ";
+		$query .= "AND _IDcentre = '$IDcentre' ";
+		$query .= ( $name ) ? "AND _name like '$name%' " : "" ;
+		$query .= ( $IDclass ) ? "AND _IDclass = '$IDclass' " : "" ;
+		$query .= "order by _name, _fname";
+
+		// détermination du nombre de pages
+		$result = mysql_query($query, $mysql_link);
+		$nbelem = ( $result ) ? mysql_affected_rows($mysql_link) : 0 ;
+
+		$page  = $nbelem;
+		$show  = 1;
+
+		if ( $nbelem ) {
+			if ( $IDclass )
+				$page = $show = 1;
+			else {
+				$page  = ( $page % $MAXPAGE )
+					? (int) ($page / $MAXPAGE) + 1
+					: (int) ($page / $MAXPAGE) ;
+
+				$show  = ( $page % $MAXSHOW )
+					? (int) ($page / $MAXSHOW) + 1
+					: (int) ($page / $MAXSHOW) ;
+				}
+
+			// initialisation
+			$i     = 1;
+			$first = 1 + (($skpage - 1) * $MAXPAGE);
+				
+			// se positionne sur la page ad hoc
+			mysql_data_seek($result, $first - 1);
+			$row   = remove_magic_quotes(mysql_fetch_row($result));
+
+			$j   = 0;
+			$max = ( $IDclass ) ? $nbelem : $MAXPAGE ;
+			
+			while ( $row AND $i++ <= $max ) {
+				$bgcolor = ( $j++ % 2 ) ? "item" : "menu" ;
+
+				// recherche de la classe
+				$return  = mysql_query("select _ident from campus_classe where _IDclass = '$row[3]' limit 1", $mysql_link);
+				$classe  = ( $return ) ? remove_magic_quotes(mysql_fetch_row($return)) : 0 ;
+
+				// recherche du nbr de matières renseignées
+				$query   = "select distinctrow notes_data._IDdata from notes_items, notes_data ";
+				$query  .= "where notes_items._IDeleve = '$row[2]' AND notes_items._value != '' ";
+				$query  .= "AND notes_data._IDdata = notes_items._IDdata ";
+				$query  .= "AND notes_data._IDclass = '$row[3]' AND notes_data._year = '$year' AND notes_data._period = '$period' ";
+
+				$return  = mysql_query($query, $mysql_link);
+				$nbitem  = ( $return ) ? mysql_numrows($return) : 0 ;
+
+				// accès au bulletin
+				$link1   = ( getAccess() == 2 OR ($auth[0] & pow(2, $_SESSION["CnxGrp"] - 1)) OR $row[2] == $_SESSION["CnxID"] )
+					? "<a href=\"".myurlencode("index.php?item=$item&cmde=show&IDcentre=$IDcentre&IDclass=$row[3]&IDeleve=$row[2]&year=$year&period=$period")."\"><i class=\"icon-th-list\" title=\"".$msg->read($NOTES_POST)."\"></i></a>"
+					: "<i class=\"icon-th-list\" title=\"".$msg->read($NOTES_POST)."\"></i>" ;
+				
+				// saisie des notes
+				$link2 = ( $_SESSION["CnxID"] == $auth[3] OR ($auth[0] & pow(2, $_SESSION["CnxGrp"] - 1)) OR $row[2] == $_SESSION["CnxID"] )
+					? "<a href=\"".myurlencode("index.php?item=$item&cmde=post&IDeleve=$row[2]&IDcentre=$IDcentre&name=$name&IDclass=$row[3]&year=$year&period=$period")."\">$row[0] $row[1]</a>"
+					: "$row[0] $row[1]" ;
+
+				$link3   = ( getAccess() == 2 OR ($auth[0] & pow(2, $_SESSION["CnxGrp"] - 1)) )
+					? "<a href=\"".myurlencode("index.php?item=$item&cmde=visu&IDcentre=$IDcentre&IDclass=$row[3]&year=$year&period=$period")."\">$classe[0]</a>"
+					: "$classe[0]" ;
+
+				// lecture du compteur des téléchargements
+				$path  = "tmp/bulletin_".$row[3]."_".$row[2]."_".$year."_".$period.".pdf";
+
+				$res   = mysql_query("select _IDdown, _count from download_data where _file = '$path'", $mysql_link);
+				$down  = ( $res ) ? mysql_fetch_row($res) : 0 ;
+
+				$hit   = ( $down[0] )
+					? "<a href=\"#\" onclick=\"popWin('".$_SESSION["ROOTDIR"]."/user_list.php?sid=".$_SESSION["sessID"]."&amp;IDdown=$down[0]&amp;cmde=dwload&amp;lang=".$_SESSION["lang"]."', '450', '200'); return false;\">$down[1]</a>"
+					: "0" ;
+
+				print("
+					<tr class=\"$bgcolor btn\" style=\"display: table-row\">
+			                <td style=\"width:1%; padding: 5px; border-radius: 4px 0 0 4px\">$link1</td>
+			                <td style=\"width:34%; padding: 5px\">$link2</td>
+			                <td class=\"align-center\" style=\"padding: 5px\">$link3</td>
+			                <td class=\"align-center\" style=\"padding: 5px\"></td>
+			                <td class=\"align-center\" style=\"padding: 5px\">$nbitem</td>
+			                <td class=\"align-center\" style=\"padding: 5px; border-radius: 0 4px 4px 0\">[$hit]</td>
+					  </tr>
+					");
+
+				$row = remove_magic_quotes(mysql_fetch_row($result));
+				}
+			}
+
+		print("
+		            </table>
+	            </form>
+			");
+
+		// bouton précédent
+		$where = $skshow - 1;
+		if ( $skshow == 1 )
+			$prev = "";
+		else {
+			$skpg = 1 + (($skshow - 2) * $MAXSHOW);
+			$prev = "[<a href=\"".myurlencode("index.php?item=$item&cmde=$cmde&$href&skpage=$skpg&skshow=$where")."\">". $msg->read($NOTES_PREV) ."</a>]";
+			}
+
+		// liens directs sur n° de page
+		$start = 1 + (($skshow - 1) * $MAXSHOW);
+		$end   = $skshow * $MAXSHOW;
+
+		$choix = ( $skpage == $start )
+			? "<img src=\"".$_SESSION["ROOTDIR"]."/images/nav_left.gif\" title=\"«\" alt=\"«\" /><strong>$start</strong><img src=\"".$_SESSION["ROOTDIR"]."/images/nav_right.gif\" title=\"»\" alt=\"»\" />"
+			: "<a href=\"".myurlencode("index.php?item=$item&cmde=$cmde&$href&skpage=$start&skshow=$skshow")."\">$start</a>" ;
+
+		for ($j = $start + 1; $j <= $end AND $j <= $page; $j++)
+			$choix .= ( $skpage == $j )
+				? "|<img src=\"".$_SESSION["ROOTDIR"]."/images/nav_left.gif\" title=\"«\" alt=\"«\" /><strong>$j</strong><img src=\"".$_SESSION["ROOTDIR"]."/images/nav_right.gif\" title=\"»\" alt=\"»\" />"
+				: "|<a href=\"".myurlencode("index.php?item=$item&cmde=$cmde&$href&skpage=$j&skshow=$skshow")."\">$j</a>" ;
+
+		// bouton suivant
+		$where = $skshow + 1;
+		$next  = ( $skshow == $show )
+			? ""
+			: "[<a href=\"".myurlencode("index.php?item=$item&cmde=$cmde&$href&skpage=$j&skshow=$where")."\">". $msg->read($NOTES_NEXT) ."</a>]";
+	?>
+
+	      <hr/>
+
+		<?php if ( $nbelem ) print("<div style=\"text-align:center;\">$prev $choix $next</div>"); ?>
+</div>

@@ -1,0 +1,193 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2002-2007 by Dominique Laporte(C-E-D@wanadoo.fr)
+   Copyright (c) 2006 by Nordine Zetoutou (nordine.zetoutou@educagri.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : page_top.htm
+ *		projet   : le bandeau du haut avec le logo de l'établissement
+ *
+ *		version  : 1.2
+ *		auteur   : laporte
+ *		creation : 20/10/02
+ *		modif    : 20/03/03 - par D. Laporte
+ *		           log de déconnexion
+ *                     18/10/03 - par D.Laporte
+ *                     mise en place des post-it
+ *		           17/07/06 - Nordine Zetoutou
+ * 	                 migration des balises HTML en XHTML 1.0 strict
+ */
+
+require_once "include/gallery.php";
+
+// initialisation
+$my_logo = $height = "";
+
+// taille du logo par défaut
+imageSize("download/logos/".$_SESSION["CfgIdent"]."/logo01.jpg", $srcWidth, $srcHeight);
+
+// images défilantes ou logo fixe
+$result  = mysql_query("select _IDlogo from config_logo where _visible = 'O'", $mysql_link);
+
+if ( $_SESSION["CfgLogo1"] == "O" ) {
+$height = "height:".$srcHeight."px;";
+
+if ( mysql_numrows($result) )	{
+	$my_logo = "
+		<div id=\"header\" style=\"width:".$srcWidth."px;\">
+			<div id=\"blendimage\" style=\"height:".$srcHeight."px;\">
+			<ul id=\"navheader\" style=\"position: absolute;\"><li style=\"list-style-type: none;\">&nbsp;</li></ul>
+			</div>
+		</div>";
+	}
+else {
+	$file = $_SESSION["ROOTDIR"]."/download/logos/".$_SESSION["CfgIdent"]."/logo01.jpg";
+
+	if ( file_exists($file) )
+		$my_logo = "
+			<div style=\"align-center\"><a href=\"index.php\">
+				<img src=\"".$_SESSION["ROOTDIR"]."/download/logos/". rawurlencode($_SESSION["CfgIdent"]) ."/logo01.jpg\" title=\"\" alt=\"$file\" style=\"margin-bottom: 5px\" />
+			</a></div>";
+	}
+} 
+
+if($_SESSION["CfgBandeau"] == "1")
+{
+	$coloricon = "black";
+}
+else
+{
+	$coloricon = "white";
+}
+
+?>
+
+<?php if($MODETHEME == "portal")
+{
+	?>
+	<div style="margin-left: 20px"><?php echo $my_logo; ?></div>
+	<?php
+}
+?>
+
+<div class="noprint navbar navbar-inverse<?php echo $_SESSION["CfgBandeau"]; ?> navbar-fixed-top " <?php if($MODETHEME == "portal"){echo "style=\"position: inherit; margin-bottom: 10px; margin-left: 20px; margin-right: 30px\"";}?>>
+	<div class="navbar-inner<?php echo $_SESSION["CfgBandeau"]; ?>" <?php if($MODETHEME == "portal"){echo "style=\"border-radius: 4px\"";}?>>
+		<div class="container-fluid">
+			<button class="btn btn-navbar" data-target=".nav-collapse" data-toggle="collapse" type="button">
+				<span class="icon-bar"></span>
+				<span class="icon-bar"></span>
+				<span class="icon-bar"></span>
+			</button>
+			<?php if($MODETHEME != "portal")
+			{
+				?>
+				<a class="brand" href="index.php?item=0"><?php echo $_SESSION["CfgIdent"]; ?></a>
+				<a class="brand" href="index.php?item=0" style="border-right: 1px solid #777777; padding: 0px; margin-top: 5px; height: 30px; margin-left: -10px">&nbsp;</a>
+				<?php
+			}
+			?>
+			<a class="brand" href="index.php?item=0" style="padding-left: 5px; padding-right: 5px"><i class="icon-home icon-white" style="padding-bottom: 0px; padding-top: 0px; padding-right: 0px; margin-top: 3px; margin-left: 30px"></i></a>
+			<div class="nav-collapse collapse">
+			<?php
+
+					// la session est valide
+					if ( $_SESSION["sessID"] ) {
+						// lecture des paramètres de personnalisation des utilisateurs
+						$query  = "select _menu, _puce, _fond, _header, _service ";
+						$query .= "from user_config ";
+						$query .= "where _IDconf = '". $_SESSION["CnxID"] ."' ";
+						$query .= "limit 1";
+
+						$result = mysql_query($query, $mysql_link);
+						$myrow  = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+						if ( $myrow ) {
+							$MENUSKIN               = $myrow[0];
+							$_SESSION["CfgPuce"]    = $_SESSION["ROOTDIR"]."/css/themes/puce/$myrow[1]";
+							$_SESSION["CfgFond"]    = $_SESSION["ROOTDIR"]."/css/themes/fond/$myrow[2]";
+							$_SESSION["CfgHeader"]  = $_SESSION["ROOTDIR"]."/css/themes/header/$myrow[3]";
+							$_SESSION["CfgService"] = $myrow[4];
+							}
+
+						// lecture de la dernière connexion de l'utilisateur
+						$result = mysql_query("select _name, _fname, _sexe, _lastcnx from user_id where _ID = '".$_SESSION["CnxID"]."' limit 1", $mysql_link);
+						$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+						if ( $row ) {
+							// lecture de la dernière connexion de l'utilisateur
+							$return = mysql_query("select _ident from config_centre where _IDcentre = '".$_SESSION["CnxCentre"]."' AND _lang = '".$_SESSION["lang"]."' limit 1", $mysql_link);
+							$myrow  = ( $return ) ? remove_magic_quotes(mysql_fetch_row($return)) : 0 ;
+
+							// si login automatique : on donne la possibilité de s'identifier et/ou de créer un compte
+							if ( strlen($AUTOLOGIN) )
+								echo "<ul class=\"nav\"><li class=\"dropdown\"><a href=\"index.php?item=100\">". $message->read($PAGE_ACCOUNT) ."</a></li></ul>";
+							
+							$message->languageBannerTypeMenu("msg");
+							
+							}	// endif row
+						}	// endif session
+
+				?>
+				<p class="navbar-text pull-right" style="margin-left: 10px">
+				<?php
+				if ( $_SESSION["CnxAdm"] == 255 )
+				{
+					$sessionconfig = "";
+					if(($_SESSION["config"]=="off")||(!isset($_SESSION["config"]))||($_SESSION["config"]==""))
+					{
+						$sessionconfig = "config=on";
+					}
+					else
+					{
+						$sessionconfig = "config=off";
+					}
+					?>
+					<a href="index.php?item=0&amp;<?php echo $sessionconfig; ?>"><i class="ie-icon-top icon-cog icon-<?php echo $coloricon; ?>"></i></a>
+					<?php
+				}
+				?>
+				<a href="index.php?item=31&amp;cmde=bag"><i class="ie-icon-top icon-briefcase icon-<?php echo $coloricon; ?>"></i></a>
+				<a href="index.php?item=-1"><i class="ie-icon-top icon-off icon-<?php echo $coloricon; ?>"></i></a>
+				</p>
+
+				<p class="navbar-text pull-right">
+				<?php
+				echo "
+				". $message->read($PAGE_LASTCNX, Array("", formatUserName($row[0], $row[1]), $myrow[0], str_replace(" ", " ".$message->read($PAGE_AT)." ", $row[3])));
+				?>
+				</p>
+
+				<ul class="nav">
+					<?php
+						require_once "page_menu.php";
+
+						$Query  = "select _IDmenu, _ident, _marquee, _order, _img, _backoffice, _sort from config_menu ";
+						$Query .= "where _activate = 'O' ";
+						$Query .= "AND _lang = '".$_SESSION["lang"]."' AND _order < 0 ";
+						$Query .= ( $_SESSION["CnxAdm"] == 255 ) ? "" : "AND (_IDgrprd & ".pow(2, $_SESSION["CnxGrp"] - 1).") " ;
+						$Query .= "order by _order desc";
+
+						setmenu($Query);
+					?>
+				</ul>
+			</div>
+		</div>
+	</div>
+</div>

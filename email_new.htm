@@ -1,0 +1,296 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2007 by Dominique Laporte(C-E-D@wanadoo.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : email_new.htm
+ *		projet   : la page de création/modification d'un contact
+ *
+ *		version  : 1.0
+ *		auteur   : laporte
+ *		creation : 27/01/06
+ *		modif    : 
+ */
+
+
+$IDadd    = ( @$_POST["IDadd"] )			// Identifiant du contact
+	? (int) $_POST["IDadd"]
+	: (int) @$_GET["IDadd"] ;
+
+$name     = addslashes(trim(@$_POST["name"]));
+$fname    = addslashes(trim(@$_POST["fname"]));
+$sexe     = @$_POST["sexe"];
+$titre    = addslashes(trim(@$_POST["titre"]));
+$fonction = addslashes(trim(@$_POST["fonction"]));
+$societe  = addslashes(trim(@$_POST["societe"]));
+$adr      = addslashes(trim(@$_POST["adr"]));
+$cp       = trim(@$_POST["cp"]);
+$ville    = addslashes(trim(@$_POST["ville"]));
+$tel      = trim(@$_POST["tel"]);
+$fax      = trim(@$_POST["fax"]);
+$email    = trim(@$_POST["email"]);
+$web      = trim(@$_POST["web"]);
+
+$submit   = @$_POST["valid_x"];			// bouton de validation
+?>
+
+
+<?php
+	// traitement commande
+	$retcode = "";
+	$error1  = $error2 = false;
+
+	if ( $submit ) {
+		// vérification saisie
+		$error1 = (bool) ($name == "");
+		$error2 = ( strlen($email) ) ? (bool) (strstr($email, "@") == "" OR strstr($email, ".") == "") : false ;
+
+		if ( !$error1 AND !$error2 ) {
+			if ( strlen($cp) == 4 )
+				$cp = "0$cp";
+
+			if ( $IDadd ) {
+				$Query  = "update email_address ";
+				$Query .= "set _name = '$name', _fname = '$fname', _sexe = '$sexe', _titre = '$titre', _fonction = '$fonction', ";
+				$Query .= "_company = '$societe', _adresse = '$adr', _cp = '$cp', _ville = '$ville', _tel = '$tel', _email = '$email', _fax = '$fax', _web = '$web' ";
+				$Query .= "where _IDadd = '$IDadd' AND _ID = '".$_SESSION["CnxID"]."' ";
+				$Query .= "limit 1";
+				}
+			else {
+				$Query  = "insert into email_address ";
+				$Query .= "values('', '".$_SESSION["CnxID"]."', '$name', '$fname', '$sexe', '$titre', '$fonction', '$societe', '$adr', '$cp', '$ville', '$tel', '$fax', '$email', '$web')";
+				}
+
+			$retcode = ( mysql_query($Query, $mysql_link) )
+				? " <img src=\"".$_SESSION["ROOTDIR"]."/images/ok.gif\" title=\"\" alt=\"\" />"
+				: " <img src=\"".$_SESSION["ROOTDIR"]."/images/bad.gif\" title=\"\" alt=\"\" /> " . sql_error($mysql_link) ;
+			}
+		}
+
+	// lecture du contact
+	$query  = "select _name, _fname, _sexe, _titre, _fonction, _company, _adresse, _cp, _ville, _tel, _fax, _email, _web ";
+	$query .= "from email_address ";
+	$query .= "where _IDadd = '$IDadd' ";
+	$query .= "limit 1";
+
+	$result = mysql_query($query, $mysql_link);
+	$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+	// lectures de données à modifier
+	$name     = $row[0];
+	$fname    = $row[1];
+	$sexe     = $row[2] ;
+	$titre    = $row[3];
+	$fonction = $row[4];
+	$societe  = $row[5];
+	$adr      = $row[6];
+	$cp       = $row[7];
+	$ville    = $row[8];
+	$tel      = $row[9];
+	$fax      = $row[10];
+	$email    = $row[11];
+	$web      = $row[12];
+
+	// initialisation
+	$statut  = ( $IDadd ) ? $msg->read($EMAIL_MODIFICATION) : $msg->read($EMAIL_NEWRECORD) ;
+	$statut .= " $retcode";
+?>
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($EMAIL_ADDRESSBOOK2)); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+
+	<p><?php print("<strong>". $msg->read($EMAIL_STATUS) ."</strong> $statut"); ?></p>
+
+	<form id="formulaire" action="index.php" method="post">
+	<?php
+		print("
+			<p class=\"hidden\"><input type=\"hidden\" name=\"item\"    value=\"$item\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"cmde\"    value=\"$cmde\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"IDadd\"   value=\"$IDadd\" /></p>
+			");
+	?>
+
+		 	 <div style="border:#cccccc solid 1px; padding:2px;">
+
+				<table class="width100">
+
+				<?php
+      	            	if ( $error1 )
+                  			print("
+				                    <tr>
+		          					<td style=\"width:100%;\" class=\"align-justify valign-middle\" colspan=\"2\">
+									<span style=\"color:#FF0000;\">".$msg->read($EMAIL_ERRINPUT)."</span>
+	          						</td>
+			                  	  </tr>
+							");
+				?>
+
+	                    <tr>
+	                      <td style="width:20%;" class="align-right valign-middle">
+	                        <?php print($msg->read($EMAIL_NAME)); ?>
+	                      </td>
+	                      <td style="width:80%;" class="valign-middle">
+	                          <?php print("<label for=\"name\"><input type=\"text\" id=\"name\" name=\"name\" size=\"40\" value=\"$name\" /></label>"); ?>
+	                      </td>
+	                    </tr>
+
+	                    <tr>
+	                      <td class="align-right valign-middle">
+	                        <?php print($msg->read($EMAIL_FNAME)); ?>
+	                      </td>
+	                      <td class="valign-middle">
+	                          <?php print("<label for=\"fname\"><input type=\"text\" id=\"fname\" name=\"fname\" size=\"40\" value=\"$fname\" /></label>"); ?>
+	                      </td>
+	                    </tr>
+
+	                    <tr>
+	                      <td class="align-right valign-middle">
+	                        <?php print($msg->read($EMAIL_SEX)); ?>
+	                      </td>
+	                      <td class="valign-middle">
+					<label for="sexe">
+					<select id="sexe" name="sexe">
+					<?php
+						$sex[0][0] = "H"; $sex[1][0] = $msg->read($EMAIL_MALE);
+						$sex[0][1] = "F"; $sex[1][1] = $msg->read($EMAIL_FEMALE);
+
+						for ($i = 0; $i < count($sex[0]); $i++)
+							if ( $sexe == $sex[0][$i] )
+								print("<option selected=\"selected\" value=\"".$sex[0][$i]."\">".$sex[1][$i]."</option>");
+							else
+								print("<option value=\"".$sex[0][$i]."\">".$sex[1][$i]."</option>");
+					?>
+					</select>
+					</label>
+	                      </td>
+	                    </tr>
+
+                      <tr>
+                        <td class="align-right valign-middle"><?php print($msg->read($EMAIL_TITLE)); ?></td>
+                        <td>
+					<?php print("<label for=\"titre\"><input type=\"text\" id=\"titre\" name=\"titre\" size=\"40\" value=\"$titre\" /></label>"); ?>
+                        </td>
+                      </tr>
+
+                      <tr>
+                        <td class="align-right valign-middle"><?php print($msg->read($EMAIL_FUNCTION)); ?></td>
+                        <td>
+					<?php print("<label for=\"fonction\"><input type=\"text\" id=\"fonction\" name=\"fonction\" size=\"40\" value=\"$fonction\" /></label>"); ?>
+                        </td>
+                      </tr>
+
+                      <tr>
+                        <td class="align-right valign-middle"><?php print($msg->read($EMAIL_COMPANY)); ?></td>
+                        <td>
+					<?php print("<label for=\"societe\"><input type=\"text\" id=\"societe\" name=\"societe\" size=\"40\" value=\"$societe\" /></label>"); ?>
+                        </td>
+                      </tr>
+
+                      <tr>
+                        <td class="align-right valign-middle"><?php print($msg->read($EMAIL_ADDRESS)); ?></td>
+                        <td>
+					<?php print("<label for=\"adr\"><input type=\"text\" id=\"adr\" name=\"adr\" size=\"40\" value=\"$adr\" /></label>"); ?>
+                        </td>
+                      </tr>
+
+                      <tr>
+                        <td class="align-right valign-middle"><?php print($msg->read($EMAIL_CITY)); ?></td>
+                        <td>
+					<?php print("<label for=\"cp\"><input type=\"text\" id=\"cp\" name=\"cp\" size=\"5\" value=\"$cp\" /></label>"); ?> -
+					<?php print("<label for=\"ville\"><input type=\"text\" id=\"ville\" name=\"ville\" size=\"27\" value=\"$ville\" /></label>"); ?>
+                        </td>
+                      </tr>
+
+                      <tr>
+                        <td class="align-right valign-middle"><?php print($msg->read($EMAIL_TEL)); ?></td>
+                        <td>
+					<?php print("<label for=\"tel\"><input type=\"text\" id=\"tel\" name=\"tel\" size=\"20\" value=\"$tel\" /></label>"); ?>
+                        </td>
+                      </tr>
+
+                      <tr>
+                        <td class="align-right valign-middle"><?php print($msg->read($EMAIL_FAX)); ?></td>
+                        <td>
+					<?php print("<label for=\"fax\"><input type=\"text\" id=\"fax\" name=\"fax\" size=\"20\" value=\"$fax\" /></label>"); ?>
+                        </td>
+                      </tr>
+
+				<?php
+      	            	if ( $error2 )
+                  			print("
+				                    <tr>
+		          					<td style=\"width:100%;\" class=\"align-justify valign-middle\" colspan=\"2\">
+									<span style=\"color:#FF0000;\">".$msg->read($EMAIL_ERREMAIL)."</span>
+	          						</td>
+			                  	  </tr>
+							");
+				?>
+
+                      <tr>
+                        <td class="align-right valign-middle"><?php print($msg->read($EMAIL_EMAIL)); ?></td>
+                        <td>
+					<?php print("<label for=\"email\"><input type=\"text\" id=\"email\" name=\"email\" size=\"40\" value=\"$email\" /></label>"); ?>
+                        </td>
+                      </tr>
+
+                      <tr>
+                        <td class="align-right valign-middle"><?php print($msg->read($EMAIL_WEBSITE)); ?></td>
+                        <td>
+					<?php print("<label for=\"web\"><input type=\"text\" id=\"web\" name=\"web\" size=\"40\" value=\"$web\" /></label>"); ?>
+                        </td>
+                      </tr>
+                    </table>
+
+            </div>
+
+		<hr style="width:80%;" />
+
+		<table class="width100">
+		  <tr>
+			<td style="width:20%;" class="valign-middle align-right">
+				<?php print("<input type=\"image\" src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/valid.gif\" name=\"valid\" alt=\"".$msg->read($EMAIL_INPUTOK)."\" />"); ?>
+			</td>
+			<td class="valign-middle">
+				<?php print($msg->read($EMAIL_ISOK)); ?>
+			</td>
+		  </tr>
+		  <tr>
+			<td class="valign-middle align-right">
+			<?php
+				$href = "index.php?item=$item&cmde=address" ;
+
+				print("<a href=\"".myurlencode($href)."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/cancel.gif\" title=\"\" alt=\"".$msg->read($EMAIL_INPUTCANCEL)."\" /></a>");
+			?>
+			</td>
+			<td class="valign-middle">
+				<?php print($msg->read($EMAIL_BACK)); ?>
+			</td>
+		  </tr>
+		</table>
+
+	</form>
+
+</div>

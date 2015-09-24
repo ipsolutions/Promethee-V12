@@ -1,0 +1,337 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2002-2008 by Dominique Laporte(C-E-D@wanadoo.fr)
+   Copyright (c) 2006 by Nordine Zetoutou (nordine.zetoutou@educagri.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : fil.htm
+ *		projet   : la page de visualisation des FIL d'information
+ *
+ *		version  : 1.0
+ *		auteur   : laporte
+ *		creation : 23/10/04
+ *		modif    : 17/07/06 - Nordine Zetoutou
+ * 	                 migration des balises HTML en XHTML 1.0 strict
+ */
+
+
+$IDgroup = ( @$_POST["IDgroup"] )			// identifiant e-groupe
+	? (int) $_POST["IDgroup"]
+	: (int) @$_GET["IDgroup"] ;
+$IDflash = ( strlen(@$_POST["IDflash"]) )		// identification du flash-info
+	? (int) $_POST["IDflash"]
+	: (int) @$_GET["IDflash"] ;
+$IDfil   = @$_GET["IDfil"];				// identification du fil d'info
+$year    = ( @$_GET["year"] )
+	? $_GET["year"]
+	: date("Y") ;
+$month   = ( @$_GET["month"] )
+	? $_GET["month"]
+	: date("m") ;
+
+$submit  = ( @$_POST["submit"] )			// bouton de validation
+	? $_POST["submit"]
+	: @$_GET["submit"] ;
+?>
+
+
+<?php
+	require_once "include/smileys.php";
+	require_once "include/spip.php";
+
+     	// seul le big chef peut supprimer une annonce
+	if ( $_SESSION["CnxAdm"] == 255 )
+		switch ( $submit ) {
+			case "del" :	// on efface l'annonce
+				if ( mysql_query("delete from flash_fil where _IDfil = '$IDfil'", $mysql_link) )
+					if ( !mysql_query("delete from flash_filpost where _IDfil = '$IDfil'", $mysql_link) )
+						sql_error($mysql_link);
+				break;
+
+			case "clear" :	// on efface l'archive
+				$Query  = "delete from flash_fil ";
+				$Query .= ( $IDflash ) ? "where _IDflash = '$IDflash' AND " : "where " ;
+				$Query .= "_date >= '$year-01-01' AND _date <= '$year-12-31'";
+
+				if ( !mysql_query($Query, $mysql_link) )
+					sql_error($mysql_link);
+				break;
+
+			default :
+				break;
+			}
+?>
+
+	<!-- archivage sur l'année -->
+	<form id="formulaire" action="index.php" method="post">
+	<?php
+		print("
+			<p class=\"hidden\"><input type=\"hidden\" name=\"item\"      value=\"$item\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"IDgroup\"   value=\"$IDgroup\" /></p>
+			");
+	?>
+
+	<table class="width100">
+	  <tr style="background-color:#C0C0C0;">
+		<td class="align-left" style="width:30%; white-space:nowrap;">
+			<label for="IDflash">
+			<select id="IDflash" name="IDflash" onchange="document.forms.formulaire.submit()">
+			<?php
+				// recherche des catégories
+				if ( $IDgroup ) {
+					$Query  = "select egroup._IDparent ";
+					$Query .= "from egroup, egroup_data ";
+					$Query .= "where egroup_data._IDdata = '$IDgroup' ";
+					$Query .= "AND egroup._IDgroup = egroup_data._IDgroup ";
+					$Query .= "AND egroup._lang = '".$_SESSION["lang"]."' ";
+
+					$return = mysql_query($Query, $mysql_link);
+					$parent = ( $return ) ? mysql_fetch_row($return) : 0 ;
+
+					$Query  = "select _IDgroup, _ident from egroup ";
+					$Query .= "where _IDparent = '$parent[0]' ";
+					$Query .= "AND _lang = '".$_SESSION["lang"]."' ";
+					}
+				else {
+					$Query  = "select _IDflash, _title from flash ";
+					$Query .= "where _type = 'F' ";
+					$Query .= "AND _lang = '".$_SESSION["lang"]."' ";
+					$Query .= "order by _IDflash";
+					}
+
+				$return = mysql_query($Query, $mysql_link);
+				$flash  = ( $return ) ? mysql_fetch_row($return) : 0 ;
+
+				print("<option value=\"0\">". $msg->read($FIL_ALLANNOUNCE) ."</option>");
+
+				while ( $flash ) {
+					$select = ( $flash[0] == $IDflash ) ? "selected=\"selected\"" : "" ;
+
+					print("<option value=\"$flash[0]\" $select>$flash[1]</option>");
+
+					$flash  = mysql_fetch_row($return);
+		              	}
+			?>
+			</select>
+			</label>
+
+			<span style="cursor: pointer;" onclick="$('request')._display.toggle(); return false;"><img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/updown.png" title="" alt="" /></span>
+		</td>
+		<td class="align-center">
+			<?php print($msg->read($FIL_LIVENEWS)); ?>
+		</td>
+		<td class="align-right" style="width:30%; white-space:nowrap;">
+		<?php
+			if ( $IDgroup ) {
+				$query    = "select _access from egroup_user ";
+				$query   .= "where _ID = '".$_SESSION["CnxID"]."' AND _IDdata = '$IDgroup' ";
+				$query   .= "limit 1";
+
+				$result   = mysql_query($query, $mysql_link);
+				$row      = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+				$canWrite = (bool) ( $_SESSION["CnxSex"] != "A" AND ($row[0] & 2) );
+
+				// seuls les rédacteurs du egroupe peuvent poster
+				if ( $canWrite )
+					print("[<a href=\"".myurlencode("index.php?item=$item&cmde=wall&IDgroup=$IDgroup")."\">".$msg->read($FIL_ADDANNOUNCE)."</a>]");
+				}
+			else {
+				// les connexions anonymes n'ont pas le droit de poster des annonces
+				// ni les utilisateurs qui ne font pas partie de l'établissement
+				$canWrite = (bool) ( $_SESSION["CnxSex"] != "A" AND getAccess() == 2 );
+
+				if ( $canWrite )
+					print("[<a href=\"".myurlencode("index.php?item=$item&cmde=post")."\">".$msg->read($FIL_ADDANNOUNCE)."</a>]");
+				}
+		?>
+		</td>
+	  </tr>
+	</table>
+
+	<div id="request" style="display:none;">
+
+		<table class="width100">
+		  <tr>
+			<td style="width:14%"></td>
+			<?php
+				$list = explode(",", $msg->read($FIL_MONTH));
+
+				for ($i=0; $i < count($list); $i++)
+			            print("<td style=\"width:7%;\" class=\"align-center\">$list[$i]</td>");
+			?>
+		  </tr>
+
+		<?php
+			// lectures des années
+			$query   = "select max(_date), min(_date) from flash_fil ";
+			$query  .= ( $IDgroup ) ? "where _IDflash < 0 " : "where _IDflash > 0 " ;
+			$query  .= ( $IDflash ) ? "AND _IDflash = '$IDflash' " : "" ;
+
+			$return  = mysql_query($query, $mysql_link);
+			$myrow   = ( $return ) ? mysql_fetch_row($return) : 0 ;
+
+			// construction du tableau
+			$y_end   = (int) substr($myrow[0], 0, 4);
+			$y_start = (int) substr($myrow[1], 0, 4);
+
+			for ($i = $y_end; $i AND $i >= $y_start; $i--) {
+				print("<tr>");
+
+				// suppression de l'année
+				$req  = $msg->read($FIL_DELYEAR);
+				$del  = ( $_SESSION["CnxAdm"] == 255 )
+					? "<a href=\"index.php?item=$item&amp;IDflash=$IDflash&amp;year=$i&amp;submit=clear\" onclick=\"return confirmLink(this, '$req');\"><img src=\"".$_SESSION["ROOTDIR"]."/images/corb.gif\" title=\"$req\" alt=\"\" /></a>"
+					: "" ;
+
+				print("<td style=\"width:14%;\" class=\"align-right\">$i $del</td>");
+
+				for ($m = 1; $m <= 12; $m++) {
+					// détermination du nombre des annonces
+					$query  = "select _IDfil from flash_fil ";
+					$query .= ( $IDgroup ) ? "where _IDflash < 0 " : "where _IDflash > 0 " ;
+					$query .= ( $IDflash ) ? "AND _IDflash = '$IDflash' " : "" ;
+					$query .= "AND (_date >= '$i-$m-01 00:00:00' AND _date <= '$i-$m-31 23:59:59')";
+
+					$res  = mysql_query($query, $mysql_link);
+					$nb   = ( $res ) ? mysql_affected_rows($mysql_link) : 0 ;
+
+					$link = ( $nb )
+						? "<a href=\"index.php?item=$item&amp;IDflash=$IDflash&amp;month=$m&amp;year=$i\">$nb</a>"
+						: "" ;
+
+					print("<td class=\"align-center\" style=\"width:7%;\" class=\"item\">$link</td>");
+           				}
+
+				print("</tr>");
+				}
+		?>
+
+		</table>
+
+	</div>
+
+	</form>
+
+	<hr/>
+
+	<?php
+	// attention : _IDflash = 0 pour les annonces du calendrier
+	// _IDflash > 0 pour les annonces classiques et _IDflash < 0 pour le mur d'informations des egroupes
+	$query  = "select _IDfil, _ID, _IP, _IDflash, _date, _texte, _title, _img, _post, _persistent from flash_fil ";
+	$query .= ( $IDgroup ) ? "where _IDflash < 0 " : "where _IDflash > 0 " ;
+	$query .= ( $IDflash )
+		? ($IDgroup
+			? "AND (_IDflash = '-$IDgroup' OR _IDgroup = abs($parent[0])) "
+			: "AND _IDflash = '$IDflash' ")
+		: "" ;
+	$query .= ( $IDgroup AND !$IDflash )
+		? "AND (_date >= '$year-$month-01 00:00:00' AND _date <= '$year-$month-31 23:59:59') "
+		: "AND (_persistent = 'O' OR (_date >= '$year-$month-01 00:00:00' AND _date <= '$year-$month-31 23:59:59')) " ;
+	$query .= ( $IDgroup AND !$IDflash )
+		? "order by _IDfil desc"
+		: "order by _persistent asc, _IDfil desc" ;
+
+	$result = mysql_query($query, $mysql_link);
+	$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+	while ( $row ) {
+		// lecture de la catégorie de l'annonce
+		$return  = ( $row[3] > 0 )
+			? mysql_query("select _title from flash where _IDflash = '$row[3]' limit 1", $mysql_link)
+			: mysql_query("select _ident from egroup_data where _IDdata = abs($row[3]) limit 1", $mysql_link) ;
+		$title   = ( $return ) ? remove_magic_quotes(mysql_fetch_row($return)) : 0 ;
+
+		// info persistente
+		$fixed   = ( $row[9] == "O" )
+			? "<img src=\"".$_SESSION["ROOTDIR"]."/images/document.gif\" title=\"\" alt=\"\" />"
+			: "" ;
+
+		// suppression des annonces
+		$req    = $msg->read($FIL_DELANNOUNCE);
+		$del    = ( $_SESSION["CnxAdm"] == 255 )
+			? "<a href=\"".myurlencode("index.php?item=$item&IDgroup=$IDgroup&IDfil=$row[0]&submit=del")."\" onclick=\"return confirmLink(this, '$req');\"><img src=\"".$_SESSION["ROOTDIR"]."/images/corb.gif\" title=\"$req\" alt=\"$req\"  /></a>"
+			: "" ;
+
+		// modification des annonces
+		$cmde   = ( $IDgroup ) ? "wall" : "post" ;
+		$maj    = ( $_SESSION["CnxAdm"] == 255 OR $row[2] == $_SESSION["CnxID"] )
+			? "<a href=\"".myurlencode("index.php?item=$item&IDgroup=$IDgroup&IDfil=$row[0]&cmde=$cmde")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/stats/post.gif\" title=\"".$msg->read($FIL_UPDTANNOUNCE)."\" alt=\"".$msg->read($FIL_UPDTANNOUNCE)."\" /></a>"
+			: "" ;
+
+		// lecture des PJ
+		$return = mysql_query("select _IDpj, _file, _size from flash_filpj where _IDfil = '$row[0]' limit 1", $mysql_link);
+		$myrow  = ( $return ) ? remove_magic_quotes(mysql_fetch_row($return)) : 0 ;
+
+		$attdoc = ( $myrow )
+			? "<img src=\"".$_SESSION["ROOTDIR"]."/images/spip/pj.gif\" title=\"\" alt=\"\" /> <a href=\"$DOWNLOAD/fil/$myrow[0].".extension($myrow[1])."\" onclick=\"window.open(this.href, '_blank'); return false;\">$myrow[1]</a> " . $msg->read($FIL_BYTE, $myrow[2])
+			: "" ;
+
+		// lecture du compteur des commentaires
+		$res    = mysql_query("select _IDmsg from flash_filpost where _IDfil = '$row[0]'", $mysql_link);
+		$count  = ( $res ) ? mysql_affected_rows($mysql_link) : 0 ;
+
+		$msg->isPlural = (bool) ( $count > 1 );
+
+		$post   = ( $canWrite AND $row[8] == "O" )
+			? "(<a href=\"".myurlencode("index.php?item=$item&IDgroup=$IDgroup&IDfil=$row[0]&cmde=note")."\">". $msg->read($FIL_GETCOMMENT, strval($count)) ."</a>)"
+			: "" ;
+
+		// lecture du compteur des téléchargements
+		$res  = mysql_query("select _IDmsg from flash_filvu where _IDfil = '$row[0]'", $mysql_link);
+		$hit  = ( $res ) ? mysql_numrows($res) : 0 ;
+
+		$load = ( $hit )
+			? "<a href=\"#\" onclick=\"popWin('".$_SESSION["ROOTDIR"]."/user_list.php?IDfil=$row[0]&amp;cmde=fil&amp;lang=".$_SESSION["lang"]."', '450', '200'); return false;\">$hit</a>"
+			: "0" ;
+
+		print("
+			<table class=\"width100\">
+			  <tr>
+			    <td style=\"background-color:#EEEEEE;\">
+				<strong>[$title[0]]</strong> $row[6] <span class=\"x-small\">". $msg->read($FIL_HIT, $load) ."</span> $fixed $del $maj<br/>
+				<span class=\"x-small\">". $msg->read($FIL_POSTBY, Array(getUserName($row[1]), date2longfmt($row[4]), _getHostName($row[2]))) ."</span>
+			    </td>
+			  </tr>
+			</table>
+
+			<div style=\"border:#cccccc solid 1px; padding:4px; background-color:#ffffff; margin-bottom:10px;\">
+			<table class=\"width100\">
+			  <tr>
+			    <td style=\"width:1%\" class=\"valign-top\">
+				<img src=\"".$_SESSION["ROOTDIR"]."/images/spip/annonces/$row[7]\" title=\"\" alt=\"\" />
+			    </td>
+			    <td class=\"valign-top\">
+				". replace_smile(find_typo($row[5], $note)) ."<br/>
+				$attdoc<br/>
+				$post
+			    </td>
+			  </tr>
+			</table>
+			</div>
+			");
+
+		// mise à jour des log de lecture
+		if ( !mysql_query("insert into flash_filvu values('', '$row[0]', '".$_SESSION["CnxID"]."', '".$_SESSION["CnxIP"]."', '".date("Y-m-d H:i:s")."')", $mysql_link) )
+			mysql_query("update flash_filvu set _date = '".date("Y-m-d H:i:s")."' where _IDfil = '$row[0]' AND _ID = '".$_SESSION["CnxID"]."' limit 1", $mysql_link);
+
+		$row = remove_magic_quotes(mysql_fetch_row($result));
+		}
+	?>

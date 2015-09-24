@@ -1,0 +1,297 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2002-2007 by Dominique Laporte(C-E-D@wanadoo.fr)
+   Copyright (c) 2006 by Cyril Fresne (cyril.fresne@gmail.com)
+   Copyright (c) 2006 by Nordine Zetoutou (nordine.zetoutou@educagri.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : forum_moderer.htm
+ *		projet   : la page de modération des messages du forum
+ *
+ *		version  : 1.1
+ *		auteur   : laporte
+ *		creation : 10/11/02
+ *		modif    : 15/06/06 - par cyril fresne
+ *                     migration PHP5
+ *		           17/07/06 - Nordine Zetoutou
+ * 	                 migration des balises HTML en XHTML 1.0 strict
+ */
+ 
+
+$IDgroup = ( @$_POST["IDgroup"] )		// identifiant du e-groupe
+	? (int) $_POST["IDgroup"]
+	: (int) @$_GET["IDgroup"] ;
+$IDroot  = ( @$_POST["IDroot"] ) 		// ID du répertoire racine
+	? (int) $_POST["IDroot"]
+	: (int) @$_GET["IDroot"] ;
+
+$IDforum = ( @$_POST["IDforum"] )	 	// ID du forum
+	? (int) $_POST["IDforum"]
+	: (int) @$_GET["IDforum"] ;
+$IDmsg   = (int) @$_GET["IDmsg"];		// ID du message
+$parent  = (int) @$_GET["parent"];		// ID du message parent
+$nbelem  = (int) @$_GET["nbelem"];		// nombre de messages
+$pos     = (int) @$_GET["pos"];		// position du message dans la liste 
+$request = @$_GET["request"];
+
+$submit  = @$_GET["submit"];			// bouton de validation
+?>
+
+
+<?php
+	// lecture de la base de données des forums
+	$result = mysql_query("select _title, _mailcp, _IDmod from forum_data where _IDforum = '$IDforum' limit 1", $mysql_link);
+	$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+	// vérification des autorisations
+	admSessionAccess($row[2]);
+
+	// validation/annulation des messages
+	switch ( $submit ) {
+		case "valider" :
+			if ( mysql_query("update forum_items set _visible = 'O' where _IDmsg = '$IDmsg' limit 1", $mysql_link) )
+				// envoie par email
+				if ( $row[1] == "O" ) {
+					// lecture du message
+					$Query  = "select _title, _texte from forum_items ";
+					$Query .= "where _IDmsg = '$IDmsg'";
+
+					$return = mysql_query($Query, $mysql_link);
+					$myrow  = ( $return ) ? remove_magic_quotes(mysql_fetch_row($return)) : 0 ;
+
+					$sujet  = $myrow[0];
+					$texte  = $myrow[1];
+
+					// liste des abonnés
+					$Query  = "select _ID from forum_list ";
+					$Query .= "where _IDforum = '$IDforum' AND _visible = 'O'";
+
+					$return = mysql_query($Query, $mysql_link);
+					$myrow  = ( $return ) ? mysql_fetch_row($return) : 0 ;
+
+					// envoie du message par webmail
+					while ( $myrow ) {
+						$Query  = "select _email from user_id ";
+						$Query .= "where _ID = '$myrow[0]' ";
+						$Query .= "limit 1";
+
+						$ret    = mysql_query($Query, $mysql_link);
+						$sql    = ( $ret ) ? mysql_fetch_row($ret) : 0 ;
+
+						if ( $sql )
+							mail($sql[0], $sujet, $texte);
+
+						$myrow  = mysql_fetch_row($return);
+						}
+					}
+			break;
+
+		case "censurer" :
+			mysql_query("update forum_items set _visible = 'O', _censor = 'O' where _IDmsg = '$IDmsg' limit 1", $mysql_link);
+			break;
+
+		case "annuler" :
+			mysql_query("delete from forum_items where _IDmsg = '$IDmsg' limit 1", $mysql_link);
+			break;
+
+		default :
+			break;
+		}
+
+	// lecture des messages non validés
+	$Query  = "select _IDmsg from forum_items ";
+	$Query .= "where _IDforum = '$IDforum' AND _visible = 'N' ";
+	$Query .= "order by _IDmsg asc";
+
+	$result = mysql_query($Query, $mysql_link);
+	$myrow  = ( $result ) ? mysql_fetch_row($result) : 0 ;
+	$nbelem = ( $result ) ? mysql_numrows($result) : 0 ;
+
+	if ( $nbelem AND !$IDmsg )
+		$IDmsg = $myrow[0];
+?>
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($FORUM_MYFORUM, $row[0])); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+
+            <p style="margin-top:0px; margin-bottom:10px; text-align:justify;">
+		<?php print($msg->read($FORUM_MSGWAITING, strval($nbelem))); ?>
+		</p>
+
+		<?php
+			// lecture du message
+			$Query  = "select _title, _texte, _date, _ID, _IDmsg, _parent, _IP from forum_items ";
+			$Query .= "where _visible = 'N' ";
+
+			switch ( $request ) {
+				case "next" :
+					$Query .= "AND _IDmsg > '$IDmsg' AND _IDforum = '$IDforum' order by _IDmsg asc";
+					break;
+
+				case "prev" :
+					$Query .= "AND _IDmsg < '$IDmsg' AND _IDforum = '$IDforum' order by _IDmsg desc";
+					break;
+
+				default :
+					$Query .= "AND _IDmsg >= '$IDmsg' AND _IDforum = '$IDforum' order by _IDmsg asc";
+					break;
+				}
+
+			$result = mysql_query($Query, $mysql_link);
+			$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+			// position du message courant
+			$pos    = ( $request == "prev" )
+				? $nbelem - mysql_affected_rows($mysql_link) + 1
+				: mysql_affected_rows($mysql_link) ;
+
+			// lecture des données
+			$subject = $msg->read($FORUM_RE, $row[0]);
+			$subject = str_replace(" ", "+", $subject);
+
+			$IDmsg   = $row[4];
+			$parent  = $row[5];
+		?>
+
+            <table class="width100">
+              <tr>
+                <td>
+			<?php
+				$Query  = "select _IDforum, _title, _texte, _lang from forum_data ";
+				$Query .= "order by _title";
+
+				$result = mysql_query($Query, $mysql_link);
+				$myrow  = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+				print("<form id=\"formulaire\" action =\"\" method=\"post\">");
+
+				print("<label for=\"IDforum\">");
+				print("<select id=\"IDforum\" name=\"IDforum\" onchange=\"document.forms.formulaire.submit()\">");
+				while ( $myrow ) {
+					if ( $IDforum == $myrow[0] )
+						print("<option selected=\"selected\" value=\"$myrow[0]\">$myrow[1]</option>");
+					else
+						print("<option value=\"$myrow[0]\">$myrow[1]</option>");
+
+					$myrow = remove_magic_quotes(mysql_fetch_row($result));
+					}
+				print("</select> <img src=\"".$_SESSION["ROOTDIR"]."/images/group.gif\" title=\"\" alt=\"\" />");
+				print("</label>");
+
+				print("</form>");
+			?>
+                </td>
+
+                <td class="align-right">
+			<?php
+				$next = ( $pos > 1 )
+                			? "<a href=\"".myurlencode("index.php?item=$item&cmde=moderer&IDgroup=$IDgroup&IDforum=$IDforum&IDmsg=$IDmsg&parent=$parent&nbelem=$nbelem&pos=$pos&request=next")."\">".$msg->read($FORUM_NEXT)."</a>"
+                			: $msg->read($FORUM_NEXT) ;
+
+	                	$prev = ( $pos >= 1 AND $pos != $nbelem )
+      	          		? "<a href=\"".myurlencode("index.php?item=$item&cmde=moderer&IDgroup=$IDgroup&IDforum=$IDforum&IDmsg=$IDmsg&parent=$parent&nbelem=$nbelem&pos=$pos&request=prev")."\">".$msg->read($FORUM_PREV)."</a>"
+            	    		: $msg->read($FORUM_PREV) ;
+
+				print("[$prev]<strong>.</strong>[$next]");
+			?>
+                </td>
+              </tr>
+            </table>
+
+		<?php
+			// suppression des post
+			$req    = $msg->read($FORUM_ERASING, str_replace(Array(' ', '"'), Array('+', '\''), $row[0]));
+			$del    = ( $_SESSION["CnxAdm"] == 255 )
+				? "<a href=\"".myurlencode("index.php?item=$item&cmde=moderer&IDgroup=$IDgroup&IDforum=$IDforum&IDmsg=$IDmsg&submit=annuler")."\" onclick=\"return confirmLink(this, '$req');\"><img src=\"".$_SESSION["ROOTDIR"]."/images/corb.gif\" title=\"$req\" alt=\"\" /></a>"
+				: "" ;
+
+			// censure des post
+			$req    = $msg->read($FORUM_CENSORING, str_replace(Array(' ', '"'), Array('+', '\''), $row[0]));
+			$censor = ( $_SESSION["CnxAdm"] == 255 )
+				? "<a href=\"".myurlencode("index.php?item=$item&cmde=moderer&IDgroup=$IDgroup&IDforum=$IDforum&IDmsg=$IDmsg&submit=censurer")."\" onclick=\"return confirmLink(this, '$req');\"><img src=\"".$_SESSION["ROOTDIR"]."/images/forbidden.gif\" title=\"$req\" alt=\"\" /></a>"
+				: "" ;
+		?>
+
+            <!-- affichage de l'entête -->
+            <table class="width100">
+		<?php
+			if ( $nbelem )
+				print("
+		              <tr style=\"background-color:#c0c0c0;\">
+		                <td style=\"width:20%;\" class=\"align-right\">
+			                  ". $msg->read($FORUM_SUBJECT) ."<br/>
+			                  ". $msg->read($FORUM_AUTHOR) ."<br/>
+			                  ". $msg->read($FORUM_POSTED) ."
+		                </td>
+		                <td class=\"align-left\">
+
+
+
+						$row[0] $del $censor<br/>
+			                  ". getUserName($row[3]) ."<br/>
+			                  ". date2longfmt($row[2]) ."
+		                </td>
+		              </tr>");
+		?>
+
+		  <tr>
+                <td style="width:20%; border: 1px solid #c0c0c0;" class="valign-top align-center">
+			<?php
+				if ( $nbelem )
+					print("
+						<a href=\"".myurlencode("index.php?item=$item&cmde=moderer&IDgroup=$IDgroup&IDforum=$IDforum&IDmsg=$IDmsg&submit=valider")."\">
+						<img src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/valid.gif\" title=\"\" alt=\"\" /></a>
+						");
+			?>
+                </td>
+                <td style="border: 1px solid #c0c0c0;" class="valign-top">
+		    	<?php 
+				require_once "include/smileys.php";
+
+		    		if ( $nbelem )
+			    		print("". replace_smile(find_typo($row[1], $note)) .""); 
+		    		else
+		    			print("
+						<p style=\"text-align:center;\">
+						<img src=\"".$_SESSION["ROOTDIR"]."/images/warning.png\" title=\"\" alt=\"\" /><br/>
+						".$msg->read($FORUM_NOMSG)."
+		    				</p>");
+		    	?>
+		    </td>
+		  </tr>
+
+		  <tr>
+                <td colspan="2"><hr/></td>
+		  </tr>
+
+		  <tr>
+			<td class="align-right" colspan="2">
+		    	<?php print("[<a href=\"index.php?item=$item&amp;IDgroup=$IDgroup\">".$msg->read($FORUM_BACKTOLIST)."</a>]"); ?>
+                </td>
+		  </tr>
+		</table>
+
+</div>

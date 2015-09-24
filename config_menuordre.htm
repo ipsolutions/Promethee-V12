@@ -1,0 +1,230 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2006-2008 by Dominique Laporte(C-E-D@wanadoo.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : config_menu.htm
+ *		projet   : paramétrage des menus
+ *
+ *		version  : 1.0
+ *		auteur   : laporte
+ *		creation : 19/08/06
+ *		modif    : 
+ */
+
+$_GET["config"] = "on";
+ 
+$IDconf    = ( @$_POST["IDconf"] )					// ID de la configuration
+	? (int) $_POST["IDconf"]
+	: (int) @$_GET["IDconf"] ;
+
+$IDmenu    = ( @$_POST["IDmenu"] )					// ID du menu
+	? (int) $_POST["IDmenu"]
+	: (int) @$_GET["IDmenu"];
+$IDsubmenu = ( @$_POST["IDsubmenu"] )				// ID du sous menu
+	? (int) $_POST["IDsubmenu"]
+	: (int) @$_GET["IDsubmenu"] ;
+$IDitem    = (int) @$_POST["IDitem"];				// ID du type de e-groupe
+$text      = addslashes(trim(@$_POST["text"]));			// intitulé du menu
+
+$submit    = ( @$_GET["submit"] )					// bouton de validation
+	? $_GET["submit"]
+	: @$_POST["valid_x"] ;
+?>
+
+
+<?php
+	// vérification des autorisations
+	admSessionAccess();
+
+	switch ( $submit ) {
+		case "del" :
+		case "undel" :
+			if ( $submit == "del" )
+				mysql_query("update config_menu set _activate = 'N' where _IDmenu = '$IDmenu'", $mysql_link);
+			else
+				mysql_query("update config_menu set _activate = 'O' where _IDmenu = '$IDmenu'", $mysql_link);
+			break;
+
+		case "visible.gif" :
+			mysql_query("update config_submenu set _visible = 'N' where _IDsubmenu = '$IDsubmenu' limit 1", $mysql_link);
+			break;
+		case "invisible.gif" :
+			mysql_query("update config_submenu set _visible = 'O' where _IDsubmenu = '$IDsubmenu' limit 1", $mysql_link);
+			break;
+
+		case "erase" :
+			if ( mysql_query("delete from config_menu where _IDmenu = '$IDmenu'", $mysql_link) )
+				mysql_query("delete from config_submenu where _IDmenu = '$IDmenu'", $mysql_link);
+
+			$IDmenu = 0;
+			break;
+
+		default :
+			if ( $submit ) {
+				// recherche de la table ad hoc
+				$query  = "select _table from config_menu ";
+				$query .= "where _IDmenu = '$IDmenu' AND _lang = '".$_SESSION["lang"]."' ";
+				$query .= "limit 1";
+
+				$result = mysql_query($query, $mysql_link);
+				$row    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+				$record = ( $row[0] == "config_submenu" ) ? "_IDsubmenu" : "_IDmenu" ;
+				$sql    = ( $row[0] == "egroup_menu" ) ? "AND _IDitem = '$IDitem' " : "" ;
+
+				// initialisation
+				$query  = "update $row[0] ";
+				$query .= "set _visible = 'N', _anonyme = 'N', _backoffice = 'N' ";
+				$query .= "where _lang = '".$_SESSION["lang"]."' ";
+				$query .= ( $row[0] == "config_submenu" ) ? "AND _IDmenu = '$IDmenu' " : "" ;
+				$query .= $sql;
+
+				mysql_query($query, $mysql_link);
+
+				// cacher les items des menus
+				$cb = @$_POST["show"];
+				for ($i = 0; $i < count($cb); $i++)
+					mysql_query("update $row[0] set _visible = 'O' where $record = '".@$cb[$i]."' AND _lang = '".$_SESSION["lang"]."' $sql limit 1", $mysql_link);
+
+				// accès anonymes
+				$cb = @$_POST["access"];
+				for ($i = 0; $i < count($cb); $i++)
+					mysql_query("update $row[0] set _anonyme = 'O' where $record = '".@$cb[$i]."' AND _lang = '".$_SESSION["lang"]."' $sql limit 1", $mysql_link);
+
+				// backoffice
+				$cb = @$_POST["back"];
+				for ($i = 0; $i < count($cb); $i++)
+					mysql_query("update $row[0] set _backoffice = 'O' where $record = '".@$cb[$i]."' AND _lang = '".$_SESSION["lang"]."' $sql limit 1", $mysql_link);
+
+				// suppression
+				$cb = @$_POST["cbox"];
+				for ($i = 0; $i < count($cb); $i++)
+					mysql_query("delete from $row[0] where $record = '".@$cb[$i]."' AND _lang = '".$_SESSION["lang"]."' $sql limit 1", $mysql_link);
+				}
+			break;
+		}
+
+	if ( strlen($text) )
+		mysql_query("update config_menu set _ident = '$text' where _IDmenu = '$IDmenu' AND _lang = '".$_SESSION["lang"]."' limit 1", $mysql_link);
+?>
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($CONFIG_CONFIGMENUS)); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+
+        <table class="width100">
+          <tr>
+            <td style="width:100%;" class="align-center" colspan="2">
+			<span class="menucfg">
+			<img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/options.png" title="" alt="" />
+			<?php print("<a href=\"index.php?item=$item&amp;IDconf=$IDconf\">". $msg->read($CONFIG_OPTION) ."</a>"); ?>
+			</span>
+
+			<span class="menucfg">
+			<img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/config.png" title="" alt="" />
+			<?php print("<a href=\"index.php?item=$item&amp;cmde=skin&amp;IDconf=$IDconf\">". $msg->read($CONFIG_TUNE) ."</a>"); ?>
+			</span>
+
+			<span class="menucfg">
+			<img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/database.gif" title="" alt="" />
+			<?php print("<a href=\"index.php?item=$item&amp;cmde=dba&amp;IDconf=$IDconf\">". $msg->read($CONFIG_DATABASE) ."</a>"); ?>
+			</span>
+
+			<span class="menucfg">
+			<img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/personnaliser.gif" title="" alt="" />
+			<?php print("<a href=\"index.php?item=$item&amp;cmde=kwords&amp;IDconf=$IDconf\">". $msg->read($CONFIG_KEYWORDS) ."</a>"); ?>
+			</span>
+
+			<span style="margin:5px; padding:2px; border-style:solid; border-color:#000000; border-width:1px; background-color:#eeeeee;">
+			<img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/liste.png" title="" alt="" /> <?php print($msg->read($CONFIG_MENU)) ?>
+			</span>
+
+			<span class="menucfg">
+			<img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/p2p.png" title="" alt="" />
+			<?php print("<a href=\"index.php?item=$item&amp;cmde=p2p&amp;IDconf=$IDconf\">". $msg->read($CONFIG_P2P) ."</a>"); ?>
+			</span>
+            </td>
+          </tr>
+
+          <tr>
+            <td style="width:100%;" colspan="2"><hr/></td>
+          </tr>
+
+          <tr>
+			<td>
+				<?php
+					require_once "page_menu.php";
+
+					$Query  = "select _IDmenu, _ident, _marquee, _order, _img, _backoffice, _sort from config_menu ";
+					$Query .= "where _activate = 'O' ";
+					$Query .= "AND _lang = '".$_SESSION["lang"]."' AND _order > 0 ";
+					$Query .= ( $_SESSION["CnxAdm"] == 255 ) ? "" : "AND (_IDgrprd & ".pow(2, $_SESSION["CnxGrp"] - 1).") " ;
+					$Query .= "order by _order";
+
+					setmenu($Query);
+				?>
+			</td>
+			<td>
+				<?php
+					require_once "page_menu.php";
+
+					$Query  = "select _IDmenu, _ident, _marquee, _order, _img, _backoffice, _sort from config_menu ";
+					$Query .= "where _activate = 'O' ";
+					$Query .= "AND _lang = '".$_SESSION["lang"]."' AND _order < 0 ";
+					$Query .= ( $_SESSION["CnxAdm"] == 255 ) ? "" : "AND (_IDgrprd & ".pow(2, $_SESSION["CnxGrp"] - 1).") " ;
+					$Query .= "order by _order desc";
+
+					setmenu($Query);
+				?>
+			</td>
+		  </tr>
+		</table>
+            
+
+	<hr/>
+
+        <table class="width100">
+          <tr>
+             <td style="width:10%;" class="valign-middle align-center">
+			<?php print("<input type=\"image\" src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/valid.gif\" name=\"valid\" alt=\"".$msg->read($CONFIG_INPUTOK)."\" />"); ?>
+             </td>
+             <td class="valign-middle">
+			<?php print($msg->read($CONFIG_VALIDATE)); ?>
+             </td>
+          </tr>
+          <tr>
+             <td class="valign-middle align-center">
+			<a href="index.php"><?php print("<img src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/cancel.gif\" title=\"\" alt=\"".$msg->read($CONFIG_INPUTCANCEL)."\" />"); ?></a>
+             </td>
+             <td class="valign-middle">
+			<?php print($msg->read($CONFIG_GOHOME)); ?>
+             </td>
+          </tr>
+        </table>
+
+	</form>
+
+</div>

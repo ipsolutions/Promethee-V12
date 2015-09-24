@@ -1,0 +1,5 @@
+Wir informieren Sie, dass Ihr Kind %1 %2
+Bekanntgegeben wurde, fehlt heute : %3
+Und wurde nicht teilgenommen, in : %4
+
+Grüßen.

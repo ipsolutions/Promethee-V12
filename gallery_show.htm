@@ -1,0 +1,404 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2003-2008 by Dominique Laporte(C-E-D@wanadoo.fr)
+   Copyright (c) 2006 by Hugues Lecocq(hugues.lecocq@laposte.net)
+   Copyright (c) 2006 by Nordine Zetoutou (nordine.zetoutou@educagri.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : gallery_show.htm
+ *		projet   : la page de visualisation des images
+ *
+ *		version  : 1.1
+ *		auteur   : laporte
+ *		creation : 2/07/03
+ *		modif    : 30/11/03 - par D. Laporte
+ *                     implémentation wiki
+ *                     15/06/06 - par hugues lecocq
+ *                     migration php5
+ *		           17/07/06 - Nordine Zetoutou
+ * 	                 migration des balises HTML en XHTML 1.0 strict
+ */
+
+
+$IDgroup  = ( @$_POST["IDgroup"] )		// identifiant du e-groupe
+	? (int) $_POST["IDgroup"]
+	: (int) @$_GET["IDgroup"] ;
+$IDdata    = ( @$_POST["IDdata"] )		// identifiant de la table des photothèques
+	? (int) $_POST["IDdata"]
+	: (int) @$_GET["IDdata"] ;
+$IDitem    = ( @$_POST["IDitem"] )		// identifiant de la table image des photothèques
+	? (int) $_POST["IDitem"]
+	: (int) @$_GET["IDitem"] ;
+$IDgal     = ( @$_POST["IDgal"] )		// identifiant des galeries
+	? (int) $_POST["IDgal"]
+	: (int) @$_GET["IDgal"] ;
+$IDpage    = ( @$_POST["IDpage"] )     	// identifiant de la table Wiki ? ou Wiki page ?			
+	? (int) $_POST["IDpage"]
+	: (int) @$_GET["IDpage"] ;
+$sort      = ( @$_POST["sort"] )     	// tri des images		
+	? (int) $_POST["sort"]
+	: (int) @$_GET["sort"] ;
+$wiki_cmde = ( @$_POST["wiki_cmde"] )			
+	? $_POST["wiki_cmde"]
+	: @$_GET["wiki_cmde"] ;
+$wiki_text = ( @$_POST["wiki_text"] )			
+	? $_POST["wiki_text"]
+	: @$_GET["wiki_text"] ;
+
+$skpage    = ( @$_GET["skpage"] )		// n° de la page affichée
+	? (int) $_GET["skpage"]
+	: 1 ;
+$skshow    = ( @$_GET["skshow"] )		// n° du flash info
+	? (int) $_GET["skshow"]
+	: 1 ;
+ 
+$submit    = ( @$_POST["submit"] )		// bouton de validation
+	? $_POST["submit"]
+	: @$_GET["submit"] ;
+?>
+
+
+<script type="text/javascript" src="script/defil.js"></script>
+
+
+<?php
+	// initialisation
+	$result = mysql_query("select _IDitem from gallery_items where _IDdata = '$IDdata' ", $mysql_link);
+	$total  = ( $result ) ? mysql_affected_rows($mysql_link) : 0 ;
+	$nbitem = ( $total ) ? 1 : 0 ;
+
+     	switch ( $submit ) {
+     		case "del" :
+			// suppression de l'image
+			$Query   = "delete from gallery_items ";
+			$Query  .= "where _IDitem = '$IDitem'";
+
+			if ( !mysql_query($Query, $mysql_link) )
+				sql_error($mysql_link);
+			else
+				$wiki_cmde = "erase";
+			break;
+
+     		default :
+			// lecture de l'image
+			$Query   = "select _file, _texte, _IDdata, _width, _height, _date, _ID, _IP, _size, _titre, _IDitem from gallery_items ";
+			$Query  .= "where _IDdata = '$IDdata' ";
+	      	switch ( $submit ) {
+	      		case "next" :
+					$Query  .= "AND _IDitem > '$IDitem' order by _IDitem asc";
+	     				break;
+	      		case "prev" :
+					$Query  .= "AND _IDitem < '$IDitem' order by _IDitem desc";
+	     				break;
+	      		default :
+					$Query  .= "AND _IDitem <= '$IDitem' order by _IDitem desc";
+	     				break;
+				}
+
+			$result  = mysql_query($Query, $mysql_link);
+			$row     = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+			if ( $row ) {
+				$IDdata = $row[2];
+				$IDitem = $row[10];
+				}
+
+			$nbitem  = ( $result )
+				? ($submit == "next"
+					? $total - mysql_affected_rows($mysql_link) + 1
+					: mysql_affected_rows($mysql_link))
+				: 0 ;
+			break;
+     		}
+
+	// le propriétaire de l'image
+	$who     = getUserName($row[6], false);
+
+	// poids du fichier
+	$size    = number_format(floor($row[8] / 1024 ), 0, '', ' ');
+
+	// description du menu popup sur le lien
+	$desc    = $msg->read($GALLERY_CREATAT) ." ". str_replace(" ",  " ".$msg->read($GALLERY_AT)." ", $row[5]) ."<br/>";
+	$desc   .= $msg->read($GALLERY_AUTHOR) ." $who ". _getHostName($row[7], false) ."<br/>";
+	$desc   .= $msg->read($GALLERY_RESOLUTION, Array(strval($row[3]), strval($row[4]))) ."<br/>";
+	$desc   .= $msg->read($GALLERY_SIZE, strval($size));
+
+	$desc    = str_replace(Array("'", "\n", "\r"), Array("\'", "<br/>", ""), $desc);
+
+	// lecture de la galerie
+	$Query   = "select _title, _IDmod, _IDgrpwr from gallery_data ";
+	$Query  .= "where _IDdata = '$IDdata' ";
+	$Query  .= "limit 1";
+
+	$result  = mysql_query($Query, $mysql_link);
+	$gallery = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+?>
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($GALLERY_GALLERY)."<strong> > $gallery[0] > $row[0]</strong>"); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+
+	<?php
+		if ( $submit == "del" )
+			// image à afficher
+			$srcImage = "images/nophoto.gif";
+		else {
+			// mise à jour de la base de données
+			$Query  = "update gallery_items ";
+			$Query .= "set _hit = _hit + 1 ";
+			$Query .= "where _IDitem = '$IDitem'";
+
+			$result = mysql_query($Query, $mysql_link);
+
+			// image à afficher
+			$srcImage = strtolower(stripaccent("$DOWNLOAD/galerie/$IDdata/$row[0]"));
+			}
+
+		if ( strlen($row[1]) )
+			print("<div style=\"background-color:#eeeeee;\">". str_replace("\n", "<br/>", $row[1]) ."</div>");
+	?>
+
+		<table class="width100">
+		  <tr>
+		<?php
+			// défilement des images
+			$next = ( $nbitem == $total )
+				? $msg->read($GALLERY_NEXT)
+				: "<a href=\"".myurlencode("index.php?item=$item&IDgroup=$IDgroup&IDitem=$IDitem&IDgal=$IDgal&IDdata=$IDdata&sort=$sort&skpage=$skpage&skshow=$skshow&cmde=$cmde&submit=next")."\">". $msg->read($GALLERY_NEXT) ."</a>" ;
+			$prev = ( $nbitem == 1 )
+				? $msg->read($GALLERY_PREV)
+				: "<a href=\"".myurlencode("index.php?item=$item&IDgroup=$IDgroup&IDitem=$IDitem&IDgal=$IDgal&IDdata=$IDdata&sort=$sort&skpage=$skpage&skshow=$skshow&cmde=$cmde&submit=prev")."\">". $msg->read($GALLERY_PREV) ."</a>" ;
+			$back = "<a href=\"".myurlencode("index.php?item=$item&cmde=visu&IDgroup=$IDgroup&IDgal=$IDgal&IDdata=$IDdata&sort=$sort&skpage=$skpage&skshow=$skshow")."\">". $msg->read($GALLERY_BACKROOT) ."</a>";
+
+			print("<td style=\"width:33%;\">[$back]</td>");
+			print("<td style=\"width:33%;\" class=\"align-center\"><strong>$nbitem/$total</strong></td>");
+			print("<td style=\"width:33%;\" class=\"align-right\">[$prev]<strong>.</strong>[$next]</td>");
+		?>
+		  </tr>
+
+		  <tr>
+			<td colspan="3"><hr style="width:80%;" /></td>
+		  </tr>
+
+		  <tr>
+			<td style="width:100%" colspan="3" class="align-center">
+			<?php
+				if ( strlen($row[9]) )
+					print("<strong>$row[9]</strong><br/>");
+
+				print("
+					<a href=\"#\" class=\"overlib\">
+			  		<img src=\"$srcImage\" title=\"\"  alt=\"\" />
+					<span>$desc</span>
+					</a>");
+			?>
+			</td>
+		  </tr>
+		</table>
+
+	<?php
+		require_once "include/wiki.php";
+
+		if ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $gallery[1] OR ($gallery[2] & pow(2, $_SESSION["CnxGrp"] - 1)) ) {
+			$wk = new wiki;
+
+			// initialisation des variables de l'objet wiki
+			$wk->tag     = "$gallery[0]_$IDitem";
+			$wk->version = "$item.$IDroot";
+			$wk->owner   = $who;
+			$wk->admin   = (bool) ($_SESSION["CnxAdm"] == 255 OR $gallery[1] == $_SESSION["CnxID"]);
+			$wk->user    = (bool) ($gallery[2] & pow(2, $_SESSION["CnxGrp"] - 1));
+			$wk->link    = myurlencode("index.php?item=$item&IDgal=$IDgal&IDdata=$IDdata&IDitem=$IDitem&skpage=$skpage&skshow=$skshow&cmde=show");
+
+			switch ( $wiki_cmde ) {
+				case "next" :
+					$wk->nextPage($IDpage);
+					break;
+
+				case "prev" :
+					$wk->prevPage($IDpage);
+					break;
+
+				case "lock" :
+					$wk->setLock($IDpage);
+					$wk->show();
+					break;
+
+				case "del" :
+					$wk->delete($IDpage);
+					$wk->show();
+					break;
+
+				case "erase" :
+					$wk->erase();
+					break;
+
+				case "valid" :
+					$wk->validate($IDpage);
+					$wk->show();
+					break;
+
+				case "edit" :
+					$wk->edit($IDpage);
+					break;
+
+				case "insert" :
+					$wk->insert($row[0], $wiki_text, $_SESSION["CnxName"]);
+					$wk->show();
+					break;
+
+				default :
+					// description de l'image
+					$wk->show();
+					break;
+				}
+			}
+	?>
+
+		<table class="width100">
+		  <tr>
+			<td colspan="2">
+				<div id="mod_defil" class="mod_defil">
+				<div id="support"   class="support_xl">
+				<div id="contenu"   class="contenu_xl">
+
+                        <table class="table_defil">
+                          <tr> 
+                            <?php
+					// lecture de la base de données
+					$Query  = "select _file, _IDitem, _height, _width from gallery_items ";
+					$Query .= "where _IDdata = '$IDdata' ";
+					$Query .= ( $_SESSION["CnxAdm"] == 255 ) ? "" : "AND _visible = 'O' " ;
+					$Query .= "order by _IDitem asc";
+/*
+					switch ( $sort ) {
+						case 1 :
+							$Query .= "order by _date asc";
+							break;
+						case 2 :
+							$Query .= "order by _IDitem asc";
+							break;
+						case 3 :
+							$Query .= "order by _hit desc";
+							break;
+						default :
+							$Query .= "order by _file asc";
+							break;
+						}
+*/
+
+					$result = mysql_query($Query, $mysql_link);
+					$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+					$width  = 0;
+	            		$path   = "$DOWNLOAD/galerie/$IDdata/vignettes";
+
+					while ( $row ) {
+						// image : 160 x 120 max
+						$maxWidth    = 160;
+						$maxHeight   = 120;
+
+						$ratioWidth  = $row[3] / $maxWidth;
+						$ratioHeight = $row[2] / $maxHeight;
+
+						// taille maximale dépassée ?
+						if ( $ratioWidth > 1 OR $ratioHeight > 1 ) {
+							if( $ratioWidth < $ratioHeight ) {
+								$width += (int) ($row[3] / $ratioHeight);
+								$height = $maxHeight; 
+								}
+							else {
+								$width += $maxWidth; 
+								$height = (int) ($row[2] / $ratioWidth);
+								}
+							}
+						else {
+							$width += $row[3];
+							$height = $row[2];
+							}
+
+						print("
+							<td class=\"defil\">
+								<a href=\"".myurlencode("index.php?item=$item&IDgroup=$IDgroup&IDgal=$IDgal&IDdata=$IDdata&IDitem=$row[1]&skpage=$skpage&skshow=$skshow&cmde=show")."\">
+								<img src=\"$path/".strtolower(stripaccent($row[0]))."\" title=\"$row[0]\" alt=\"\" class=\"image\" height=\"$height\" />
+								</a>
+							</td>
+							");
+
+						$row = remove_magic_quotes(mysql_fetch_row($result));
+						}
+				?>
+                          </tr>
+                        </table>
+
+				</div>
+				</div>
+
+				<div class="navi_left">
+					<span class="pointer" onmouseover="javascript:moveLayerLeft(1, 20, <?php echo $width; ?>);" onmouseout="javascript:clearTimeout(Timer);">&laquo;&laquo;</span>
+					<span>&nbsp;&nbsp;&nbsp;</span>
+					<span class="pointer" onmouseover="javascript:moveLayerLeft(1, 5, <?php echo $width; ?>);" onmouseout="javascript:clearTimeout(Timer);">&laquo;</span>
+				</div>
+
+				<div class="navi_right">
+					<span class="pointer" onmouseover="javascript:moveLayerLeft(-1, 5, <?php echo $width; ?>);" onmouseout="javascript:clearTimeout(Timer);">&raquo;</span>
+					<span>&nbsp;&nbsp;&nbsp;</span>
+					<span class="pointer" onmouseover="javascript:moveLayerLeft(-1, 20, <?php echo $width; ?>);" onmouseout="javascript:clearTimeout(Timer);">&raquo;&raquo;</span>
+				</div>
+
+				</div>
+			</td>
+		  </tr>
+
+		  <tr>
+			<td colspan="2"><hr style="width:80%;" /></td>
+		  </tr>
+
+		  <tr>
+			<td>
+			<?php
+				// retour à la galerie
+				$back  = "<a href=\"".myurlencode("index.php?item=$item&cmde=visu&IDgroup=$IDgroup&IDgal=$IDgal&IDdata=$IDdata&sort=$sort&skpage=$skpage&skshow=$skshow")."\">";
+				$back .= $msg->read($GALLERY_BACKROOT);
+				$back .= "</a>";
+
+				print("[$back]");
+			?>
+			</td>
+			<td class="align-right">
+			<?php
+				// seul le modérateur peut effacer une image
+				$del  = "<a href=\"".myurlencode("index.php?item=$item&IDgroup=$IDgroup&IDitem=$IDitem&IDgal=$IDgal&IDdata=$IDdata&sort=$sort&skpage=$skpage&skshow=$skshow&cmde=$cmde&submit=del")."\">";
+				$del .= $msg->read($GALLERY_DELIMAGE);
+				$del .= "</a>";
+
+         			if ( $_SESSION["CnxAdm"] == 255 OR $gallery[1] == $_SESSION["CnxID"] )
+					print("[$del]");
+			?>
+			</td>
+		  </tr>
+		</table>
+
+</div>

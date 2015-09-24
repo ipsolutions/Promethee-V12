@@ -1,0 +1,444 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2007-2008 by Dominique Laporte(C-E-D@wanadoo.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : cms_post.htm
+ *		projet   : la page de saisie des contenus d'information
+ *
+ *		version  : 1.0
+ *		auteur   : laporte
+ *		creation : 7/10/07
+ *		modif    : 
+ */
+
+
+$IDinfos   = ( @$_POST["IDinfos"] )					// identifiant des rubriques des publications par internet
+	? (int) $_POST["IDinfos"]
+	: (int) @$_GET["IDinfos"] ;
+$IDitem    = ( @$_POST["IDitem"] )					// identifiant des articles
+	? (int) $_POST["IDitem"]
+	: (int) @$_GET["IDitem"] ;
+$IDsubmenu = ( @$_POST["IDsubmenu"] )				// identifiant du menu
+	? (int) $_POST["IDsubmenu"]
+	: (int) @$_GET["IDsubmenu"] ;
+$texte     = addslashes(trim(@$_POST["texte"]));		// texte de l'annonce
+$IDpj      = (int) @$_GET["IDpj"];					// ID de la pièce jointe
+
+$submit    = ( @$_POST["valid_x"] )					// bouton de validation
+	? "valid"
+	:  @$_GET["submit"] ;
+?>
+
+
+<?php
+//---------------------------------------------------------------------------
+function attachment($IDitem)
+{
+/*
+ * fonction :	enregistrement des PJ
+ * in :		$IDitem : ID de l'article
+ * out :		tableau du path des différentes PJ
+ */
+
+	require "globals.php";
+
+	// transfert d'une Pièce Jointe
+	$file = @$_FILES["UploadPJ"]["tmp_name"];
+	$pj   = Array();
+
+	for ($j = 0; $j < count($file) && @$file[$j]; $j++)
+		if ( authfile(@$_FILES["UploadPJ"]["name"][$j]) ) {
+			// extension du fichier en PJ
+			$ext    = extension(@$_FILES["UploadPJ"]["name"][$j]);
+			$pjdesc = addslashes(trim(@$_POST["PJdesc"][$j]));
+
+			$Query  = "insert into flash_pj ";
+			$Query .= "values('', '$IDitem', '".@$_FILES["UploadPJ"]["name"][$j]."', '$pjdesc', '$ext', '".@$_FILES["UploadPJ"]["size"][$j]."', '', 'O', 'O')";
+
+			if ( !mysql_query($Query, $mysql_link) )
+				sql_error($mysql_link);
+			else {
+				// fichier destination
+				$dest   = "$DOWNLOAD/flash/". mysql_insert_id() .".$ext";
+				$pj[$j] = $dest;
+
+				// copie du fichier temporaire -> répertoire de stockage
+				if ( move_uploaded_file($file[$j], $dest) )
+					mychmod($dest, $CHMOD);
+				}
+			}
+
+	return $pj;
+}
+//---------------------------------------------------------------------------
+
+	require_once "include/flash.php";
+
+	// lecture de la base de données des flash info
+	$query   = "select flash._title, flash._IDmod, flash._PJ, flash._chrono, flash._autoval, flash_data._title, flash._IDgrpwr ";
+	$query  .= "from flash, flash_data ";
+	$query  .= "where flash_data._IDinfos = '$IDinfos' ";
+	$query  .= "AND flash_data._IDflash = flash._IDflash ";
+	$query  .= "limit 1";
+
+	$result  = mysql_query($query, $mysql_link);
+	$row     = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+	// vérification des autorisations
+	if ( ($row[6] & pow(2, $_SESSION["CnxGrp"] - 1)) == 0 )
+		verifySessionAccess($row[1]);
+
+	$main    = $row[0];
+	$is_pj   = $row[2];
+	$chrono  = $row[3];
+	$autoval = $row[4];
+	$title   = $row[5];
+
+	// initialisation du statut et des erreurs
+	$status  = "-";
+
+	// on détermine le niveau du menu
+	$query   = "select _IDmenu from config_submenu ";
+	$query  .= "where _lang = '".$_SESSION["lang"]."' ";
+	$query  .= "AND _IDsubmenu = '$IDsubmenu' ";
+	$query  .= "limit 1";
+
+	$result  = mysql_query($query, $mysql_link);
+	$myrow   = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+	// saisie d'un article
+	switch ( $submit ) {
+		case "valid" :
+			// on récupère la date pour maj
+			$date  = date("Y-m-d H:i:s");
+			$texte = str_replace("\r\n", "", $texte);
+
+			// vérification de la saisie
+			if ( !strlen($texte) )
+				$status = "<span style=\"color:#FF0000\">". $msg->read($CMS_ERRTEXT) ."</span>";
+
+			if ( $status == "-" ) {
+				$status  = ( $IDitem ) ? $msg->read($CMS_MODIFY) : $msg->read($CMS_INSERT) ;
+
+				$mytitle = ( $myrow[0] < 0 ) ? "#menu_item:$IDsubmenu" : "" ;
+
+				// insertion d'une nouvelle rubrique dans la base de données
+				if ( !$IDitem ) {
+					$Query  = "INSERT INTO flash_items ";
+					$Query .= "VALUES ('', '$IDinfos', '$date', '$date', '".$_SESSION["CnxID"]."', '".$_SESSION["CnxIP"]."', '$mytitle', '$texte', '', '', '', '', '', '', '0', '$autoval') ";
+					}
+				// sinon on effectue la mise à jour
+				else { 
+					// seuls les propriétaires peuvent modifier leurs articles
+					$Query  = "UPDATE flash_items ";
+					$Query .= "SET _modif = '$date', ";
+					$Query .= "_ID = '".$_SESSION["CnxID"]."', ";
+					$Query .= "_IP = '".$_SESSION["CnxIP"]."' ";
+					$Query .= ( strlen($texte) )   ? ", _texte = '$texte' " : "" ;
+					$Query .= "where _IDitem = '$IDitem' ";
+					$Query .= "limit 1" ;
+					}
+
+				if ( mysql_query($Query, $mysql_link) ) {
+					if ( !$IDitem ) {
+						$IDitem = mysql_insert_id();
+
+						mysql_query("update flash_items set _order = '$IDitem' limit 1", $mysql_link);
+						}
+
+					// transfert d'une Pièce Jointe
+					attachment($IDitem);
+
+					$status .= " <img src=\"".$_SESSION["ROOTDIR"]."/images/ok.gif\" title=\"\" alt=\"\" />";
+					}
+				else
+					$status .= " <img src=\"".$_SESSION["ROOTDIR"]."/images/bad.gif\" title=\"\" alt=\"\" />";
+				}	// endif error
+			break;
+
+		case "del" :
+		case "delpj" :
+			$myret = mysql_query("select _ID from flash_items where where _IDitem = '$IDitem' limit 1", $mysql_link);
+			$mysql = ( $myret ) ? mysql_fetch_row($myret) : 0 ;
+
+			if ( $_SESSION["CnxID"] == $mysql[0] OR ($_SESSION["CnxAdm"] & 8) ) {
+				$query = ( $submit == "del" )
+					? "select _IDpj, _ext from flash_pj where _IDitem = '$IDitem'"
+					: "select _IDpj, _ext from flash_pj where _IDpj = '$IDpj' limit 1" ;
+
+				// lecture des Pièces Jointes
+				$myret = mysql_query($query, $mysql_link);
+				$mysql = ( $myret ) ? mysql_fetch_row($myret) : 0 ;
+
+				// suppression des PJ
+				while ( $mysql ) {
+					unlink("$DOWNLOAD/flash/$mysql[0].$mysql[1]");
+
+					$mysql = mysql_fetch_row($myret);
+					}
+
+				mysql_query("delete from flash_pj where _IDitem = '$IDitem'", $mysql_link);
+
+				if ( $submit == "del" )
+					if ( mysql_query("delete from flash_items where _IDitem = '$IDitem' limit 1", $mysql_link) )
+						$IDitem = 0;
+				}
+			break;
+
+		case "visible" :
+		case "invisible" :
+			$visible = ( $submit == "visible" ) ? "N" : "O" ;
+
+			$query   = "update flash_items ";
+			$query  .= "set _visible = '$visible' ";
+			$query  .= "where _IDitem = '$IDitem' ";
+			$query  .= ( $_SESSION["CnxAdm"] == 255 ) ? "" : "AND _ID = '".$_SESSION["CnxID"]."' " ;
+			$query  .= "limit 1";
+
+			mysql_query($query, $mysql_link);
+			break;
+
+		default :
+			break;
+		}	// endswitch
+
+	// sélection de l'article
+	$Query  = "select _IDitem, _texte from flash_items ";
+	$Query .= "where _IDinfos = '$IDinfos' " ;
+	$Query .= "AND _IDitem = '$IDitem' ";
+	$Query .= "limit 1" ;
+
+	$myret  = mysql_query($Query, $mysql_link);
+	$mysql  = ( $myret ) ? remove_magic_quotes(mysql_fetch_row($myret)) : 0 ;
+
+	$IDitem = (int) $mysql[0];
+	$texte  = $mysql[1];
+?>
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($CMS_SUBMIT, strtoupper(read_menutitle($main)))); ?><br/>
+		<?php print($msg->read($CMS_FORMPOST)); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+
+	<table class="width100">
+	  <tr>
+	    <td style="width:10%;" class="align-right"><?php print($msg->read($CMS_STATUS)); ?></td>
+	    <td><?php print($status); ?></td>
+	  </tr>
+
+	  <tr>
+	    <td class="align-right"><?php print($msg->read($CMS_ITEM)); ?></td>
+	    <td>
+		<?php
+			$mytitle  = read_menutitle($title);
+			$mytitle .= ( $myrow[0] < 0 ) ? "/" . read_menutitle("#menu_item:$IDsubmenu") : "" ;
+
+			print("<a href=\"index.php?item=$item&amp;cmde=cms&amp;IDsubmenu=$IDsubmenu\">$mytitle</a>");
+		?>
+	    </td>
+	  </tr>
+
+	  <tr>
+	    <td style="height:10px;"></td>
+	  </tr>
+	</table>
+
+	<form id="formulaire" action="index.php" method="post" enctype="multipart/form-data">
+	<?php
+		print("
+			<p class=\"hidden\"><input type=\"hidden\" name=\"item\"      value=\"$item\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"cmde\"      value=\"$cmde\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"IDinfos\"   value=\"$IDinfos\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"IDsubmenu\" value=\"$IDsubmenu\" /></p>
+			");
+	?>
+
+             <table class="width100">
+               <tr>
+                 <td class="valign-bottom" style="background-color:#eeeeee;">
+			<?php
+				print("<strong>. </strong><select style=\"font-size: 9px;\" onchange=\"document.forms.formulaire.submit()\" name=\"IDitem\">");
+
+				// affichage des annonces
+				$query  = "select _IDitem, _date, _visible from flash_items ";
+				$query .= "where _IDinfos = '$IDinfos' ";
+				$query .= ( $myrow[0] < 0 ) ? "AND _title = '#menu_item:$IDsubmenu' " : "AND _title not like '#menu_item:%' " ;
+				$query .= "order by _IDitem ";
+				$query .= ( $chrono == "O" ) ? "asc" : "desc" ;
+
+				$result = mysql_query($query, $mysql_link);
+				$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+				$select = "";
+
+				print("<option value=\"0\">". $msg->read($CMS_NEWTEXT) ."</option>");
+
+				while ( $row ) {
+					$status = ( $row[2] == "O" ) ? $msg->read($CMS_PUBLISHED) : $msg->read($CMS_AWAITING) ;
+
+					if ( $IDitem == $row[0] ) {
+						$select = ( $row[2] == "O" ) ? "visible" : "invisible";
+
+						print("<option selected=\"selected\" value=\"$row[0]\">". $msg->read($CMS_TEXT, Array(strval($row[0]), date2longfmt($row[1]))) ." ($status)</option>");
+						}
+					else
+						print("<option value=\"$row[0]\">". $msg->read($CMS_TEXT, Array(strval($row[0]), date2longfmt($row[1]))) ." ($status)</option>");
+
+					$row    = remove_magic_quotes(mysql_fetch_row($result));
+					}				
+
+				if ( $IDitem ) {
+					$visible = ( $_SESSION["CnxAdm"] & 8 )
+						? "<a href=\"".myurlencode("index.php?item=$item&cmde=$cmde&IDinfos=$IDinfos&IDitem=$IDitem&IDsubmenu=$IDsubmenu&submit=$select")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/$select.gif\" title=\"\" alt=\"\" /></a>"
+						: "" ;
+
+					$delete  = "<a href=\"".myurlencode("index.php?item=$item&cmde=$cmde&IDinfos=$IDinfos&IDitem=$IDitem&IDsubmenu=$IDsubmenu&submit=del")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/corb.gif\" title=\"\" alt=\"\" /></a>";
+					}
+				else
+					$visible = $delete = "";
+
+				print("</select> $visible $delete");
+			?>
+                  </td>
+                </tr>
+
+                <tr>
+                  <td>
+			<?php
+					$oFCKeditor           = new FCKeditor("texte") ;
+					$oFCKeditor->BasePath = "./script/fckeditor/";
+					$oFCKeditor->Height   = 500;
+					$oFCKeditor->Value    = $texte;
+					$oFCKeditor->Create() ;
+			?>
+			</td>
+                </tr>
+              </table>
+
+                <?php
+			// Pièce Jointe sur un message
+			if ( $is_pj )
+			    	print("<table class=\"width100\">");
+
+				// lecture des Pièces Jointes
+				$res = mysql_query("select _IDpj, _ext, _size, _title from flash_pj where _IDitem = '$IDitem'", $mysql_link);
+				$row = ( $res ) ? mysql_fetch_row($res) : 0 ;
+
+				if ( $row ) {
+				    	print("
+					    <tr>
+					      <td class=\"valign-middle align-right\"><img src=\"".$_SESSION["ROOTDIR"]."/images/pj.gif\" title=\"\" alt=\"\" /></td>
+					      <td>
+						");
+
+					while ( $row ) {
+						// description de la pièce jointe
+						$desc = $msg->read($CMS_SIZE, $row[2]) ."<br/>". $row[3];
+
+						print("
+							<img src=\"".$_SESSION["ROOTDIR"]."/images/mime/$row[1].gif\" title=\"$row[1]\" alt=\"$row[1]\" />
+							". $msg->read($CMS_DOC, Array("#", str_replace("'", "\'", $desc), "")) ." 
+							<a href=\"".myurlencode("index.php?item=$item&cmde=$cmde&IDinfos=$IDinfos&IDitem=$IDitem&IDsubmenu=$IDsubmenu&IDpj=$row[0]&submit=delpj")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/corb.gif\" title=\"\" alt=\"\" /></a><br />
+							");
+
+						$row  = mysql_fetch_row($res);
+						}
+
+				    	print("
+					      </td>
+					    </tr>
+					    	");
+					}
+
+				$addpj = ( $is_pj > 1 )
+					? "<span style=\"cursor: pointer;\" onclick=\"$('more')._display.toggle(); return false;\"><img src=\"".$_SESSION["ROOTDIR"]."/images/ajouter.gif\" title=\"\" alt=\"\" /></span>"
+					: "" ;
+
+			    	print("
+				    <tr>
+				      <td class=\"align-right valign-top\">
+						". $msg->read($CMS_ATTACHMENT) ."<br />
+						$addpj
+					</td>
+					<td>");
+
+				print("
+					<fieldset style=\"width:80%; border:#cccccc solid 1px;\">
+					<legend>". $msg->read($CMS_ATTACHED) ." 1</legend>
+						<p class=\"hidden\"><input type=\"hidden\" name=\"MAX_FILE_SIZE\" value=\"$FILESIZE\" /></p>
+						<input type=\"file\" name=\"UploadPJ[]\" size=\"50\" style=\"font-size:9px; margin-bottom:5px;\" /><br />
+						<label for=\"PJdesc_1\">
+						<input type=\"text\" id=\"PJdesc_1\" name=\"PJdesc[]\" size=\"50\" />
+						". $msg->read($CMS_ATTDESCRIPTION) ."
+						</label>
+					</fieldset>");
+
+				print("<div id=\"more\" style=\"display:none;\">");
+
+				for ($i = 2; $i <= $is_pj; $i++) {
+					print("
+						<fieldset style=\"width:80%; border:#cccccc solid 1px;\">
+						<legend>". $msg->read($CMS_ATTACHED) ." $i</legend>
+							<p class=\"hidden\"><input type=\"hidden\" name=\"MAX_FILE_SIZE\" value=\"$FILESIZE\" /></p>
+							<input type=\"file\" name=\"UploadPJ[]\" size=\"50\" style=\"font-size:9px; margin-bottom:5px;\" /><br />
+							<label for=\"PJdesc_$i\">
+							<input type=\"text\" id=\"PJdesc_$i\" name=\"PJdesc[]\" size=\"50\" />
+							". $msg->read($CMS_ATTDESCRIPTION) ."
+							</label>
+						</fieldset>");
+					}
+
+				print("</div>");
+
+				print("
+				      </td>
+				    </tr>
+		              </table>");
+                ?>
+
+	<hr style="width:80%;" />
+
+         <table class="width100">
+           <tr>
+              <td style="width:10%;" class="valign-middle align-center">
+              	<?php print("<input type=\"image\" src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/valid.gif\" name=\"valid\" alt=\"".$msg->read($CMS_INPUTOK)."\" />"); ?>
+              </td>
+              <td class="valign-middle">
+              	<?php print($msg->read($CMS_VALID)); ?>
+              </td>
+           </tr>
+           <tr>
+              <td class="valign-middle align-center">
+              	<a href="index.php"><?php print("<img src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/cancel.gif\" title=\"\" alt=\"".$msg->read($CMS_INPUTCANCEL)."\" />"); ?></a>
+              </td>
+              <td class="valign-middle">
+              	<?php print($msg->read($CMS_QUIT)); ?>
+              </td>
+           </tr>
+         </table>
+
+	</form>
+
+</div>

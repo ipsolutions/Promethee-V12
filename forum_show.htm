@@ -1,0 +1,774 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2002-2007 by Dominique Laporte(C-E-D@wanadoo.fr)
+   Copyright (c) 2006 by Cyril Fresne (cyril.fresne@gmail.com)
+   Copyright (c) 2006 by Nordine Zetoutou (nordine.zetoutou@educagri.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : forum_show.htm
+ *		projet   : la page de visualisation et de réponse aux messages du forum
+ *
+ *		version  : 1.5
+ *		auteur   : laporte
+ *		creation : 30/10/02
+ *		modif    : 14/06/03 - par D. Laporte
+ *                     prise en compte des avatars
+ *
+ *		           25/09/03 - par D. Laporte
+ *                     affichage des pièces jointes
+ *
+ *		           7/12/03 - par D. Laporte
+ *                     modification / suppression des messages
+ *
+ *		           27/12/03 - par D. Laporte
+ *                     email
+ *
+ *		           27/10/05 - par D. Laporte
+ *                     vues déployées et réduites
+ *
+ *			     15/06/06 - par cyril fresne
+ *                     migration PHP5
+ *
+ *		           17/07/06 - Nordine Zetoutou
+ * 	                 migration des balises HTML en XHTML 1.0 strict
+ */
+ 
+
+$IDgroup = ( @$_POST["IDgroup"] )		// identifiant du e-groupe
+	? (int) $_POST["IDgroup"]
+	: (int) @$_GET["IDgroup"] ;
+$IDroot  = ( @$_POST["IDroot"] ) 		// ID du répertoire racine
+	? (int) $_POST["IDroot"]
+	: (int) @$_GET["IDroot"] ;
+$IDforum = ( @$_POST["IDforum"] ) 		// ID du forum
+	? (int) $_POST["IDforum"]
+	: (int) @$_GET["IDforum"] ;
+$IDmsg   = ( @$_POST["IDmsg"] ) 		// ID du message
+	? (int) $_POST["IDmsg"]
+	: (int) @$_GET["IDmsg"] ;
+$parent = ( @$_POST["parent"] ) 		// ID du message parent
+	? (int) $_POST["parent"]
+	: (int) @$_GET["parent"] ;
+$visu    = ( @$_POST["visu"] ) 	      // commentaire
+	? $_POST["visu"]
+	: @$_GET["visu"] ;
+$deploy  = ( @$_POST["deploy"] ) 	      // items déployés
+	? $_POST["deploy"]
+	: @$_GET["deploy"] ;
+$subject = ( @$_POST["subject"] ) 	      // le sujet du message
+	? $_POST["subject"]
+	: @$_GET["subject"] ;
+$request = ( @$_POST["request"] ) 	      // commentaire
+	? $_POST["request"]
+	: @$_GET["request"] ;
+
+$submit  = ( @$_POST["submit"] )		// bouton de validation
+	? $_POST["submit"]
+	: @$_GET["submit"] ;
+?>
+
+
+<?php
+	require_once "include/smileys.php";
+	require_once "include/spip.php";
+	require_once "include/user.php";
+
+	//---------------------------------------------------------------------------
+	function changechild($newforum, $parent)
+	{
+		global $mysql_link;
+
+		// lecture de la base de données
+		$Query  = "select _IDmsg from forum_items ";
+		$Query .= "where _parent = '$parent'";
+
+		$result = mysql_query($Query, $mysql_link);
+		$row    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+		while ( $row ) {
+			if ( mysql_query("update forum_items set _IDforum = '$newforum' where _IDmsg = '$row[0]' limit 1", $mysql_link) )
+				changechild($newforum, $row[0]);
+
+			$row = mysql_fetch_row($result);
+			}
+	}
+	//---------------------------------------------------------------------------
+
+	// pour les forums privés (gestion par ACL)
+	$acl = new user_acl("forum");
+
+	// lecture du droit de lecture
+	$query    = "select distinctrow ";
+	$query   .= "forum_data._IDgrprd, forum_data._private, forum_data._IDmod ";
+	$query   .= "from forum_data, forum_items ";
+	$query   .= ( $IDmsg ) ? "where forum_items._IDmsg = '$IDmsg' " : "where forum_data._IDforum = '$IDforum' " ;
+	$query   .= "AND forum_data._IDforum = forum_items._IDforum ";
+	$query   .= "limit 1";
+
+	$result = mysql_query($query, $mysql_link);
+	$auth   = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+	// vérification des autorisations
+	verifySessionAccess($auth[2], $auth[0]);
+
+	// si pas d'autorisation => bye, bye
+	if ( $auth[1] == "O" AND !$acl->isMember($IDforum, $_SESSION["CnxID"]) )
+		logSessionAccess();
+
+	// l'utilisateur a validé une commande
+	switch ( $submit ) {
+		case "del" :
+			$IDpj   = (int) @$_GET["msgid"];
+
+			$Query  = "DELETE from forum_pj ";
+			$Query .= "where _IDpj = '$IDpj' limit 1";
+
+			if ( !mysql_query($Query, $mysql_link) )
+				sql_error($mysql_link);
+			else
+				unlink("$DOWNLOAD/forum/$IDpj.".@$_GET["ext"]);
+			break;
+
+		case "censor" :
+			$value = ( @$_GET["value"] == "O" ) ? "N" : "O" ;
+			mysql_query("update forum_items set _censor = '$value' where _IDmsg = '$IDmsg' limit 1", $mysql_link);
+			break;
+
+		default :
+			$newforum = (int) @$_POST["newforum"];
+
+			if ( $submit == $msg->read($FORUM_MOVE) )
+				if ( mysql_query("update forum_items set _IDforum = '$newforum' where _IDmsg = '$IDmsg' limit 1", $mysql_link) )
+					changeChild($newforum, $IDmsg);
+			break;
+		}
+
+	// lecture de la base de données des forums
+	$query    = "select distinctrow ";
+	$query   .= "forum_data._title, forum_data._IDgrpwr, forum_data._update, forum_data._erase, forum_data._email, forum_data._IDroot, forum_data._IDgrprd, forum_data._maximize, forum_data._IDforum, forum_data._IDmod ";
+	$query   .= "from forum_data, forum_items ";
+	$query   .= ( $IDmsg ) ? "where forum_items._IDmsg = '$IDmsg' " : "where forum_data._IDforum = '$IDforum' " ;
+	$query   .= "AND forum_data._IDforum = forum_items._IDforum ";
+	$query   .= "limit 1";
+
+	$result   = mysql_query($query, $mysql_link);
+	$forum    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+	$IDforum  = $forum[8];
+
+	// si n° message inconnu
+	// si pas d'autorisation => bye, bye
+	if ( !$forum )
+		logSessionAccess();
+
+	// vérification des autorisations
+	verifySessionAccess($forum[9], $forum[6]); 
+
+	// lecture forum parent
+	$result = mysql_query("select _title from forum where _IDroot = '$forum[5]' limit 1", $mysql_link);
+	$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+	$forum[0] = ( $row ) ? "$row[0]/$forum[0]" : $forum[0] ;
+	$deploy   = ( $deploy == "" ) ? $forum[7] : $deploy ;
+
+	// lecture du message
+	$Query  = "select _title, _texte, _date, _ID, _IDmsg, _IP, _sign, _update, _censor, _IDsmile, _IDforum, _parent, _thread ";
+	$Query .= "from forum_items ";
+	$Query .= "where _IDforum = '$IDforum' ";
+	$Query .= ( $_SESSION["CnxAdm"] == 255 ) ? "" : "AND _visible = 'O' " ;
+	switch ( $request ) {
+		case "next" :
+			$Query .= "AND _thread < '".@$_GET["thread"]."' AND _parent = 0 order by _IDmsg desc";
+			break;
+							
+		case "prev" :
+			$Query .= "AND _thread > '".@$_GET["thread"]."' AND _parent = 0 order by _IDmsg";
+			break;
+							
+		default :
+			$Query .= "AND _IDmsg >= '$IDmsg' order by _IDmsg";
+			break;
+		}
+
+	$result  = mysql_query($Query, $mysql_link);
+	$row     = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+	$pos     = ( $result ) ? mysql_affected_rows($mysql_link) : 0 ;
+
+	$IDmsg   = $row[4];
+	$parent  = $row[11];
+	$thread  = $row[12];
+
+	// lecture du nombre de messages dans le forum
+	$query  = "select distinctrow _thread ";
+	$query .= "from forum_items ";
+	$query .= "where _IDforum = '$IDforum' ";
+	$query .= ( $_SESSION["CnxAdm"] == 255 ) ? "" : "AND _visible = 'O'" ;
+
+	$result = mysql_query($query, $mysql_link);
+	$nbelem = ( $result ) ? mysql_affected_rows($mysql_link) : 0 ;
+	$pos    = ( $request == "next" ) ? $nbelem - $pos + 1 : $pos ;
+
+	// initialisation
+	$link   = "index.php?item=$item&IDgroup=$IDgroup&IDforum=$IDforum&IDroot=$IDroot&IDmsg=$IDmsg&parent=$parent&visu=$visu&deploy=$deploy";
+?>
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($FORUM_MYFORUM, $forum[0])); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+
+	<form id="formulaire" action="" method="post" >
+
+	<p style="margin-top:0px; margin-bottom:10px; text-align:justify;">
+	<?php print($msg->read($FORUM_CLICK)); ?>
+	</p>
+
+	<table class="width100">
+	   <tr>
+		<td style="width:10%;" class="valign-middle">
+		<?php
+                	// vérification de l'accès en écriture
+                 	if ( $_SESSION["CnxAdm"] == 255 OR ($forum[1] & pow(2, $_SESSION["CnxGrp"] - 1)) )
+                 		print("
+					<a href=\"".myurlencode("$link&msgid=$row[4]&thread=$row[12]&cmde=post&submit=reply")."\">
+                 			<img src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/reply.gif\" title=\"\" alt=\"\" /></a>
+                 			");
+		?>
+		</td>
+		<td class="valign-middle">
+		<?php
+			if ( $_SESSION["CnxAdm"] == 255 OR ($forum[1] & pow(2, $_SESSION["CnxGrp"] - 1)) ) 
+                  	print($msg->read($FORUM_REPLY));
+		?>
+		</td>
+		<td class="valign-middle align-right">
+		<?php
+                	$next = ( $nbelem > 1 AND $pos < $nbelem )
+                		? "<a href=\"".myurlencode("$link&thread=$thread&request=next&cmde=show")."\">".$msg->read($FORUM_NEXT)."</a>"
+                		: $msg->read($FORUM_NEXT) ;
+
+                	$prev = ( $pos > 1 )
+                		? "<a href=\"".myurlencode("$link&thread=$thread&request=prev&cmde=show")."\">".$msg->read($FORUM_PREV)."</a>"
+                		: $msg->read($FORUM_PREV) ;
+
+                  print("[$prev]<strong>.</strong>[$next]");
+		?>
+		</td>
+	   </tr>
+	</table>
+
+	<?php
+		//---------------------------------------------------------------------------
+		function isNew($IDmsg, $date)
+		{
+			global $mysql_link;
+
+			// pour indiquer les nouveaux messages (moins de 2 jours pour les Anonymes)
+			if ( $_SESSION["CnxSex"] == "A" )
+				return ( $date > date("Y-m-d H:i:s", (time() - $TIMEFORUM)) )
+					? " <img src=\"".$_SESSION["ROOTDIR"]."/images/new.gif\" title=\"\" alt=\"\" />"
+					: "" ;
+
+			// lecture de la base de données
+			$Query  = "select _IP from forum_vu ";
+			$Query .= "where _IDmsg = '$IDmsg' AND _ID = '".$_SESSION["CnxID"]."' ";
+			$Query .= "limit 1";
+
+			$result = mysql_query($Query, $mysql_link);
+			$row    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+			return ( $row )
+				? ""
+				: " <img src=\"".$_SESSION["ROOTDIR"]."/images/new.gif\" title=\"\" alt=\"\" />" ;
+		}
+		//---------------------------------------------------------------------------
+		function showMain($forum, $row, $link)
+		{
+			// fonction d'affichage du corps des messages
+			require "globals.php";
+
+			require_once "include/calendar_tools.php";
+
+			require "msg/forum.php";
+			require_once "include/TMessage.php";
+
+			$msg    = new TMessage($_SESSION["ROOTDIR"]."/msg/".$_SESSION["lang"]."/forum.php");
+
+			// lecture de l'auteur du message
+			$query  = "select distinctrow ";
+			$query .= "user_id._name, user_id._create, user_id._msg, user_id._avatar, user_id._cnx, user_id._email, user_id._IDgrp, config_centre._ident ";
+			$query .= "from user_id, config_centre ";
+			$query .= "where user_id._ID = '$row[3]' ";
+			$query .= "AND config_centre._lang = '".$_SESSION["lang"]."' ";
+			$query .= "AND config_centre._IDcentre = user_id._IDcentre ";
+			$query .= "limit 1";
+
+			$result = mysql_query($query, $mysql_link);
+			$who    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+			$mailto = getUserName($row[3], $forum[4]);
+
+			// lecture de la station émettrice
+			$by     = " " . _getHostName($row[5]);
+
+			$date   = date("Y-m-d H:i:s");
+
+			// date de modification du message
+			$modif  = ( $row[2] != $row[7] )
+				? $msg->read($FORUM_MODIFIED, date2longfmt($row[7]))
+				: "" ;
+
+			// suppression des post
+			$req    = $msg->read($FORUM_ERASING, str_replace(Array(' ', '"'), Array('+', '\''), $row[0]));
+			$del    = ( $_SESSION["CnxAdm"] == 255 OR ($_SESSION["CnxID"] == $row[3] AND $forum[3] == "O") )
+				? "<a href=\"".myurlencode("$link&msgid=$row[4]&cmde=visu&submit=del")."\" onclick=\"return confirmLink(this, '$req');\"><img src=\"".$_SESSION["ROOTDIR"]."/images/corb.gif\" title=\"$req\" alt=\"\" /></a>"
+				: "" ;
+
+			// modification des post
+			$maj    = ( $_SESSION["CnxAdm"] == 255 OR ($_SESSION["CnxID"] == $row[3] AND $forum[2] == "O") )
+				? "<a href=\"".myurlencode("$link&msgid=$row[4]&cmde=post&submit=update")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/stats/post.gif\" title=\"". $msg->read($FORUM_UPDATEMESSAGE) ."\" alt=\"\" /></a>"
+				: "" ;
+
+			// censure des post
+			$req    = ( $row[8] == "O" )
+				? $msg->read($FORUM_UNCENSOR)
+				: $msg->read($FORUM_CENSORING, str_replace(Array(' ', '"'), Array('+', '\''), $row[0])) ;
+			$censor = ( $_SESSION["CnxAdm"] == 255 )
+				? "<a href=\"".myurlencode("$link&msgid=$row[4]&value=$row[8]&cmde=show&submit=censor")."\" onclick=\"return confirmLink(this, '$req');\"><img src=\"".$_SESSION["ROOTDIR"]."/images/forbidden.gif\" title=\"$req\" alt=\"\" /></a>"
+				: "" ;
+
+			// déplacer le sujet dans un autre forum
+			// à condition que ce soit un nouveau sujet
+			if ( $_SESSION["CnxAdm"] == 255 AND $row[8] == "N" AND $row[11] == 0 ) {
+				$query   = "select _IDforum, _title from forum_data ";
+				$query  .= "where _lang = '".$_SESSION["lang"]."' ";
+				$query  .= "order by _title";
+
+				$return  = mysql_query($query, $mysql_link);
+				$myrow   = ( $return ) ? remove_magic_quotes(mysql_fetch_row($return)) : 0 ;
+
+				$select  = "<label for=\"newforum\" >" ;
+				$select .= "<select id=\"newforum\" name=\"newforum\" style=\"font-size:9px;\" >" ;
+				while ( $myrow ) {			
+					$ident   = ucfirst(strtolower(str_replace($keywords_search, $keywords_replace, $myrow[1])));
+
+					$select .= ( $row[10] == $myrow[0] )
+						? "<option value=\"$myrow[0]\" selected=\"selected\">$ident</option>"
+						: "<option value=\"$myrow[0]\">$ident</option>" ;
+
+					$myrow   = remove_magic_quotes(mysql_fetch_row($return));
+					}				
+				$select .= "</select>";
+				$select .= "</label>";
+
+				$select .= "<input type=\"hidden\" value=\"$row[4]\" name=\"IDmsg\" />";
+				$select .= "<input type=\"submit\" value=\"".$msg->read($FORUM_MOVE)."\" name=\"submit\" style=\"font-size:9px;\" />";
+				}
+			else
+				$select  = $forum[0];
+
+			// humeur du sujet
+			$res    = mysql_query("select _ident from smileys where _IDsmile = '$row[9]' limit 1", $mysql_link);
+			$smile  = ( $res ) ? remove_magic_quotes(mysql_fetch_row($res)) : 0 ;
+			$humeur = "<img src=\"".$_SESSION["ROOTDIR"]."/images/smiley/forum/$smile[0].gif\" title=\"$smile[0]\" alt=\"$smile[0]\" />";
+
+			print("
+		            <table class=\"width100\">
+		              <tr style=\"background-color:#C0C0C0;\">
+		                <td style=\"width:20%;\" class=\"valign-middle align-right\">
+	                  	". $msg->read($FORUM_TITLE) ."<br/>
+	                  	". $msg->read($FORUM_SUBJECT) ."<br/>
+	                  	". $msg->read($FORUM_AUTHOR) ."
+		                </td>
+		                <td style=\"width:80%;\" class=\"valign-middle align-left\">
+					$select<br/>
+		                  [$humeur] $row[0] $del $maj $censor<br/>
+		                  [<img src=\"".$_SESSION["ROOTDIR"]."/images/smiley/$who[6].gif\" title=\"$who[6]\" alt=\"$who[6]\" />] $mailto
+		                </td>
+		              </tr>
+				");
+
+			print("
+				  <tr>
+				    <td style=\"border: 1px solid #c0c0c0;\" class=\"valign-top\">
+				");
+
+			$r = (int) ($who[4] / $HITBYSTAR);
+			$r = ( $r > $MAXSTAR ) ? $MAXSTAR : $r ;
+
+	    		print("
+				". $msg->read($FORUM_REGISTERED) ." ". substr($who[1], 0, strpos($who[1], " ")) ."<br/>
+				<img src=\"".$_SESSION["ROOTDIR"]."/images/stats/r$r.gif\" title=\"\" alt=\"\" /><br/>
+     				". $msg->read($FORUM_MESSAGES, $who[2]) ."<br/>
+     				". $msg->read($FORUM_CENTER) ." $who[7]
+     				");
+
+     			if ( $who[3] )
+				print("<p style=\"margin-top:10px; margin-bottom:10px; text-align:center;\"><img src=\"".$_SESSION["ROOTDIR"]."/images/avatar/$who[3].gif\" title=\"$who[3]\" alt=\"$who[3]\" /></p>");
+
+			print("
+				    </td>
+				");
+
+			$query .= "limit 1";
+
+			// navigation dans les messages
+			$return = mysql_query("select _parent from forum_items where _IDmsg = '$row[4]' AND _thread = '$row[12]' limit 1", $mysql_link);
+			$myrow  = ( $return ) ? mysql_fetch_row($return) : 0 ;
+
+			$up     = ( @$myrow[0] )
+				? "<a href=\"".myurlencode("$link&IDmsg=$myrow[0]&cmde=show")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/forum/up.gif\" title=\"\" alt=\"\" /></a>"
+				: "" ;
+
+			$return = mysql_query("select _IDmsg from forum_items where _IDmsg > '$row[4]' AND _thread = '$row[12]' order by _IDmsg asc limit 1", $mysql_link);
+			$myrow  = ( $return ) ? mysql_fetch_row($return ) : 0 ;
+
+			$down   = ( @$myrow[0] )
+				? "<a href=\"".myurlencode("$link&IDmsg=$myrow[0]&cmde=show")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/forum/down.gif\" title=\"\" alt=\"\" /></a>"
+				: "" ;
+
+                 	// vérification de l'accès en écriture
+                 	$quote = ( $_SESSION["CnxAdm"] == 255 OR ($forum[1] & pow(2, $_SESSION["CnxGrp"] - 1)) )
+				? "<a href=\"".myurlencode("$link&msgid=$row[4]&thread=$row[12]&cmde=post&submit=quote")."\">
+				   <img src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/icon_quote.gif\" title=\"\" alt=\"\" />
+				   </a>"
+				: "" ;
+
+			print("
+				    <td style=\"border: 1px solid #c0c0c0;\" class=\"valign-top\">
+
+					<table style=\"background-color:#eeeeee; width: 100%\">
+					  <tr>
+					    <td style=\"width:1%\"><img src=\"".$_SESSION["ROOTDIR"]."/images/horloge.png\" title=\"\" alt=\"\" /></td>
+					    <td class= \"valign-middle\"><span class=\"x-small\">#$row[4], ".$msg->read($FORUM_POSTEDON)." ".date2longfmt($row[2])."$by$modif</span></td>
+					    <td class=\"align-right\">$up $down $quote</td>
+					  </tr>
+					</table>
+
+					<hr style=\"margin:0px;\" />
+				");
+
+	    		// le message (attention  la censure)
+			if ( $row[8] == "O" )
+		    		print("<p style=\"text-align:center;\">". $msg->read($FORUM_CENSOR) ."</p>");
+
+			$note = "";
+			if ( $_SESSION["CnxAdm"] == 255 OR $row[8] == "N" )
+		    		print("". replace_smile(find_typo($row[1], $note)) .""); 
+
+			// notes de bas de page
+			if ( strlen($note) )
+				print("<hr style=\"width:30%; margin-left:0px;\" /><p class=\"x-small\" style=\"margin: 0px;\">$note</p>");
+
+			// signature du message
+			if ( $row[6] == "O" ) {
+				$res  = mysql_query("select _signature from user_id where _ID = '$row[3]' limit 1", $mysql_link);
+				$sign = ( $res ) ? remove_magic_quotes(mysql_fetch_row($res)) : 0 ;
+
+				if ( strlen($sign[0]) )
+					print("<p style=\"margin: 0px;\"><img src=\"".$_SESSION["ROOTDIR"]."/images/hr.png\" title=\"--\" alt=\"--\" /></p>" . replace_smile($sign[0]));
+				}
+
+			print("
+				    </td>
+				  </tr>
+				");
+
+			// lecture des PJ
+			$sql = mysql_query("select _IDpj, _title, _ext, _size from forum_pj where _IDmsg = '$row[4]'", $mysql_link);
+			$doc = ( $sql ) ? remove_magic_quotes(mysql_fetch_row($sql)) : 0 ;
+
+			while ( $doc ) {
+				// description de la PJ
+				$desc  = $msg->read($FORUM_SIZE, $doc[3]) ."<br/>";
+				$desc .= $doc[1];
+				$desc  = addslashes($desc);			// le script java n'aime pas les '
+
+				// chemin pour compteur des téléchargements
+				$path  = "$DOWNLOAD/forum/$doc[0].$doc[2]";
+
+				$res   = mysql_query("select _IDdown, _count from download_data where _file = '$path'", $mysql_link);
+				$down  = ( $res ) ? mysql_fetch_row($res) : 0 ;
+
+				$nblnk = ( $down[0] )
+					? "<a href=\"#\" onclick=\"popWin('".$_SESSION["ROOTDIR"]."/user_list.php?sid=".$_SESSION["sessID"]."&amp;IDdown=$down[0]&amp;cmde=dwload&amp;lang=".$_SESSION["lang"]."', '450', '200'); return false;\">$down[1]</a>"
+					: "0" ;
+
+				$msg->isPlural = (bool) ( $nblnk > 1 );
+
+	             	// lien sur la PJ
+				$target = "onclick=\"window.open(this.href, '_blank'); return false;\"";
+				$lien   = myurlencode("index.php?file=$path");
+
+				// suppression de la pièce jointe
+				$req    = $msg->read($FORUM_DELATTACHMENT);
+				$delete = ( $_SESSION["CnxID"] == $row[3] OR $_SESSION["CnxAdm"] == 255 )
+					? "<a href=\"".myurlencode("$link&msgid=$doc[0]&ext=$doc[2]&cmde=show&submit=del")."\" onclick=\"return confirmLink(this, '$req');\">
+					   <img src=\"".$_SESSION["ROOTDIR"]."/images/corb.gif\" title=\"".$msg->read($FORUM_DELATTACHMENT)."\" alt=\"".$msg->read($FORUM_DELATTACHMENT)."\" />
+					   </a>"
+					: "" ;
+
+				print("
+					  <tr>
+					    <td style=\"border: 1px solid #c0c0c0;\" class=\"valign-top align-center\">
+					    	<img src=\"".$_SESSION["ROOTDIR"]."/images/spip/pj.gif\" title=\"".$msg->read($FORUM_ATTACHMENT)."\" alt=\"".$msg->read($FORUM_ATTACHMENT)."\" />
+					    </td>
+
+					    <td style=\"border: 1px solid #c0c0c0;\" class=\"valign-top\">
+						<img src=\"".$_SESSION["ROOTDIR"]."/images/mime/$doc[2].gif\" title=\"$doc[2]\" alt=\"$doc[2]\" />
+						". $msg->read($FORUM_DOC, Array($lien, $desc, $target)) ." $delete <br />
+					    	<span class=\"x-small\">". $msg->read($FORUM_DOWNLOADED, strval($nblnk)) ."</span>
+					    </td>
+					  </tr>
+					");
+
+				$doc = remove_magic_quotes(mysql_fetch_row($sql));
+				}
+
+			print("</table>");
+
+			// log des lectures
+			mysql_query("insert into forum_vu values('$row[4]', '".$_SESSION["CnxID"]."', '".$_SESSION["CnxIP"]."', '".date("Y-m-d H:i:s", time())."')", $mysql_link);
+		}
+		//---------------------------------------------------------------------------
+		function showBodyMessages($forum, $link, $thread, $parent)
+		{
+			// fonction récursive d'affichage des messages
+			global $mysql_link;
+
+			// lecture de la base de données
+			$Query  = "select _title, _texte, _date, _ID, _IDmsg, _IP, _sign, _update, _censor, _IDsmile, _IDforum, _parent, _thread ";
+			$Query .= "from forum_items ";
+			$Query .= "where _thread = '$thread' AND _parent = '$parent' ";
+			$Query .= ( $_SESSION["CnxAdm"] == 255 ) ? "" : "AND _visible = 'O' " ;
+			$Query .= "order by _IDmsg";
+
+			$result = mysql_query($Query, $mysql_link);
+			$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+			while( $row ) {
+				print("<p style=\"margin-top:0px; margin-bottom:10px;\"></p>");
+
+				showMain($forum, $row, $link);
+
+           			// afficher les messages enfants
+           			showBodyMessages($forum, $link, $row[12], $row[4]);
+
+				$row = remove_magic_quotes(mysql_fetch_row($result));
+				}
+		}
+		//---------------------------------------------------------------------------
+		function showMessages($IDgroup, $thread, $parent, $IDselect, $visu, $n)
+		{
+			// fonction récursive d'affichage des messages fils
+			global $mysql_link;
+
+			require "msg/forum.php";
+			require_once "include/TMessage.php";
+
+			$msg  = new TMessage($_SESSION["ROOTDIR"]."/msg/".$_SESSION["lang"]."/forum.php");
+
+			// augmentation du retrait
+			$n++;
+
+			// lecture de la base de données
+			$Query  = "select _title, _date, _IP, _post, _IDmsg, _ID, _IDsmile, _censor, _IDsmile, _IDforum ";
+			$Query .= "from forum_items ";
+			$Query .= "where _thread = '$thread' AND _parent = '$parent' ";
+			$Query .= ( $_SESSION["CnxAdm"] == 255 ) ? "" : "AND _visible = 'O' " ;
+			$Query .= "order by _IDmsg";
+					
+			$result = mysql_query($Query, $mysql_link);
+
+			while( ($row = remove_magic_quotes(mysql_fetch_row($result))) ) {
+				// indique un nouveau message
+				$new    = isNew($row[4], $row[1]);
+
+				// humeur du sujet
+				$res    = mysql_query("select _ident from smileys where _IDsmile = '$row[6]' limit 1", $mysql_link);
+				$smile  = ( $res ) ? remove_magic_quotes(mysql_fetch_row($res)) : 0 ;
+				$humeur = ( $row[7] == "O" )
+					? "<img src=\"".$_SESSION["ROOTDIR"]."/images/forbidden.gif\" title=\"\" alt=\"\" />"
+					: "<img src=\"".$_SESSION["ROOTDIR"]."/images/smiley/forum/$smile[0].gif\" title=\"$smile[0]\" alt=\"$smile[0]\" />" ;
+
+				// lecture des PJ
+				$res    = mysql_query("select _IDpj from forum_pj where _IDmsg = '$row[4]'", $mysql_link);
+				$pj     = mysql_numrows($res)
+					? "<img src=\"".$_SESSION["ROOTDIR"]."/images/pj.gif\" title=\"".$msg->read($FORUM_ATTACHMENT)."\" alt=\"".$msg->read($FORUM_ATTACHMENT)."\" />"
+					: "" ;
+
+				// indique un message sélectionné
+				$image  = ( $row[4] != $IDselect )
+					? "<img src=\"".$_SESSION["ROOTDIR"]."/images/minipost.gif\" title=\"\" alt=\"\" />"
+					: "<img src=\"".$_SESSION["ROOTDIR"]."/images/minireply.gif\" title=\"\" alt=\"\" />" ;
+					
+				// calcul du retrait
+				$width  = 30 * $n;
+
+				// afficher le posteur
+				$poster = ( $visu == "O" )
+					? " (".getUserName($row[5]).")"
+					: "" ;
+
+				// afficher le titre des messages sous forme de lien
+				print("
+					<table class=\"width100\">
+					<tr>
+					  <td style=\"width:$width"."px;\"></td>
+					  <td>
+						$image
+						<a href=\"".myurlencode("index.php?item=3&IDgroup=$IDgroup&IDmsg=$row[4]&parent=$parent&visu=$visu&cmde=show")."\">
+						$row[0]</a> $humeur $pj
+						$new
+						<em>$poster</em>
+					  </td>
+					</tr>
+					</table>
+					");
+
+           			// afficher les messages enfants
+           			showMessages($IDgroup, $thread, $row[4], $IDselect, $visu, $n);
+				}
+
+			// diminution du retrait
+			$n--;
+		}
+		//---------------------------------------------------------------------------
+
+		//----- affichage du message parent
+		showMain($forum, $row, $link);
+
+		//----- recherche du fil de discussion
+		$result = mysql_query("select _IDmsg from forum_items where _thread = '$thread' limit 1", $mysql_link);
+		$count  = ( mysql_fetch_row($result) ) ? mysql_affected_rows($mysql_link) : 0 ;
+
+		if ( $count ) {
+			if ( $deploy == "O" ) {
+				//----- affichage des messages fils
+				showBodyMessages($forum, $link, $thread, $thread);
+				}
+			else {
+				//----- affichage du message parent
+				$query  = "select _title, _date, _access, _post, _IDmsg, _IDsmile, _ID, _censor, _IDsmile, _IDforum, _parent, _thread ";
+				$query .= "from forum_items ";
+				$query .= "where _IDmsg = '$thread' ";
+				$query .= ( $_SESSION["CnxAdm"] == 255 ) ? "" : "AND _visible = 'O' " ;
+				$query .= "limit 1";
+
+				$result = mysql_query($query, $mysql_link);
+				$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+				// indique un nouveau message
+				$new    = isNew($row[4], $row[1]);
+
+				// humeur du sujet
+				$res    = mysql_query("select _ident from smileys where _IDsmile = '$row[5]'", $mysql_link);
+				$smile  = ( $res ) ? mysql_fetch_row($res) : 0 ;
+				$humeur = ( $row[7] == "O" )
+					? "<img src=\"".$_SESSION["ROOTDIR"]."/images/forbidden.gif\" title=\"\" alt=\"\" />"
+					: "<img src=\"".$_SESSION["ROOTDIR"]."/images/smiley/forum/$smile[0].gif\" title=\"$smile[0]\" alt=\"$smile[0]\" />" ;
+
+				// indique un message sélectionné
+				$image  = ( $thread != $IDmsg )
+					? "<img src=\"".$_SESSION["ROOTDIR"]."/images/minipost.gif\" title=\"\" alt=\"\" />"
+					: "<img src=\"".$_SESSION["ROOTDIR"]."/images/minireply.gif\" title=\"\" alt=\"\" />" ;
+
+				// lecture des PJ
+				$res = mysql_query("select _IDpj from forum_pj where _IDmsg = '$row[4]'", $mysql_link);
+				$pj  = mysql_numrows($res)
+					? "<img src=\"".$_SESSION["ROOTDIR"]."/images/pj.gif\" title=\"\" alt=\"\" />"
+					: "" ;
+
+				// afficher le posteur
+				$poster = ( $visu == "O" )
+					? " (".getUserName($row[6]).")"
+					: "" ;
+
+				// pour basculer l'affichage du posteur
+     		       	$toggle = ( $visu == "O" ) ? "N" : "O" ;
+							
+           		 	$post   = "<a href=\"".myurlencode("index.php?item=$item&IDgroup=$IDgroup&IDroot=$IDroot&IDmsg=$thread&visu=$toggle&cmde=show")."\">";
+           			$post  .= ( $visu == "O" ) ? $msg->read($FORUM_HIDEPOSTER) : $msg->read($FORUM_SHOWPOSTER) ;
+              		$post  .= "</a>";
+
+				print("<div style=\"background-color:#eeeeee; border:#cccccc solid 1px;\">");
+
+				print("
+					<table class=\"width100\">
+					  <tr>
+					    <td>
+						$image
+						<a href=\"".myurlencode("index.php?item=$item&IDgroup=$IDgroup&IDmsg=$row[4]&parent=$parent&visu=$visu&cmde=show")."\">
+						$row[0]</a> $humeur $pj
+						$new
+						<em>$poster</em>
+					    </td>
+
+					    <td class=\"align-right\">[$post]</td>
+					  </tr>
+					</table>
+					");
+
+				//----- affichage des messages fils
+				showMessages($IDgroup, $thread, $thread, $IDmsg, $visu, 0);
+
+				print("</div>");
+				}
+			}
+	?>
+
+	</form>
+
+	<table class="width100">
+	   <tr>
+		<td style="width:50%;" class="valign-middle">
+		<?php
+			print("[".$msg->read($FORUM_BACKTOFORUM, myurlencode("index.php?item=$item&IDgroup=$IDgroup&IDforum=$IDforum&IDroot=$IDroot&cmde=visu"))."]");
+		?>
+		</td>
+		<td style="width:50%;" class="valign-middle align-right">
+		<?php
+			// pour afficher le posteur
+	            $toggle = ( $deploy == "O" ) ? "N" : "O" ;
+							
+      	      $tree   = "<a href=\"".myurlencode("index.php?item=3&IDgroup=$IDgroup&IDroot=$IDroot&IDmsg=$thread&deploy=$toggle&cmde=show")."\">";
+            	$tree  .= ( $deploy == "O" ) ? $msg->read($FORUM_CRUNCH) : $msg->read($FORUM_DEPLOY) ;
+              	$tree  .= "</a>";
+
+			print("[$tree]");
+		?>
+		</td>
+	   </tr>
+	</table>
+
+	<form id="gotomsg" action="<?php echo myurlencode("index.php?item=3&IDgroup=$IDgroup&IDroot=$IDroot&cmde=show"); ?>" method="post" >
+		<p style="margin:0;">
+		<img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/in.gif" title="" alt="" /> <?php print($msg->read($FORUM_GOTO)); ?>
+
+		<label for="IDmsg"><input type="text" id="IDmsg" name="IDmsg" size="4" style="font-size:9px;" /></label>
+		<input type="image" src="images/go.gif" title="<?php echo $msg->read($FORUM_GOTO); ?>" alt="<?php echo $msg->read($FORUM_GOTO); ?>" />
+		</p>
+	</form>
+
+</div>

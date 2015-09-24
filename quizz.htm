@@ -1,0 +1,579 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2004-2008 by Dominique Laporte(C-E-D@wanadoo.fr)
+   Copyright (c) 2006 by frédéric poyet(frederic.poyet@free.fr)
+   Copyright (c) 2006 by Nordine Zetoutou (nordine.zetoutou@educagri.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : quizz.htm
+ *		projet   : la page des exercices en ligne du campus virtuel
+ *
+ *		version  : 1.1
+ *		auteur   : laporte
+ *		creation : 20/06/04
+ *		modif    : 19/06/06 - par Fred POYET
+ *                     migration php5
+ *                     17/07/06 - Nordine Zetoutou
+ * 	                 migration des balises HTML en XHTML 1.0 strict
+ */
+
+
+$IDgroup = ( @$_POST["IDgroup"] )		// identifiant du e-groupe
+	? (int) $_POST["IDgroup"]
+	: (int) @$_GET["IDgroup"] ;
+$IDquizz = ( @$_POST["IDquizz"] )		// ID du quizz
+	? (int) $_POST["IDquizz"]
+	: (int) @$_GET["IDquizz"] ;
+$IDsel   = ( @$_POST["IDsel"] )		// ID de la classe
+	? (int) $_POST["IDsel"]
+	: (int) (@$_GET["IDsel"] ? $_GET["IDsel"] : $_SESSION["CnxClass"] );
+$IDmat   = ( @$_POST["IDmat"] )		// ID de la matière/formation
+	? (int) $_POST["IDmat"]
+	: (int) @$_GET["IDmat"] ;
+$IDdata  = ( @$_POST["IDdata"] )		// Identifiant de la matière
+	? (int) $_POST["IDdata"]
+	: (int) @$_GET["IDdata"] ;
+$IDroot   = ( @$_POST["IDroot"] )		// ID répertoire racine
+	? (int) $_POST["IDroot"]
+	: (int) @$_GET["IDroot"] ;
+$IDparent = ( @$_POST["IDparent"] )		// ID répertoire parent
+	? (int) $_POST["IDparent"]
+	: (int) @$_GET["IDparent"] ;
+
+$skpage  = ( @$_GET["skpage"] )		// n° de la page affichée
+	? (int) $_GET["skpage"]
+	: 1 ;
+$skshow  = ( @$_GET["skshow"] )		// n° du flash info
+	? (int) $_GET["skshow"]
+	: 1 ;
+
+$submit  = ( @$_GET["submit"] )		// bouton de validation
+	? $_GET["submit"]
+	: (@$_POST["delete_x"] ? "delete" : "") ;
+?>
+
+
+<?php
+	require "include/quizz.php";
+
+	// initialisation
+	$href = "item=$item&IDgroup=$IDgroup&IDquizz=$IDquizz&IDmat=$IDmat&IDdata=$IDdata";
+
+	// on sélectionne la matière pédagogique ou la formation des campus
+	if ( $IDmat < 0 ) {
+		$Query  = "select _IDmod, _IDgrpwr, _IDgrprd, _ident from campus_classe ";
+		$Query .= "where _IDclass = abs($IDmat) ";
+		$Query .= "AND _visible = 'O' ";
+		$Query .= "limit 1";
+		}
+	else {
+		$Query  = "select _IDmod, _IDgrpwr, _IDgrprd, _titre from campus_data ";
+		$Query .= "where _IDmat = '$IDmat' ";
+		$Query .= "AND _visible = 'O' AND _lang = '".$_SESSION["lang"]."' ";
+		$Query .= "limit 1";
+		}
+
+	$result = mysql_query($Query, $mysql_link);
+	$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+	// initialisation
+	$IDmod  = $row[0];
+	$grpwr  = $row[1];
+	$grprd  = $row[2];
+
+	// lecture du modérateur
+	if ( $IDmod  ) {
+		$result = mysql_query("select _sexe from user_id where _ID = '$IDmod' limit 1", $mysql_link);
+		$who    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+		$mod    = ( $who[0] == "F" )
+			? $msg->read($QUIZZ_MODOF)
+			: $msg->read($QUIZZ_MODOM) ;
+		$mod   .= " : " . getUserName($IDmod);
+		}
+	else
+		$mod = $msg->read($QUIZZ_NOMODO);
+
+     	// seul le big chef ou le propriétaire
+	// peuvent supprimer un exercice
+	switch ( $submit ) {
+		case "delete" :	// suppression répertoire et quizz
+			//---- on efface le dossier
+			$rm = @$_POST["deldir"];
+
+			for ($i = 0; $i < count($rm); $i++) {
+				$query  = "delete from quizz_root where _IDroot = '$rm[$i]' limit 1";
+				$query .= ( $_SESSION["CnxAdm"] == 255 ) ? "" : "AND _ID = '".$_SESSION["CnxID"]."'";
+
+				mysql_query($query, $mysql_link);
+				}
+
+			//---- on efface le quizz
+			$rm = @$_POST["delquizz"];
+
+			for ($i = 0; $i < count($rm); $i++) {
+				$query  = "delete from quizz where _IDquizz = '$rm[$i]' limit 1";
+				$query .= ( $_SESSION["CnxAdm"] == 255 ) ? "" : "AND _ID = '".$_SESSION["CnxID"]."'";
+
+				if ( mysql_query($query, $mysql_link) )
+					// on enchaine sur la RAZ...
+					if ( mysql_query("delete from quizz_vote where _IDquizz = '$rm[$i]'", $mysql_link) )
+						mysql_query("delete from quizz_user where _IDquizz = '$rm[$i]'", $mysql_link);
+				}
+			break;
+
+		case "raz" :	// raz des scores du quizz
+//			$IDuser = (int) @$_GET["IDuser"];
+
+			if ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $IDmod )
+				if ( !mysql_query("delete from quizz_vote where _IDquizz = '$IDquizz'", $mysql_link) )
+					mysql_error($mysql_link);
+				else
+					if ( !mysql_query("delete from quizz_user where _IDquizz = '$IDquizz'", $mysql_link) )
+						mysql_error($mysql_link);
+			break;
+
+		case "update" :	// ouverture/fermeture du quizz
+			$result = mysql_query("select _visible from quizz where _IDquizz = '$IDquizz' limit 1", $mysql_link);
+			$myrow  = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+			$query  = "update quizz ";
+			$query .= ( $myrow[0] == "O" ) ? "set _visible = 'N' " : "set _visible = 'O' " ;
+			$query .= "where _IDquizz = '$IDquizz' ";
+			$query .= ( $_SESSION["CnxAdm"] == 255 ) ? "" : "AND _ID = '".$_SESSION["CnxID"]."'";
+
+			if ( !mysql_query($query, $mysql_link) )
+				mysql_error($mysql_link);
+			break;
+
+		default :
+			break;
+		}
+
+	// fichier à transférer
+	$file = @$_FILES["UploadFile"]["tmp_name"];
+
+	// test d'erreur sur champs non renseignés
+	if ( $file )
+		if ( authfile(@$_FILES["UploadFile"]["name"]) )
+			if ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $IDmod OR ($grpwr & pow(2, $_SESSION["CnxGrp"] - 1)) )
+				import_quizz($file, $IDdata, $IDroot);
+?>
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat; height: 25px;\">
+	<div style="text-align: center;"><?php print($msg->read($QUIZZ_LIST, $row[3])); ?></div>
+	<div class="x-small" style="float: left;"><em><?php echo $mod; ?></em></div>
+</div>
+
+<div class="maincontent">
+
+		<p style="margin-top:0px;"><?php print($msg->read($QUIZZ_DATABANK)); ?></p>
+
+		<form id="formulaire" action="" method="post" enctype="multipart/form-data">
+
+			<hr style="width:80%;" />
+
+			<table class="width100">
+			  <tr>
+			    <td style="width:50%;" class="align-right">
+				<?php print($msg->read($QUIZZ_CHOOSEMATTER)); ?>
+			    </td>
+			    <td style="width:50%;">
+				<label for="IDdata">
+			  	<select id="IDdata" name="IDdata" onchange="document.forms.formulaire.submit()">
+					<option value="0"><?php print($msg->read($QUIZZ_ALLMATTER)); ?></option>
+					<?php
+						// affichage des matières
+						$query  = "select _IDmat, _titre from campus_data ";
+						$query .= "where _visible = 'O' AND _lang = '".$_SESSION["lang"]."' ";
+						$query .= ( $_SESSION["CnxAdm"] == 255 ) ? "" : "AND (_IDgrprd & ". pow(2, $_SESSION["CnxGrp"] - 1) .") " ;
+						$query .= ( $IDmat > 0 ) ? "AND _IDmat = '$IDmat' " : "" ;
+						$query .= "order by _titre asc";
+
+						$result = mysql_query($query, $mysql_link);
+						$mat    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+						// initialisation
+						if ( !$IDdata )
+							$IDdata = $mat[0];
+
+						while ( $mat ) {			
+							$select = ( $IDdata == $mat[0] OR $_SESSION["CampusName"] == $mat[1] ) ? "selected=\"selected\"" : "" ;
+
+							print("<option value=\"$mat[0]\" $select>$mat[1]</option>");
+
+							$mat = remove_magic_quotes(mysql_fetch_row($result));
+							}	// endwhile catégorie
+					?>
+				</select> <img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/document.gif" title="" alt="" />
+				</label>
+			    </td>
+			  </tr>
+
+			  <tr>
+			    <td class="align-right">
+				<?php print($msg->read($QUIZZ_CHOOSECLASS)); ?>
+			    </td>
+			    <td>
+				<label for="IDsel">
+			  	<select id="IDsel" name="IDsel" onchange="document.forms.formulaire.submit()">
+					<option value="0"><?php print($msg->read($QUIZZ_ALLCLASS)); ?></option>
+					<?php
+						// affichage des classes
+						$query  = "select _IDclass, _ident from campus_classe ";
+						$query .= "where _visible = 'O' ";
+						$query .= ( strlen($_SESSION["CampusName"]) AND $IDmat < 0 ) ? "AND _ident = '".$_SESSION["CampusName"]."' " : "" ;
+						$query .= "order by _ident";
+
+						$result = mysql_query($query, $mysql_link);
+						$grp    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+						while ( $grp ) {
+							$select = ( $IDsel == $grp[0] OR $_SESSION["CampusName"] == $grp[1] ) ? "selected=\"selected\"" : "" ;
+
+							// détermination du nombre de quizz
+							$Query  = "select _IDquizz from quizz ";
+							$Query .= "where _IDmat = '$IDdata' AND _IDgrprd like '% $grp[0] %' ";
+							$Query .= ( $_SESSION["CnxAdm"] == 255 ) ? "" : "AND (_visible = 'O' OR _ID = '".$_SESSION["CnxID"]."') " ;
+
+							$return = mysql_query($Query, $mysql_link);
+							$nbelem = ( $return ) ? mysql_affected_rows($mysql_link) : 0 ;
+
+							print("<option value=\"$grp[0]\" $select>$grp[1] ($nbelem)</option>");
+
+							$grp = remove_magic_quotes(mysql_fetch_row($result));
+							}
+					?>
+				</select> <img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/group.gif" title="" alt="" />
+				</label>
+			    </td>
+			  </tr>
+			</table>
+
+			<hr style="width:80%;" />
+
+		<?php
+			if ( $IDdata ) {
+				// vérification de l'accès en écriture
+				if ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $IDmod OR ($grpwr & pow(2, $_SESSION["CnxGrp"] - 1)) ) {
+					$link  = "[";
+					$link .= "<img src=\"".$_SESSION["ROOTDIR"]."/images/ajouter.gif\" title=\"".$msg->read($QUIZZ_ADDEXERCICE)."\" alt=\"".$msg->read($QUIZZ_ADDEXERCICE)."\" />";
+					$link .= "<a href=\"".myurlencode("index.php?cmde=new&item=$item&IDsel=$IDsel&IDmat=$IDmat&IDdata=$IDdata&IDroot=$IDroot")."\">". $msg->read($QUIZZ_ADD) ."</a>";
+					$link .= " | ";
+					$link .= "<img src=\"".$_SESSION["ROOTDIR"]."/images/ressources.png\" title=\"".$msg->read($QUIZZ_ADDEXERCICE)."\" alt=\"".$msg->read($QUIZZ_ADDEXERCICE)."\" />";
+					$link .= "<span onclick=\"$('list')._display.toggle(); return false;\"><a href=\"#\">". $msg->read($QUIZZ_IMPORT) ."</a></span>";
+//					$link .= "<a href=\"#\" onclick=\"popWin('".$_SESSION["ROOTDIR"]."/quizz_import.php?sid=".myurlencode($_SESSION["sessID"]."&IDdata=$IDdata&IDroot=$IDroot")."', '450', '470');\">". $msg->read($QUIZZ_IMPORT) ."</a>";
+					$link .= "]";
+					}
+				else
+					$link  = "";
+
+				// répertoire
+				$result = mysql_query("select _titre, _IDparent from quizz_root where _IDroot = '$IDroot' limit 1", $mysql_link);
+				$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+				$mydir  = ( $row ) ? $row[0] : $msg->read($QUIZZ_ROOTDIR) ;
+
+		         	$add    = ( $row )
+					? "<a href=\"".myurlencode("index.php?item=$item&IDsel=$IDsel&IDmat=$IDmat&IDdata=$IDdata")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/folder-up.gif\" title=\"..\" alt=\"..\"/></a>"
+					: (( $_SESSION["CnxAdm"] == 255 OR ($grpwr & pow(2, $_SESSION["CnxGrp"] - 1)) )
+						? "<a href=\"".myurlencode("index.php?item=$item&cmde=newdir&IDsel=$IDsel&IDmat=$IDmat&IDdata=$IDdata")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/folder-new.gif\" title=\"". $msg->read($QUIZZ_NEWDIR) ."\" alt=\"". $msg->read($QUIZZ_NEWDIR) ."\"/></a>"
+						: "") ;
+
+				if ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $IDmod OR ($grpwr & pow(2, $_SESSION["CnxGrp"] - 1)) OR $row ) {
+					print("
+				            <table class=\"width100\">
+				              <tr>
+				                <td>$link</td>
+				                <td class=\"align-right\">[$add $mydir]</td>
+				              </tr>
+				            </table>");
+
+					print("
+						<div id=\"list\" style=\"display:none;\">
+							<input type=\"hidden\" name=\"MAX_FILE_SIZE\" value=\"$FILESIZE\" />
+							<input type=\"file\" name=\"UploadFile\" size=\"80\" style=\"font-size:9px; margin-bottom:5px;\" />
+					 		<input type=\"submit\" value=\"". $msg->read($QUIZZ_IMPORT) ."\" style=\"font-size:9px;\" />
+						</div>");
+					}
+				}
+
+			print("
+		            <table class=\"width100\">
+		              <tr class=\"align-center\" style=\"background-color:#C0C0C0;\">
+		                <td style=\"width:1%;\"><img src=\"".$_SESSION["ROOTDIR"]."/images/visible.gif\" title=\"\" alt=\"\" /></td>
+		                <td style=\"width:1%;\"><input type=\"image\" src=\"".$_SESSION["ROOTDIR"]."/images/corb.gif\" name=\"delete\" title=\"".$msg->read($QUIZZ_DELTEST)."\" alt=\"".$msg->read($QUIZZ_DELTEST)."\" /></td>
+		                <td style=\"width:50%;\">". $msg->read($QUIZZ_EXERCICE) ."</td>
+		                <td style=\"width:20%;\">". $msg->read($QUIZZ_DATE) ."</td>
+		                <td style=\"width:9%;\">". $msg->read($QUIZZ_HIT) ."</td>
+		                <td style=\"width:10%;\">". $msg->read($QUIZZ_QUESTIONLABEL) ."</td>
+		                <td style=\"width:9%;\">". $msg->read($QUIZZ_LEVELLABEL) ."</td>
+		              </tr>
+				");
+
+			// pour les dossiers privés (gestion par ACL)
+			$acl    = new user_acl("quizz_root");
+
+			//---- lecture des répertoires ----
+			$Query  = "select _IDroot, _titre, _IDmod, _IDgrprd, _visible, _IDparent, _ID, _date, _private from quizz_root ";
+			$Query .= "where _IDparent = '$IDroot' AND _IDgroup = '$IDgroup' " ;
+			$Query .= "order by _titre";
+
+			$result = ( $skpage == 1 ) ? mysql_query($Query, $mysql_link) : 0 ;
+			$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+			$i = 1;
+			while ( $row ) {
+				// accès protégé en lecture
+				if ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $row[2] OR $_SESSION["CnxID"] == $row[6] OR ($row[3] & pow(2, $_SESSION["CnxGrp"] - 1) AND $row[4] == "O") ) {
+					$bgcol  = ( $i++ % 2 ) ? "item" : "menu" ;
+
+					// accés des répertoires
+					$file   = ( $row[4] == "O" ) ? "folder-closed.gif" : "folder-lock.jpg" ;
+					$action = ( $row[4] == "O" ) ? $msg->read($QUIZZ_CLOSING)   : $msg->read($QUIZZ_OPENING) ;
+					$access = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $row[2] )
+						? "<a href=\"".myurlencode("index.php?$href&IDroot=$row[0]&IDparent=$IDparent&IDdir=$row[0]&submit=$action")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/$file\" title=\"$action\" alt=\"$action\" /></a>"
+						: "<img src=\"".$_SESSION["ROOTDIR"]."/images/$file\" title=\"\" alt=\"\" />" ;
+
+					$link   = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $row[2] OR ($row[8] == "O" AND $acl->isMember($row[0], $_SESSION["CnxID"])) )
+						? "<a href=\"". myurlencode("index.php?$href&IDroot=$row[0]&IDparent=$IDparent")."\">$row[1]</a>"
+						: $row[1] ;
+
+					if ( $row[8] == "O" )
+						$priv   = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $row[2] )
+							? "<a href=\"".myurlencode("index.php?item=1&cmde=acl&ident=quizz_root&IDident=$row[0]")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/invisible.gif\" title=\"". $msg->read($QUIZZ_PRIVATE) ."\" alt=\"". $msg->read($QUIZZ_PRIVATE) ."\" /></a>"
+							: "<img src=\"".$_SESSION["ROOTDIR"]."/images/invisible.gif\" title=\"". $msg->read($QUIZZ_PRIVATE) ."\" alt=\"". $msg->read($QUIZZ_PRIVATE) ."\" />" ;
+					else
+						$priv = "";
+
+					// suppression du répertoire
+					$isok   = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $row[4] )
+						? ""
+						: "disabled=\"disabled\"" ;
+
+					// modification du répertoire
+					$maj   = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $row[2] )
+						? "<a href=\"".myurlencode("index.php?$href&IDroot=$row[0]&IDparent=$IDparent&cmde=newdir")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/stats/post.gif\" title=\"". $msg->read($QUIZZ_UPDATING) ."\" alt=\"". $msg->read($QUIZZ_UPDATING) ."\" /></a>"
+						: "" ;
+
+					print("
+						<tr class=\"$bgcol\">
+						  <td>$access</td>
+						  <td>
+							<label for=\"deldir_$row[0]\">
+							<input type=\"checkbox\" id=\"deldir_$row[0]\" name=\"deldir[]\" value=\"$row[0]\" $isok />
+							</label>
+						  </td>
+		      			  <td>$link $priv $maj</td>
+						  <td class=\"align-center\"><span class=\"x-small\">".date2longfmt($row[7])."</span></td>
+						  <td></td>
+		   	   			  <td></td>
+						  <td></td>
+						</tr>
+       					");
+					}
+
+				$row = remove_magic_quotes(mysql_fetch_row($result));
+				}
+
+			//---- lecture de la base de données ----
+			$Query  = "select _IDquizz, _date, _titre, _level, _ID, _visible, _anonyme, _result, _back, _IP, _random, _delay from quizz ";
+			$Query .= "where _IDmat = '$IDdata' AND _IDroot = '$IDroot' " ;
+			$Query .= ( $IDsel ) ? "AND _IDgrprd like '% $IDsel %' " : "" ;
+			$Query .= ( $_SESSION["CnxAdm"] == 255 ) ? "" : "AND (_visible = 'O' OR _ID = '".$_SESSION["CnxID"]."') " ;
+			$Query .= "order by _IDquizz";
+
+			// détermination du nombre de pages
+			$result = mysql_query($Query, $mysql_link);
+			$nbelem = ( $result ) ? mysql_affected_rows($mysql_link) : 0 ;
+
+			$page   = $nbelem;
+			$show   = 1;
+
+			if ( $nbelem ) {
+				$page  = ( $page % $MAXPAGE )
+					? (int) ($page / $MAXPAGE) + 1
+					: (int) ($page / $MAXPAGE) ;
+
+				$show  = ( $page % $MAXSHOW )
+					? (int) ($page / $MAXSHOW) + 1
+					: (int) ($page / $MAXSHOW) ;
+
+				// initialisation
+//				$i     = 1;
+				$first = 1 + (($skpage - 1) * $MAXPAGE);
+				
+				// se positionne sur la page ad hoc
+				mysql_data_seek($result, $first - 1);
+				$row   = remove_magic_quotes(mysql_fetch_row($result));
+
+				while ( $row AND $i <= $MAXPAGE ) {
+					$bgcol = ( $i++ % 2 ) ? "item" : "menu" ;
+
+					// ouverture/fermeture du quizz
+					if ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $row[4] )
+						$alt = ( $row[5] == "O" ) ? $msg->read($QUIZZ_CLOSEXO) : $msg->read($QUIZZ_OPENEXO) ;
+					$img    = ( $row[5] == "O" ) ? "folder_new" : "lock" ;
+					$access = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $row[4] )
+						? "<a href=\"".myurlencode("index.php?item=$item&IDmat=$IDmat&IDdata=$IDdata&IDsel=$IDsel&IDquizz=$row[0]&submit=update")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/$img.gif\" title=\"$alt\" alt=\"$alt\" /></a>"
+						: "<img src=\"".$_SESSION["ROOTDIR"]."/images/$img.gif\" title=\"$alt\" alt=\"$alt\" />" ;
+
+					// lecture de l'auteur de la ressource
+					$auteur = "<span class=\"x-small\">".$msg->read($QUIZZ_BY, getUserName($row[4]))." "._getHostName($row[9])."</span>";
+
+					// lecture du nombre de questions
+					$res    = mysql_query("select _IDdata from quizz_data where _IDquizz = '$row[0]'", $mysql_link);
+					$count  = ( $res ) ? mysql_affected_rows($mysql_link) : 0 ;
+					$rand   = ( strlen($row[10]) AND strlen($row[10]) < $count ) ? $row[10] : $count ;
+
+					$add    = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $row[4] )
+						? "<a href=\"".myurlencode("index.php?item=$item&IDmat=$IDmat&IDdata=$IDdata&IDsel=$IDsel&IDquizz=$row[0]&cmde=upload")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/add.gif\" title=\"". $msg->read($QUIZZ_ADDQUESTION) ."\" alt=\"". $msg->read($QUIZZ_ADDQUESTION) ."\" /></a>"
+						: "" ;
+
+					// nbr d'utilisateurs qui ont commencé ou terminé le questionnaire
+					$query  = ( $row[6] == "N" ) ? "select distinctrow _IP " : "select distinctrow _ID " ;
+					$query .= "from quizz_vote ";
+					$query .= "where _IDquizz = '$row[0]'";
+
+					$res    = mysql_query($query, $mysql_link);
+					$vu     = ( $res ) ? mysql_affected_rows($mysql_link) : 0 ;
+
+					// questionnaire terminé par l'utilisateur ?
+					$query  = "select distinctrow _IDdata from quizz_vote ";
+					$query .= ( $row[6] == "N" ) ? "where _IP = '".$_SESSION["CnxIP"]."' " : "where _ID = '".$_SESSION["CnxID"]."' " ;
+					$query .= "AND _IDquizz = '$row[0]'";
+
+					$res    = mysql_query($query, $mysql_link);
+					$qtot   = ( $res ) ? mysql_affected_rows($mysql_link) : 0 ;
+
+					// test/résultat du quizz
+					// questionnaire ouvert ? 
+					if ( $row[5] == "N" )
+						$lien = "<a href=\"".myurlencode("index.php?item=$item&IDmat=$IDmat&IDdata=$IDdata&IDsel=$IDsel&IDquizz=$row[0]&cmde=show")."\">$row[2]</a>";
+					else
+						// questionnaire terminé ?
+						if ( $qtot AND $qtot == $rand AND $row[7] == "N" AND $row[8] == "N" )
+							$lien = "$row[2]";
+						else
+							$lien = "<a href=\"".myurlencode("index.php?item=$item&IDmat=$IDmat&IDdata=$IDdata&IDsel=$IDsel&IDquizz=$row[0]&nbcount=$count&cmde=visu")."\">$row[2]</a>";
+
+					// raz du quizz
+					$flag   = ( $qtot )
+						? ( $qtot == $rand 
+							? $msg->read($QUIZZ_HASENDED) 
+							: $msg->read($QUIZZ_RUNNING, Array("$qtot", "$rand")) )
+						: $msg->read($QUIZZ_NOTBEGUN) ;
+					$flag  .= ( $qtot AND ($_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $row[4]) )
+						? "[<a href=\"".myurlencode("index.php?item=$item&IDsel=$IDsel&IDmat=$IDmat&IDdata=$IDdata&IDquizz=$row[0]&submit=raz")."\">".$msg->read($QUIZZ_RESET)."</a>]"
+						: "" ;
+
+					$reset  = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $row[4] )
+						? "[<a href=\"".myurlencode("index.php?item=$item&IDsel=$IDsel&IDmat=$IDmat&IDdata=$IDdata&IDquizz=$row[0]&&submit=raz")."\">".$msg->read($QUIZZ_RESET)."</a>]"
+						: "" ;
+
+					// suppression du quizz
+					$isok   = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $row[4] )
+						? ""
+						: "disabled=\"disabled\"" ;
+
+					// modification du quizz
+					$maj    = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $row[4] )
+						? "<a href=\"".myurlencode("index.php?item=$item&IDmat=$IDmat&IDdata=$IDdata&IDsel=$IDsel&IDquizz=$row[0]&cmde=new&submit=update")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/stats/post.gif\" title=\"". $msg->read($QUIZZ_UPDATEXO) ."\" alt=\"". $msg->read($QUIZZ_UPDATEXO) ."\" /></a>"
+						: "" ;
+
+					// niveau de difficulté des exercices
+					$level  = ( $row[3] )
+						? "<img src=\"".$_SESSION["ROOTDIR"]."/images/stats/etoile$row[3].gif\" title=\"\" alt=\"$row[3]\" />"
+						: "" ;
+
+					// tirage aléatoire
+					$aleas  = ( strlen($row[10]) )
+						? "<img src=\"".$_SESSION["ROOTDIR"]."/images/random.gif\" title=\"". stripHTMLtags($msg->read($QUIZZ_RANDOM)) ."\" alt=\"". stripHTMLtags($msg->read($QUIZZ_RANDOM)) ."\" />"
+						: "" ;
+
+					// temps limité
+					$limit  = ( strlen($row[11]) )
+						? "<img src=\"".$_SESSION["ROOTDIR"]."/images/hourglass.png\" title=\"". $msg->read($QUIZZ_LIMIT, $row[11]) ."\" alt=\"". $msg->read($QUIZZ_LIMIT, $row[11]) ."\" />"
+						: "" ;
+
+					$total  = ( strlen($row[10]) ) ? "$rand/$count" : "$count" ;
+
+					// accès protégé en lecture
+					print("
+						<tr class=\"$bgcol\">
+							<td>$access</td>
+							<td>
+								<label for=\"delquizz_$row[0]\">
+								<input type=\"checkbox\" id=\"delquizz_$row[0]\" name=\"delquizz[]\" value=\"$row[0]\" $isok />
+								</label>
+							</td>
+		      				<td>$lien $aleas $limit <span class=\"x-small\">($flag) $maj</span><br/>$auteur</td>
+							<td class=\"align-center\"><span class=\"x-small\">".date2longfmt($row[1])."</span></td>
+							<td class=\"align-center\">[$vu]</td>
+		   	   				<td class=\"align-center\">$total $add</td>
+							<td class=\"align-center\">$level</td>
+			       		  </tr>
+		       			");
+
+					$row = remove_magic_quotes(mysql_fetch_row($result));
+					}	// endwhile ressource
+				}	// endif nbelem
+					
+			print("
+	            		</table>
+		              ");
+
+			// bouton précédent
+			$where = $skshow - 1;
+			if ( $skshow == 1 )
+				$prev = "";
+			else {
+				$skpg = 1 + (($skshow - 2) * $MAXSHOW);
+				$prev = "[<a href=\"".myurlencode("index.php?item=$item&IDmat=$IDmat&IDdata=$IDdata&skpage=$skpg&skshow=$where")."\">".$msg->read($QUIZZ_PREV)."</a>";
+				}
+
+			// liens directs sur n° de page
+			$start = 1 + (($skshow - 1) * $MAXSHOW);
+			$end   = $skshow * $MAXSHOW;
+
+			$choix = ( $skpage == $start )
+				? "<img src=\"".$_SESSION["ROOTDIR"]."/images/nav_left.gif\" title=\"«\" alt=\"«\" /><strong>$start</strong><img src=\"".$_SESSION["ROOTDIR"]."/images/nav_right.gif\" title=\"»\" alt=\"»\" />"
+				: "|<a href=\"".myurlencode("index.php?item=$item&IDmat=$IDmat&IDdata=$IDdata&skpage=$start&skshow=$skshow")."\">$start</a>" ;
+
+			for ($j = $start + 1; $j <= $end AND $j <= $page; $j++)
+				$choix .= ( $skpage == $j )
+					? "|<img src=\"".$_SESSION["ROOTDIR"]."/images/nav_left.gif\" title=\"«\" alt=\"«\" /><strong>$j</strong><img src=\"".$_SESSION["ROOTDIR"]."/images/nav_right.gif\" title=\"»\" alt=\"»\" />"
+					: "|<a href=\"".myurlencode("index.php?item=$item&IDmat=$IDmat&IDdata=$IDdata&kpage=$start&skshow=$skshow")."\">$j</a>" ;
+
+			// bouton suivant
+			$where = $skshow + 1;
+			$next  = ( $skshow == $show )
+				? ""
+				: "[".$msg->read($QUIZZ_NEXT)."]" ;
+		?>
+
+		<hr/>
+
+		<?php if ( $nbelem ) print("<div style=\"text-align:center;\">$prev $choix $next</div>"); ?>
+
+		</form>
+
+</div>

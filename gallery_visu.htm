@@ -1,0 +1,422 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2003-2007 by Dominique Laporte(C-E-D@wanadoo.fr)
+   Copyright (c) 2006 by Nordine Zetoutou (nordine.zetoutou@educagri.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : gallery_visu.htm
+ *		projet   : la page de visualisation des vignettes
+ *
+ *		version  : 1.0
+ *		auteur   : laporte
+ *		creation : 2/07/03
+ *		modif    : 17/07/06 - Nordine Zetoutou
+ * 	                 migration des balises HTML en XHTML 1.0 strict
+ */
+
+
+$IDgroup  = ( @$_POST["IDgroup"] )		// identifiant du e-groupe
+	? (int) $_POST["IDgroup"]
+	: (int) @$_GET["IDgroup"] ;
+$IDgal  = ( strlen(@$_POST["IDgal"]) )	// identifiant des galeries
+	? (int) $_POST["IDgal"]
+	: (int) @$_GET["IDgal"] ;
+$IDdata = ( @$_POST["IDdata"] )		// identifiant des répertoires des items des galeries
+	? (int) $_POST["IDdata"]
+	: (int) @$_GET["IDdata"] ;
+$sort   = ( @$_POST["sort"] )			// tri sur l'affichage
+	? (int) $_POST["sort"]
+	: (int) @$_GET["sort"] ;
+$IDitem = (int) @$_GET["IDitem"];		// ID de la vignette
+$IDpj   = (int) @$_GET["IDpj"];		// ID de la Pièce Jointe
+$move   = (int) @$_GET["move"];		// déplacement vignette
+$swap   = (int) @$_GET["swap"];		// échange vignette
+
+$skpage = ( @$_GET["skpage"] )		// n° de la page affichée
+	? (int) $_GET["skpage"]
+	: 1 ;
+$skshow = ( @$_GET["skshow"] )		// n° du flash info
+	? (int) $_GET["skshow"]
+	: 1 ;
+
+$submit = ( @$_POST["submit"] )		// bouton de validation
+	? $_POST["submit"]
+	: @$_GET["submit"] ;
+?>
+
+
+<?php
+	// traitement des commandes
+	switch ( $submit ) {
+     		case "delpj" :	// suppression d'une pièce jointe
+			$Query   = "delete from gallery_pj ";
+			$Query  .= "where _IDpj = '$IDpj' ";
+			$Query  .= "limit 1";
+
+			if ( !mysql_query($Query, $mysql_link) )
+				sql_error($mysql_link);
+     			break;
+
+     		case "del" :	// suppression de l'image
+			$Query   = "delete from gallery_items ";
+			$Query  .= "where _IDitem = '$IDitem' ";
+			$Query  .= "limit 1";
+
+			if ( !mysql_query($Query, $mysql_link) )
+				sql_error($mysql_link);
+     			break;
+
+     		case "swap" :	// déplacement des images
+			if ( $move != $swap ) {
+				mysql_query("update gallery_items set _IDitem = '0' where _IDitem = '$swap' limit 1", $mysql_link);
+				mysql_query("update gallery_items set _IDitem = '$swap' where _IDitem = '$move' limit 1", $mysql_link);
+
+				$min    = ( $move > $swap ) ? $swap : $move ;
+				$max    = ( $move > $swap ) ? $move : $swap ;
+
+				$Query  = "select _IDitem from gallery_items ";
+				$Query .= "where _IDdata = '$IDdata' ";
+				$Query .= "AND _IDitem > '$min' AND _IDitem < '$max' ";
+				$Query .= "order by _IDitem desc";
+
+				$result = mysql_query($Query, $mysql_link);
+				$row    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+				while ( $row ) {
+					mysql_query("update gallery_items set _IDitem = '$move' where _IDitem = '$row[0]' limit 1", $mysql_link);
+					$move = $row[0];
+					$row  = mysql_fetch_row($result);
+					}
+
+				mysql_query("update gallery_items set _IDitem = '$move' where _IDitem = '0' limit 1", $mysql_link);
+				}
+
+			$move = 0;
+     			break;
+
+     		default :
+			break;
+		}
+
+	// lecture de la base de données
+	$Query  = "select _title, _texte, _IDgrprd, _IDgrpwr, _IDmod, _file, _IDroot, _IDgal from gallery_data ";
+	$Query .= "where _IDdata = '$IDdata' ";
+	$Query .= "limit 1";
+
+	$result = mysql_query($Query, $mysql_link);
+	$myrow  = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+	// arborescence des galeries
+	$path   = $msg->read($GALLERY_GALLERY) . " > ";
+
+	$result = mysql_query("select _title from gallery where _IDgal = '$myrow[7]' AND _lang = '".$_SESSION["lang"]."' limit 1", $mysql_link);
+	$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+	$link   = "index.php?item=$item&IDgroup=$IDgroup&IDgal=$myrow[7]";
+	$path   .= ( $row ) ? "<a href=\"".myurlencode($link)."\">$row[0]</a> > " : "" ;
+
+	$result = mysql_query("select _titre from gallery_root where _IDroot = '$myrow[6]' limit 1", $mysql_link);
+	$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+	$link   = "$link&IDroot=$myrow[6]";
+	$path  .= ( $row ) ? "<a href=\"".myurlencode($link)."\">$row[0]</a> > " : "" ;
+
+	$link   = "$link&IDdata=$IDdata&cmde=visu";
+	$path  .= "<a href=\"".myurlencode($link)."\">$myrow[0]</a>";
+?>
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat; height: 30px;">
+	<div style="text-align: center;"><strong><?php echo $myrow[0]; ?></strong></div>
+	<div style="float: left;"><?php echo $path; ?></div>
+</div>
+
+<div class="maincontent">
+
+	<?php
+		// lecture de la base de données des PJ
+		$Query  = "select _IDpj, _file, _size from gallery_pj ";
+		$Query .= "where _IDdata = '$IDdata' ";
+
+		$result = mysql_query($Query, $mysql_link);
+		$mypj   = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+         	if ( strlen($myrow[1]) OR mysql_affected_rows($mysql_link) ) {
+			$text  = $myrow[1];
+			$text .= ( $text ) ? "<br/>" : "" ;
+
+			while ( $mypj ) {
+				$del   = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $myrow[4] )
+					? "<a href=\"". myurlencode("index.php?item=$item&cmde=$cmde&IDgroup=$IDgroup&IDgal=$IDgal&IDdata=$IDdata&IDpj=$mypj[0]&submit=delpj") ."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/corb.gif\" title=\"". $msg->read($GALLERY_ERASE) ."\" alt=\"\" /></a>"
+					: "" ;
+
+				$text .= "<img src=\"".$_SESSION["ROOTDIR"]."/images/mime/". extension($mypj[1]) .".gif\" title=\"\" alt=\"\" /> ";
+				$text .= "<a href=\"$DOWNLOAD/galerie/$IDdata/pj-". myurlencode($mypj[1]) ."\" onclick=\"window.open(this.href, '_blank'); return false;\">$mypj[1]</a> ";
+				$text .= $msg->read($GALLERY_BYTES, strval($mypj[2])) . " $del<br/>";
+
+				$mypj = remove_magic_quotes(mysql_fetch_row($result));
+				}
+
+         		print("
+		            <table class=\"width100\">
+		              <tr style=\"background-color:#eeeeee;\">
+		                <td>$text</td>
+		              </tr>
+		            </table>
+				");
+			}
+	?>
+
+            <table class="width100">
+              <tr>
+			<td><hr style="width:80%;" /></td>
+              </tr>
+              <tr>
+			<td class="align-center">
+			<form id="formulaire" action="index.php" method="post">
+			<?php
+				print("
+					<p class=\"hidden\"><input type=\"hidden\" name=\"item\"    value=\"$item\" /></p>
+					<p class=\"hidden\"><input type=\"hidden\" name=\"cmde\"    value=\"$cmde\" /></p>
+					<p class=\"hidden\"><input type=\"hidden\" name=\"IDgal\"   value=\"$IDgal\" /></p>
+					<p class=\"hidden\"><input type=\"hidden\" name=\"IDdata\"  value=\"$IDdata\" /></p>
+					<p class=\"hidden\"><input type=\"hidden\" name=\"IDgroup\" value=\"$IDgroup\" /></p>
+					");
+			?>
+
+			<p style="margin-top:0px; margin-bottom:0px;"><?php print($msg->read($GALLERY_SHOWBY)); ?>
+				<label for="sort">
+			  	<select id="sort" name="sort" onchange="document.forms.formulaire.submit()">
+				<?php
+					$select = ( $sort == 0 ) ? "selected=\"selected\"" : "" ;
+					print("<option value=\"0\" $select>". $msg->read($GALLERY_NAME) ."</option>");
+
+					$select = ( $sort == 1 ) ? "selected=\"selected\"" : "" ;
+					print("<option value=\"1\" $select>". $msg->read($GALLERY_DATE) ."</option>");
+
+					$select = ( $sort == 2 ) ? "selected=\"selected\"" : "" ;
+					print("<option value=\"2\" $select>". $msg->read($GALLERY_INSERT) ."</option>");
+
+					$select = ( $sort == 3 ) ? "selected=\"selected\"" : "" ;
+					print("<option value=\"3\" $select>". $msg->read($GALLERY_HIT) ."</option>");
+				?>
+				</select> <img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/gallery.gif" title="" alt="" />
+				</label>
+			</p>
+			</form>
+			</td>
+              </tr>
+              <tr>
+			<td><hr style="width:80%;" /></td>
+              </tr>
+
+            <?php
+			// lecture de la base de données
+			$Query  = "select _file, _IDitem, _width, _height, _hit, _date, _size, _ID, _titre, _IP from gallery_items ";
+			$Query .= "where _IDdata = '$IDdata' ";
+			$Query .= ( $_SESSION["CnxAdm"] == 255 ) ? "" : "AND _visible = 'O' " ;
+			switch ( $sort ) {
+				case 1 :
+					$Query .= "order by _date asc";
+					break;
+				case 2 :
+					$Query .= "order by _IDitem asc";
+					break;
+				case 3 :
+					$Query .= "order by _hit desc";
+					break;
+				default :
+					$Query .= "order by _file asc";
+					break;
+				}
+
+			$result = mysql_query($Query, $mysql_link);
+
+			// détermination du nombre de pages
+			$maxpage = $IMGBYLINE * $IMGMAXLINE;
+			$page    = ( $result ) ? mysql_affected_rows($mysql_link) : 0 ;
+			$show    = 1;
+
+			if ( $result AND $page ) {
+
+				$page  = ( $page % $maxpage )
+					? (int) ($page / $maxpage) + 1
+					: (int) ($page / $maxpage) ;
+
+				$show  = ( $page % $MAXSHOW )
+					? (int) ($page / $MAXSHOW) + 1
+					: (int) ($page / $MAXSHOW) ;
+
+				// initialisation
+				$i     = 1;
+				$first = 1 + (($skpage - 1) * $maxpage);
+
+				print("
+					  <tr>
+					    <td style=\"width:100%\" class=\"align-center\">
+
+						<table style=\"width: ". $IMGBYLINE * $MAXIMGWDTH ."px\">
+					");
+
+				// initialisation pour présentation du tableau
+				$line = 0;
+				$path = "$DOWNLOAD/galerie/$IDdata/vignettes";
+
+				// se positionne sur la page ad hoc
+				mysql_data_seek($result, $first - 1);
+				$row = remove_magic_quotes(mysql_fetch_row($result));
+
+				while ( $row AND $i <= $maxpage ) {
+					$link = "index.php?item=$item&IDgroup=$IDgroup&IDgal=$IDgal&IDdata=$IDdata&IDitem=$row[1]&skpage=$skpage&skshow=$skshow&sort=$sort";
+
+					// nouvelle ligne du tableau
+					if ( $line % $IMGBYLINE == 0 )
+						print("<tr>");
+
+					// suppression des images
+					$req  = $msg->read($GALLERY_DELIMAGE);
+					$del  = ( $_SESSION["CnxAdm"] == 255 OR $row[7] == $_SESSION["CnxID"] )
+						? "<a href=\"".myurlencode("$link&cmde=visu&submit=del")."\" onclick=\"return confirmLink(this, '$req');\"><img src=\"".$_SESSION["ROOTDIR"]."/images/corb.gif\" title=\"$req\" alt=\"$req\" /></a>"
+						: "" ;
+
+					$maj   = ( $_SESSION["CnxAdm"] == 255 AND $IDgal )
+						? "<a href=\"".myurlencode("$link&cmde=upload")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/stats/post.gif\" title=\"". $msg->read($GALLERY_MODIFY) ."\" alt=\"". $msg->read($GALLERY_MODIFY) ."\" /></a>"
+						: "" ;
+
+					// poids du fichier
+					$size = number_format(floor($row[6] / 1024 ), 0, '', ' ');
+
+					// description du menu popup sur le lien
+					$desc  = $msg->read($GALLERY_CREATAT) ." ". str_replace(" ",  " ".$msg->read($GALLERY_AT)." ", $row[5]) ."<br/>";
+					$desc .= $msg->read($GALLERY_AUTHOR) ." ". getUserName($row[7], false) ." ". _getHostName($row[9], false) ."<br/>";
+					$desc .= $msg->read($GALLERY_FILE) . " $row[0]<br/>";
+					$desc .= $msg->read($GALLERY_RESOLUTION, Array(strval($row[2]), strval($row[3]))) ."<br/>";
+					$desc .= $msg->read($GALLERY_SIZE, strval($size));
+
+					$desc  = str_replace(Array("\n", "\r"), Array("<br/>", ""), $desc);
+
+					$pos   = $i + $first - 1;
+					$title = ( $move ) ? $msg->read($GALLERY_INSERTHERE) : $msg->read($GALLERY_MOVEHERE) ;
+					$swap  = ( ($_SESSION["CnxAdm"] == 255 OR $row[7] == $_SESSION["CnxID"]) AND $sort == 0)
+						? ($move
+							? "<a href=\"".myurlencode("$link&cmde=visu&move=$move&swap=$row[1]&submit=swap")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/checkbox_off.gif\" title=\"$title\" alt=\"$title\" /></a>"
+							: "<a href=\"".myurlencode("$link&cmde=visu&move=$row[1]")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/in.gif\" title=\"$title\" alt=\"$title\" /></a>")
+						: "" ;
+					$texte = ( $row[8] != "" )
+						? "$row[8]<br/>"
+						: "" ;
+					$file  = ( $myrow[5] == "O" )
+						? substr($row[0], 0, strrpos($row[0], "."))
+						: "" ;
+
+					print("
+						<td style=\"width:$MAXIMGWDTH"."px;\" class=\"back\">
+							<p style=\"text-align:center;\" class=\"x-small\">
+							[$pos] $swap<br/>
+							<a href=\"".myurlencode("$link&cmde=show")."\" class=\"overlib\">
+								<img src=\"$path/".strtolower(stripaccent($row[0]))."\" title=\"\" alt=\"\" class=\"imgLink\" /><br/>
+								$texte
+								$file ($row[4])
+								<span>$desc</span>
+							</a>
+							$del $maj
+							</p>
+						</td>
+						");
+
+					$row = remove_magic_quotes(mysql_fetch_row($result));
+					$line++;
+					$i++;
+
+					// fin nouvelle ligne
+					if ( $line % $IMGBYLINE == 0 )
+						print("</tr>");
+					}
+
+				// on complète le tableau
+				if ( $line % $IMGBYLINE ) {
+					for ($j = 0; $j < $line % $IMGBYLINE; $j++)
+						print("<td style=\"width:$MAXIMGWDTH\">&nbsp;</td>");
+					print("</tr>");
+					}
+
+				print("</table>");
+				}
+			?>
+
+		    </td>
+		  </tr>
+            </table>
+
+		<?php
+			// bouton précédent
+			$where = $skshow - 1;
+			if ( $skshow == 1 )
+				$prev = "";
+			else {
+				$skpg = 1 + (($skshow - 2) * $MAXSHOW);
+				$prev = "[<a href=\"".myurlencode("index.php?item=$item&cmde=$cmde&IDgroup=$IDgroup&IDdata=$IDdata&IDgal=$IDgal&sort=$sort&skpage=$skpg&skshow=$where")."\">". $msg->read($GALLERY_PREV) ."</a>]";
+				}
+
+			// liens directs sur n° de page
+			$start = 1 + (($skshow - 1) * $MAXSHOW);
+			$end   = $skshow * $MAXSHOW;
+
+			$choix = ( $skpage == $start )
+				? "<img src=\"".$_SESSION["ROOTDIR"]."/images/nav_left.gif\"  title=\"\" alt=\"\" /><strong>$start</strong><img src=\"".$_SESSION["ROOTDIR"]."/images/nav_right.gif\" title=\"»\" alt=\"»\" />"
+				: "<a href=\"".myurlencode("index.php?item=$item&cmde=$cmde&IDgroup=$IDgroup&IDdata=$IDdata&IDgal=$IDgal&sort=$sort&skpage=$start&skshow=$skshow")."\">$start</a>" ;
+
+			for ($j = $start + 1; $j <= $end AND $j <= $page; $j++)
+				$choix .= ( $skpage == $j )
+					? "|<img src=\"".$_SESSION["ROOTDIR"]."/images/nav_left.gif\" title=\"«\" alt=\"«\" /><strong>$j</strong><img src=\"".$_SESSION["ROOTDIR"]."/images/nav_right.gif\" title=\"»\" alt=\"»\" />"
+					: "|<a href=\"".myurlencode("index.php?item=$item&cmde=$cmde&IDgroup=$IDgroup&IDdata=$IDdata&IDgal=$IDgal&sort=$sort&skpage=$j&skshow=$skshow")."\">$j</a>" ;
+
+			// bouton suivant
+			$where = $skshow + 1;
+			$next = ( $skshow == $show )
+				? ""
+				: "[<a href=\"".myurlencode("index.php?item=$item&cmde=$cmde&IDgroup=$IDgroup&IDdata=$IDdata&IDgal=$IDgal&sort=$sort&skpage=$j&skshow=$where")."\">". $msg->read($GALLERY_NEXT) ."</a>]";
+		?>
+
+	      <hr/>
+			<?php print("<div style=\"text-align:center;\">$prev $choix $next</div>"); ?>
+		<hr/>
+
+	<?php
+          	// vérification de l'accès en écriture
+          	if ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $myrow[4] OR ($myrow[3] & pow(2, $_SESSION["CnxGrp"] - 1)) ) 
+         		print("
+		            <table class=\"width100\">
+		              <tr>
+		                <td style=\"width:10%\" class=\"valign-middle\">
+		                	<a href=\"".myurlencode("index.php?item=$item&IDgroup=$IDgroup&IDgal=$IDgal&IDdata=$IDdata&cmde=upload")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/post.gif\" title=\"\" alt=\"\" /></a>
+		                </td>
+		                <td style=\"width:45%\" class=\"valign-middle\">". $msg->read($GALLERY_ADDIMAGE) ."</td>
+		                <td style=\"width:40%\" class=\"valign-middle align-right\">
+	 				[<a href=\"".myurlencode("index.php?item=$item&IDgroup=$IDgroup&IDgal=$IDgal")."\">". $msg->read($GALLERY_BACKROOT) ."</a>]
+		                </td>
+		              </tr>
+		            </table>
+		            ");
+		else
+         		print("[<a href=\"".myurlencode("index.php?item=$item&IDgroup=$IDgroup&IDgal=$IDgal")."\">". $msg->read($GALLERY_GOBACK) ."</a>]");
+	?>
+
+</div>

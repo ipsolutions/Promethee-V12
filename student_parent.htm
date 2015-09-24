@@ -1,0 +1,352 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2010 by Dominique Laporte(C-E-D@wanadoo.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : student_parent.htm
+ *		projet   : la page de visualisation des parents
+ *
+ *		version  : 1.0
+ *		auteur   : laporte
+ *		creation : 8/04/10
+ *		modif    : 
+ */
+
+
+$IDcentre = ( @$_POST["IDcentre"] )			// Identifiant du centre
+	? (int) $_POST["IDcentre"]
+	: (int) (@$_GET["IDcentre"] ? $_GET["IDcentre"] : $_SESSION["CnxCentre"]) ;
+$IDalpha  = ( @$_POST["IDalpha"] )			// Identifiant de la classe sélectionnée
+	? $_POST["IDalpha"]
+	: (@$_GET["IDalpha"] ? $_GET["IDalpha"] : "A") ;
+$IDeleve  = ( @$_POST["IDeleve"] )			// Identifiant de l'élève
+	? (int) $_POST["IDeleve"]
+	: (int) (@$_GET["IDeleve"] ? $_GET["IDeleve"] : @$IDeleve) ;
+
+$skpage   = ( @$_GET["skpage"] )			// n° de la page affichée
+	? (int) $_GET["skpage"]
+	: 1 ;
+$skshow   = ( @$_GET["skshow"] )			// n° du flash info
+	? (int) $_GET["skshow"]
+	: 1 ;
+
+$submit   = @$_GET["submit"];
+?>
+
+
+<?php
+	// vérification des autorisations
+	$IDeleve = ( getAccess() == 2 ) ? $IDeleve : $_SESSION["CnxID"] ;
+?>
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($STUDENT_PARENTLIST)); ?> 
+	</div>
+</div>
+
+<div class="maincontent">
+
+	<form id="formulaire" action="index.php" method="post">
+	<?php
+		print("
+			<p class=\"hidden\"><input type=\"hidden\" name=\"item\"     value=\"$item\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"IDeleve\"  value=\"$IDeleve\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"IDalpha\"  value=\"$IDalpha\" /></p>");
+	?>
+
+		<table class="width100">
+		  <tr>
+			<td style="width:50%;" class="align-right">
+			    	<?php print($msg->read($STUDENT_CHOOSECENTER)); ?> 
+			</td>
+			<td style="width:50%;">
+				<label for="IDcentre">
+			  	<select id="IDcentre" name="IDcentre" onchange="document.forms.formulaire.submit()">
+				<?php
+					// lecture des centres constitutifs
+					$query  = "select _IDcentre, _ident from config_centre ";
+					$query .= "where _visible = 'O' AND _lang = '".$_SESSION["lang"]."' ";
+					$query .= "order by _IDcentre";
+
+					$result = mysql_query($query, $mysql_link);
+					$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+					while ( $row ) {			
+						printf("<option value=\"$row[0]\" %s>$row[1]</option>", ($IDcentre == $row[0]) ? "selected=\"selected\"" : "");
+
+						$row = remove_magic_quotes(mysql_fetch_row($result));
+						}				
+				?>
+				</select> <img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/home.gif" title="" alt="" />
+				</label>
+			</td>
+		  </tr>
+		</table>
+
+		<hr style="width:80%;" />
+
+		<div style="text-align:center;">
+		<?php
+			$href  = "";
+
+			// accès par ordre alphabétique
+	            $alpha = "BCDEFGHIJKLMNOPQRSTUVWXYZ";
+
+			$index = ( $IDalpha == "A" ) ? "<span style=\"text-decoration:underline;\">A</span>" : "A" ;
+	            print("<a href=\"".myurlencode("index.php?item=$item&IDalpha=A&$href")."\">$index</a>");
+
+	            for ($i = 0; $i < 25; $i++) {
+				$index = ( $IDalpha == $alpha[$i] ) ? "<span style=\"text-decoration:underline;\">$alpha[$i]</span>" : "$alpha[$i]" ;
+		            print("<strong>.</strong><a href=\"".myurlencode("index.php?item=$item&IDalpha=$alpha[$i]&$href")."\">$index</a>");
+				}
+		?>
+		</div>
+
+		<hr style="width:80%;" />
+
+	<?php
+		// on classe par ordre alphabétique
+		$Query  = "select user_tutors._IDtutor, user_tutors._ID ";
+		$Query .= "from user_tutors, user_id " ;
+		$Query .= "where user_id._visible = 'O' ";
+		$Query .= "AND user_tutors._IDtutor = user_id._ID ";
+		$Query .= ( $IDeleve ) ? "AND user_tutors._ID = '$IDeleve' " : "" ;
+		$Query .= ( strlen($IDalpha) ) ? "AND user_id._name >= '$IDalpha' " : "" ;
+		$Query .= "order by user_id._name, user_id._fname";
+
+		$result = mysql_query($Query, $mysql_link);
+
+		// détermination du nombre de pages
+		$page   = ( $result ) ? mysql_affected_rows($mysql_link) : 0 ;
+		$show   = 1;
+
+		if ( $result AND $page ) {
+			print("<table class=\"width100\">");
+
+			$page  = ( $page % $MAXPAGE )
+				? (int) ($page / $MAXPAGE) + 1
+				: (int) ($page / $MAXPAGE) ;
+
+			$show  = ( $page % $MAXSHOW )
+				? (int) ($page / $MAXSHOW) + 1
+				: (int) ($page / $MAXSHOW) ;
+
+			// initialisation
+			$i     = 1;
+			$first = 1 + (($skpage - 1) * $MAXPAGE);
+				
+			// se positionne sur la page ad hoc
+			@mysql_data_seek($result, $first - 1);
+			$myrow = remove_magic_quotes(mysql_fetch_row($result));
+
+			while ( $myrow AND $i <= $MAXPAGE ) {
+				// lecture des parents
+				$Query  = "select distinctrow ";
+				$Query .= "user_id._ID, user_id._IDclass, " ;
+				$Query .= "_name, _fname, _sexe, _born, _adr1, _adr2, _cp, _city, _tel, _regime, _bourse, _email, _IDgrp, user_id._delegue, user_id._lang, user_id._numen, user_id._adm, " ;
+				$Query .= "user_id._mobile, user_id._work ";
+				$Query .= "from user_id, campus_classe " ;
+				$Query .= "where user_id._ID = '$myrow[0]' ";
+				$Query .= "limit 1";
+
+				$return = mysql_query($Query, $mysql_link);
+				$row    = ( $return ) ? remove_magic_quotes(mysql_fetch_row($return)) : 0 ;
+
+				// on vérifie si la photo existe
+				$path  = "$DOWNLOAD/photo/parents";
+				$photo = ( file_exists("$path/$row[0].gif") ) 
+					? "<img src=\"$path/$row[0].gif\" title=\"\" alt=\"\" />" 
+					: "<img src=\"".$_SESSION["ROOTDIR"]."/css/themes/".$_SESSION["CfgTheme"]."/images/0.gif\" title=\"\" alt=\"\" />" ;
+
+				switch ( $row[4] ) {
+					case "H" :
+	      	      		$sex = "<img src=\"".$_SESSION["ROOTDIR"]."/images/male.gif\" title=\"photo $path/$row[0]\" alt=\"photo $path/$row[0]\" />";
+	            			break;
+	            		case "F" :
+	            			$sex = "<img src=\"".$_SESSION["ROOTDIR"]."/images/female.gif\" title=\"photo $path/$row[0]\" alt=\"photo $path/$row[0]\" />";
+		            		break;
+		            	default :
+	            			$sex = "<img src=\"".$_SESSION["ROOTDIR"]."/images/anonymous.gif\" title=\"photo $path/$row[0]\" alt=\"photo $path/$row[0]\" />";
+	            			break;
+	            		}
+
+				// compte ouvert ou fermé ?
+				$mycnx = ( $row[18] )
+					? "<img src=\"".$_SESSION["ROOTDIR"]."/images/stats/online.gif\" title=\"".$msg->read($STUDENT_ACCOUNTOPEN)."\" alt=\"".$msg->read($STUDENT_ACCOUNTOPEN)."\" />" 
+					: "<img src=\"".$_SESSION["ROOTDIR"]."/images/stats/offline.gif\" title=\"".$msg->read($STUDENT_ACCOUNTCLOSE)."\" alt=\"".$msg->read($STUDENT_ACCOUNTCLOSE)."\" />" ;
+
+				$mycnx = ( $_SESSION["CnxAdm"] == 255 )
+					? "<a href=\"".myurlencode("index.php?item=1&cmde=new&ID=$row[14]&IDeleve=$row[0]")."\">$mycnx</a>"
+					: $mycnx ;
+
+				// mise à jour : il faut les droits du gestionnaire
+				$update = ( $_SESSION["CnxAdm"] & 8 )
+					? "<a href=\"".myurlencode("index.php?item=$item&cmde=account&ID=$row[0]&IDalpha=$IDalpha")."\">$sex</a>"
+					: $sex ;
+
+				// email
+				$email = ( $_SESSION["CnxAdm"] & 8 AND strlen($row[13]) )
+					? "<a href=\"mailto:$row[13]\"><img src=\"".$_SESSION["ROOTDIR"]."/images/email.gif\" title=\"$row[13]\" alt=\"$row[13]\" /></a>"
+					: "" ;
+
+				print("
+				  <tr>
+				    <td style=\"width:15%;\" class=\"valign-top align-center\">
+					$photo<br/>
+					[$row[0]]
+				    </td>
+				    <td class=\"valign-top\">
+					<div style=\"border:#cccccc solid 1px; padding:2px;\">
+					");
+
+				// l'adresse, tel, email et statut sont invisibles pour les élèves
+				$field1 = "$row[6]<br/>$row[7]<br/>$row[8] $row[9]";
+				$field2 = $row[10];
+				$field3 = $row[19];
+				$field4 = $row[20];
+
+				// affichage des groupes
+				for ($idx = 0; $idx < @count($groupe[0]); $idx++)
+					if ( $groupe[0][$idx] == $row[1] ) break;
+
+				// recherche dela classe de l'élève
+				$Query  = "select campus_classe._ident ";
+				$Query .= "from user_id, campus_classe " ;
+				$Query .= "where user_id._ID = '$myrow[1]' ";
+				$Query .= "AND campus_classe._IDcentre = '$IDcentre' AND campus_classe._IDclass = user_id._IDclass ";
+				$Query .= "limit 1";
+
+				$ret    = mysql_query($Query, $mysql_link);
+				$sql    = ( $ret ) ? remove_magic_quotes(mysql_fetch_row($ret)) : 0 ;
+
+				$table  = 
+					"<div style=\"border:#cccccc solid 1px; padding:2px; background-color:#EEEEEE;\">
+						". getUserName($myrow[1]) ."<br/>
+						$sql[0]
+					</div>";
+
+				print("
+					<table class=\"width100\">
+			              <tr>
+			                <td style=\"width:20%;\" class=\"align-right\">
+			                  ". $msg->read($STUDENT_NAME) ."
+			                </td>
+			                <td class=\"valign-top align-left\">
+			                  $row[2], $row[3] [<img src=\"".$_SESSION["ROOTDIR"]."/images/lang/ico-$row[16].png\" title=\"$row[16]\" alt=\"$row[16]\" /> $update $mycnx $email]
+			                </td>
+			                <td class=\"valign-top align-left\" rowspan=\"7\" style=\"width:$25%;\">
+						". $table ."
+			                </td>
+			              </tr>");
+
+				if ( getAccess() == 2 )
+					print("
+			              <tr>
+			                <td class=\"valign-top align-right\">
+			                  ". $msg->read($STUDENT_ADDRESS) ."
+			                </td>
+			                <td class=\"valign-top align-left\">
+			                  $field1
+			                </td>
+			              </tr>
+
+			              <tr>
+			                <td class=\"valign-top align-right\">
+			                  ". $msg->read($STUDENT_PHONE) ."
+			                </td>
+			                <td class=\"valign-top align-left\">
+			                  $field2
+			                </td>
+			              </tr>
+
+			              <tr>
+			                <td class=\"valign-top align-right\">
+			                  ". $msg->read($STUDENT_MOBILE) ."
+			                </td>
+			                <td class=\"valign-top align-left\">
+			                  $field3
+			                </td>
+			              </tr>
+
+			              <tr>
+			                <td class=\"valign-top align-right\">
+			                  ". $msg->read($STUDENT_PHONEWORK) ."
+			                </td>
+			                <td class=\"valign-top align-left\">
+			                  $field4
+			                </td>
+			              </tr>");
+
+				print("
+			            </table>
+
+			            </div>
+		                </td>
+		              </tr>
+					");
+					
+				$i++;
+				$myrow = remove_magic_quotes(mysql_fetch_row($result));
+				}
+
+            	print("</table>");
+			}	// endif page
+	      ?>
+
+	</form>
+
+	<?php
+		// bouton précédent
+		$where = $skshow - 1;
+
+		if ( $skshow == 1 )
+			$prev = "";
+		else {
+			$skpg = 1 + (($skshow - 2) * $MAXSHOW);
+			$prev = "[<a href=\"".myurlencode("index.php?item=$item&IDalpha=$IDalpha&skpage=$skpg&skshow=$where&$href")."\">". $msg->read($STUDENT_PREV) ."</a>]";
+			}
+
+		// liens directs sur n° de page
+		$start = 1 + (($skshow - 1) * $MAXSHOW);
+		$end   = $skshow * $MAXSHOW;
+
+		$choix = ( $skpage == $start )
+			? "<img src=\"".$_SESSION["ROOTDIR"]."/images/nav_left.gif\" title=\"«\" alt=\"«\" /><strong>$start</strong><img src=\"".$_SESSION["ROOTDIR"]."/images/nav_right.gif\" title=\"»\" alt=\"»\" />"
+			: "<a href=\"".myurlencode("index.php?item=$item&IDalpha=$IDalpha&skpage=$start&skshow=$skshow&$href")."\">$start</a>" ;
+
+		for ($j = $start + 1; $j <= $end AND $j <= $page; $j++)
+			$choix .= ( $skpage == $j )
+				? "|<img src=\"".$_SESSION["ROOTDIR"]."/images/nav_left.gif\" title=\"«\" alt=\"«\" /><strong>$j</strong><img src=\"".$_SESSION["ROOTDIR"]."/images/nav_right.gif\" title=\"»\" alt=\"»\" />"
+				: "|<a href=\"".myurlencode("index.php?item=$item&IDalpha=$IDalpha&skpage=$j&skshow=$skshow&$href")."\">$j</a>" ;
+
+		// bouton suivant
+		$where = $skshow + 1;
+		$next  = ( $skshow == $show )
+			? ""
+			: "[<a href=\"".myurlencode("index.php?item=$item&IDalpha=$IDalpha&skpage=$j&skshow=$where&$href")."\">". $msg->read($STUDENT_NEXT) ."</a>]" ;
+	?>
+
+		<hr style="width:80%; text-align:center;"/>
+
+		<?php print("<div style=\"text-align:center;\">$prev $choix $next</div>"); ?>
+
+</div>

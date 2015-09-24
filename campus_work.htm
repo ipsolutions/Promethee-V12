@@ -1,0 +1,465 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2004-2007 by Dominique Laporte(C-E-D@wanadoo.fr)
+   Copyright (c) 2006 by Nordine Zetoutou (nordine.zetoutou@educagri.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : campus_work.htm
+ *		projet   : la page des travaux du campus virtuel
+ *
+ *		version  : 1.0
+ *		auteur   : laporte
+ *		creation : 18/03/04
+ *		modif    : 17/07/06 - Nordine Zetoutou
+ * 	                 migration des balises HTML en XHTML 1.0 strict
+ */
+
+
+$IDsel    = ( strlen(@$_POST["IDsel"]) )	// ID de la classe
+	? (int) $_POST["IDsel"]
+	: (int) (@$_GET["IDsel"] ? $_GET["IDsel"] : $_SESSION["CnxClass"]) ;
+$IDroot   = ( @$_POST["IDroot"] )		// ID répertoire racine
+	? (int) $_POST["IDroot"]
+	: (int) @$_GET["IDroot"] ;
+
+$IDparent = (int) @$_GET["IDmat"];		// ID du répertoire parent
+$IDmat    = (int) @$_GET["IDmat"];		// ID de la matière/formation
+$IDwork   = (int) @$_GET["IDwork"];		// ID du travail
+
+$submit = @$_GET["submit"];			// bouton de validation
+?>
+
+
+<?php
+	require_once "include/user.php";
+
+	// on sélectionne la matière pédagogique ou la formation des campus
+	if ( $IDmat < 0 ) {
+		$Query  = "select _ident, _IDmod  from campus_classe ";
+		$Query .= "where _IDclass = abs($IDmat) ";
+		$Query .= "AND _visible = 'O' ";
+		$Query .= "limit 1";
+		}
+	else {
+		$Query  = "select _titre, _IDmod  from campus_data ";
+		$Query .= "where _IDmat = '$IDmat' ";
+		$Query .= "AND _visible = 'O' AND _lang = '".$_SESSION["lang"]."' ";
+		$Query .= "limit 1";
+		}
+
+	$result = mysql_query($Query, $mysql_link);
+	$campus = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+     	// suppression d'un travail
+	switch ( $submit ) {
+		case "del" :	// on efface le travail
+			$Query  = "delete from campus_download ";
+			$Query .= "where _IDwork = '$IDwork' ";
+			$Query .= ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $campus[1] ) ? "" : "AND _ID = '".$_SESSION["CnxID"]."' ";
+
+			if ( !mysql_query($Query, $mysql_link) )
+				mysql_error($mysql_link);
+			else {
+				// et on efface les dépôts associés
+				$Query  = "select _ID, _file, _type from campus_upload ";
+				$Query .= "where _IDwork = '$IDwork' ";
+
+				$result = mysql_query($Query, $mysql_link);
+				$row    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+				while ( $row ) {
+					// répertoire de stockage des travaux
+					$path = ( $row[2] == "E" )
+						? "$DOWNLOAD/campus/" . stripaccent($campus[0]) . "/$IDwork/" . stripaccent($row[1])
+						: "$DOWNLOAD/campus/" . stripaccent($campus[0]) . "/$IDwork/$row[0]-" . stripaccent($row[1]) ;
+
+					@unlink($path);
+
+					$row = mysql_fetch_row($result);
+					}
+
+				$Query  = "delete from campus_upload ";
+				$Query .= "where _IDwork = '$IDwork' ";
+				$Query .= ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $campus[1] ) ? "" : "AND _ID = '".$_SESSION["CnxID"]."' ";
+			
+				if ( !mysql_query($Query, $mysql_link) )
+					mysql_error($mysql_link);
+				}
+			break;
+
+		case "deldir" :	// on efface le répertoire
+			$query  = "delete from campus_root ";
+			$query .= "where _IDroot = '".@$_GET["mydir"]."' ";
+			$query .= ( $_SESSION["CnxAdm"] == 255 ) ? "" : "AND _ID = '".$_SESSION["CnxID"]."' ";
+			$query .= "limit 1";
+
+			mysql_query($query, $mysql_link);
+			break;
+
+		case "lock" :	// impose une limite
+		case "unlock" :	// supprime la limite
+			$now    = date("Y-m-d H:i:s");
+
+			$query  = "update campus_download ";
+			$query .= ( $submit == "unlock" )
+				? ( (@$_GET["updown"] == "up")
+					? "set _end = _start " : "set _open = _close ")
+				: ( (@$_GET["updown"] == "up")
+					? "set _end = '$now' " : "set _open = '$now' ") ;
+			$query .= "where _IDwork = '$IDwork' ";
+			$query .= "limit 1";
+
+			mysql_query($query, $mysql_link);
+			break;
+
+		default :
+			// RAZ des visualisations
+			if ( @$_POST["clear_x"] )
+				if ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $campus[1] ) {
+					$Query  = "select distinctrow ";
+					$Query .= "campus_upload._ID, campus_upload._file, campus_upload._type, campus_upload._IDwork ";
+					$Query .= "from campus_download, campus_upload ";
+					$Query .= "where campus_upload._IDwork = campus_download._IDwork ";
+					$Query .= "AND campus_download._IDmat = abs($IDmat) ";
+					$Query .= "AND campus_download._IDroot = '$IDroot' ";
+
+					$result = mysql_query($Query, $mysql_link);
+					$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+					while ( $row ) {
+						$myfile = ( $row[2] == "E" )
+							? "$DOWNLOAD/campus/" . stripaccent($campus[0]) . "/$row[3]/" . stripaccent($row[1])
+							: "$DOWNLOAD/campus/" . stripaccent($campus[0]) . "/$row[3]/$row[0]-" . stripaccent($row[1]) ;
+
+						$return = mysql_query("select _IDdown from download_data where _file = '$myfile' limit 1", $mysql_link);
+						$myrow  = ( $return ) ? mysql_fetch_row($return) : 0 ;
+
+						// RAZ du compteur des téléchargements
+						if ( mysql_query("delete from download where _IDdown = '$myrow[0]'", $mysql_link) )
+							mysql_query("delete from download_data where _IDdown = '$myrow[0]'", $mysql_link);
+
+						$row    = remove_magic_quotes(mysql_fetch_row($result));
+						}
+					}
+			break;
+		}
+?>
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($CAMPUS_WORKLIST, $_SESSION["CampusName"])); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+
+	<p style="margin-top: 0px; margin-bottom: 10px; text-align:justify;">
+	<?php print($msg->read($CAMPUS_LISTBELOW)); ?>
+	</p>
+
+	<form id="formulaire" action="" method="post">
+
+	      <hr style="width:80%;" />
+
+		<table class="width100">
+		  <tr>
+		    <td style="width:50%;" class="align-right"><?php print($msg->read($CAMPUS_CHOOSECLASS)); ?></td>
+
+		    <td style="width:50%;">
+			<label for="IDsel">
+		  	<select id="IDsel" name="IDsel" onchange="document.forms.formulaire.submit()">
+			<?php
+				print("<option value=\"0\">". $msg->read($CAMPUS_ALLCLASS) ."</option>");
+
+				// affichage des groupes
+				$query  = "select _IDclass, _ident from campus_classe ";
+				$query .= "where _visible = 'O' ";
+				$query .= ( $IDmat < 0 ) ? "AND _IDclass = abs($IDmat)" : "" ;
+
+				$result = mysql_query($query, $mysql_link);
+				$grp    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+				// initialisation
+				if ( !$IDsel AND $IDmat < 0 )
+					$IDsel = $grp[0];
+
+				while ( $grp ) {
+					if ( $IDsel == $grp[0] ) {
+						print("<option selected=\"selected\" value=\"$grp[0]\">$grp[1]</option>");
+						}
+					else
+						print("<option value=\"$grp[0]\">$grp[1]</option>");
+
+					$grp = remove_magic_quotes(mysql_fetch_row($result));
+					}
+			?>
+			</select> <img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/group.gif" title="" alt="" />
+			</label>
+		    </td>
+		  </tr>
+		</table>
+
+		<hr style="width:80%;" />
+
+	<?php
+         	// seuls le big chef, le modérateur ou un prof
+		// peuvent peuvent créer un travail
+         	if ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $campus[1] OR getAccess() == 2 ) {
+			$result = mysql_query("select _titre, _IDparent from campus_root where _IDroot = '$IDroot' limit 1", $mysql_link);
+			$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+			$mydir  = ( $row ) ? "$row[0]" : $msg->read($CAMPUS_ROOTDIR) ;
+	         	$add    = "<a href=\"".myurlencode("index.php?item=$item&IDmat=$IDmat&IDsel=$IDsel&IDparent=$IDroot&cmde=newdir")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/folder-new.gif\" title=\"". $msg->read($CAMPUS_CREATEDIR) ."\" alt=\"". $msg->read($CAMPUS_CREATEDIR) ."\" /></a>";
+
+         		print("
+		            <table class=\"width100\">
+		              <tr>
+		                <td style=\"width:10%;\" class=\"valign-middle\">
+					<a href=\"".myurlencode("index.php?item=$item&IDmat=$IDmat&IDsel=$IDsel&IDroot=$IDroot&cmde=upload")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/post.gif\" title=\"".$msg->read($CAMPUS_CREATEWORK)."\" alt=\"".$msg->read($CAMPUS_CREATEWORK)."\" /></a>
+		                </td>
+		                <td style=\"width:40%;\" class=\"valign-middle\">". $msg->read($CAMPUS_CREATEWORK) ."</td>
+		                <td class=\"valign-middle align-right\">[$add $mydir ]</td>
+		              </tr>
+		            </table>
+		            ");
+			}
+
+		// raz des fichiers vus
+		$reset  = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $campus[1] )
+			? "<input type=\"image\" src=\"".$_SESSION["ROOTDIR"]."/images/corb.gif\" name=\"clear\" title=\"". $msg->read($CAMPUS_RESET) ."\" alt=\"". $msg->read($CAMPUS_RESET) ."\" />"
+			: "" ;
+	?>
+
+            <table class="width100">
+              <tr style="background-color:#c0c0c0;">
+                <td class="align-center" style="width:55%;" colspan="2"><?php print($msg->read($CAMPUS_WRKLABEL)); ?></td>
+                <td class="align-center" style="width:25%;"><?php print($msg->read($CAMPUS_DONE)); ?></td>
+                <td class="align-center" style="width:10%;"><?php print($msg->read($CAMPUS_HITLABEL)." ".$reset); ?></td>
+                <td class="align-center" style="width:10%;"><?php print($msg->read($CAMPUS_DNELABEL)); ?></td>
+              </tr>
+
+	<?php
+		// pour les travaux privés (gestion par ACL)
+		$acl = new user_acl("campus_work");
+
+		//---- lecture des répertoires ----
+		$Query  = "select _IDroot, _titre, _IDmod, _IDgrprd, _visible, _IDparent, _private from campus_root ";
+		$Query .= "where _IDparent = '$IDroot' AND _IDmat = abs($IDmat) " ;
+		$Query .= "order by _titre";
+
+		$result = mysql_query($Query, $mysql_link);
+		$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+		// accès au répertoire parent
+         	if ( $IDroot ) {
+			$Query  = "select _IDparent from campus_root ";
+			$Query .= "where _IDroot = '$IDroot' AND _IDmat = abs($IDmat) " ;
+			$Query .= "limit 1";
+
+			$return = mysql_query($Query, $mysql_link);
+			$myrow  = ( $return ) ? mysql_fetch_row($return) : 0 ;
+
+			print("
+				<tr>
+   			        <td class=\"align-center\" style=\"width:1%;\"><img src=\"".$_SESSION["ROOTDIR"]."/images/folder-up.gif\" title=\"\" alt=\"\" /></td>
+     		    		  <td style=\"width:54%;\">
+					<a href=\"".myurlencode("index.php?item=$item&IDmat=$IDmat&IDsel=$IDsel&IDroot=$myrow[0]&cmde=work")."\">".$msg->read($CAMPUS_ROOTDIR)."</a>
+     		    		  </td>
+     		    		  <td colspan=\"3\"></td>
+				</tr>
+				");
+			}
+
+		$i = 0;
+		while ( $row ) {
+			// accès protégé en lecture
+			if ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $row[2] OR ($row[3] & pow(2, $_SESSION["CnxGrp"] - 1) AND $row[4] == "O") ) {
+				$bgcol  = ( $i++ % 2 ) ? "item" : "menu" ;
+
+				// détermination du nombre de répertoires
+				$return = mysql_query("select _IDroot from campus_root where _IDmat = abs($IDmat) AND _IDparent = '$row[0]'", $mysql_link);
+				$nbr    = ( $return ) ? mysql_affected_rows($mysql_link) : 0 ;
+
+				$msg->isPlural = (bool) ( $nbr > 1 );
+				$text   = "(". $msg->read($CAMPUS_NBDIR, strval($nbr)) .", ";
+
+				// détermination du nombre de documents
+				$return = mysql_query("select _IDwork from campus_download where _IDmat = abs($IDmat) AND _IDroot = '$row[0]'", $mysql_link);
+				$nbd    = ( $return ) ? mysql_affected_rows($mysql_link) : 0 ;
+
+				$msg->isPlural = (bool) ( $nbd > 1 );
+				$text  .= $msg->read($CAMPUS_NBFILE, strval($nbd)) .")";
+
+				// le dossier est-il privé ?
+				$file   = ( $row[4] == "O" )
+					? ($row[6] == "O" ? "invisible.gif" : "folder-closed.gif")
+					: "folder-lock.jpg" ;
+				$link   = ( $row[6] == "N" OR $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $row[2] OR $acl->isMember($row[0], $_SESSION["CnxID"]) )
+					? "<a href=\"". myurlencode("index.php?item=$item&IDmat=$IDmat&IDsel=$IDsel&IDroot=$row[0]&IDparent=$row[5]&cmde=work")."\">$row[1]</a>"
+					: $row[1] ;
+
+				if ( $row[6] == "O" )
+					$icon = ( $_SESSION["CnxAdm"] == 255 OR $row[2] == $_SESSION["CnxID"] )
+						? "<a href=\"".myurlencode("index.php?item=1&cmde=acl&ident=campus_work&IDident=$row[0]")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/invisible.gif\" title=\"".$msg->read($CAMPUS_PRIVATE)."\" alt=\"".$msg->read($CAMPUS_PRIVATE)."\" /></a>"
+						: "<img src=\"".$_SESSION["ROOTDIR"]."/images/invisible.gif\" title=\"". $msg->read($CAMPUS_PRIVATE) ."\" alt=\"". $msg->read($CAMPUS_PRIVATE) ."\" />" ;
+				else
+					$icon = "<img src=\"".$_SESSION["ROOTDIR"]."/images/$file\" title=\"\" alt=\"\" />";
+
+				// suppression du répertoire
+				$req    = $msg->read($CAMPUS_ERASE, $row[1]);
+				$del    = ( !$nbr AND !$nbd AND ($_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $row[2]) )
+					? "<a href=\"".myurlencode("index.php?item=$item&IDmat=$IDmat&IDsel=$IDsel&IDroot=$row[0]&mydir=$row[0]&submit=deldir&cmde=work")."\" onclick=\"return confirmLink(this, '$req');\"><img src=\"".$_SESSION["ROOTDIR"]."/images/corb.gif\" title=\"$req\" alt=\"$req\" /></a>"
+					: "" ;
+
+				// modification du répertoire
+				$maj    = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $row[2] )
+					? "<a href=\"".myurlencode("index.php?item=$item&IDmat=$IDmat&IDsel=$IDsel&IDroot=$row[0]&IDparent=$IDroot&cmde=newdir")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/stats/post.gif\" title=\"".$msg->read($CAMPUS_MODIFY)."\" alt=\"".$msg->read($CAMPUS_MODIFY)."\" /></a>"
+					: "" ;
+
+				print("
+					<tr class=\"$bgcol\">
+	   			        <td class=\"align-center\" style=\"width:1%;\">$icon</td>
+      		    		  <td style=\"width:54%;\">
+     		    		  		$link $maj $del<br/>
+      		    		  	<span class=\"x-small\">$text</span>
+      		    		  </td>
+	     		    		  <td colspan=\"3\"></td>
+					</tr>
+     					");
+				}
+
+			$row = remove_magic_quotes(mysql_fetch_row($result));
+			}
+
+		//---- lecture de la base de données ----
+		$Query  = "select _IDwork, _titre, _open, _close, _start, _end, _ID, _texte from campus_download ";
+		$Query .= "where _IDmat = abs($IDmat) AND _IDroot = '$IDroot' ";
+		$Query .= ( $IDsel ) ? "AND _IDgrpwr like '% $IDsel %' " : "" ;
+		$Query .= "order by _IDwork desc";
+
+		$result = mysql_query($Query, $mysql_link);
+		$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+		while ( $row ) {				
+			$bgcol = ( $i++ % 2 ) ? "item" : "menu" ;
+
+			$now = date("Y-m-d H:i:s");
+		
+			// le téléchargement du travail est-il autorisé ?
+			$img  = ( $row[2] != $row[3] AND $row[3] < $now ) ? "lock.gif" : "folder.gif" ;
+
+			// modification des travaux à télécharger
+			$maj  = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $campus[1] OR $_SESSION["CnxID"] == $row[6] )
+				? "<a href=\"".myurlencode("index.php?item=$item&IDmat=$IDmat&IDwork=$row[0]&IDroot=$IDroot&cmde=upload")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/stats/post.gif\" title=\"". $msg->read($CAMPUS_UPDATEWORK) ."\" alt=\"". $msg->read($CAMPUS_UPDATEWORK) ."\" /></a>"
+				: "" ;
+
+			// suppression des travaux à télécharger
+			$req  = $msg->read($CAMPUS_DELWORK);
+			$del  = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $campus[1] OR $_SESSION["CnxID"] == $row[6] )
+				? "<a href=\"".myurlencode("index.php?item=$item&IDmat=$IDmat&IDwork=$row[0]&IDroot=$IDroot&cmde=work&submit=del")."\" onclick=\"return confirmLink(this, '$req');\"><img src=\"".$_SESSION["ROOTDIR"]."/images/corb.gif\" title=\"$req\"  alt=\"$req\" /></a>"
+				: "" ;
+
+			// date limite manuelle (téléchargement)
+			$downtime = ( $row[2] == $row[3] )
+				? ( ($_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $campus[1] OR $_SESSION["CnxID"] == $row[6])
+					? "<a href=\"".myurlencode("index.php?item=$item&cmde=work&IDmat=$IDmat&IDroot=$IDroot&IDwork=$row[0]&updown=down&submit=lock")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/unlocked.gif\" title=\"". $msg->read($CAMPUS_LOCK) ."\" alt=\"". $msg->read($CAMPUS_LOCK) ."\" /></a>"
+					: "<img src=\"".$_SESSION["ROOTDIR"]."/images/unlocked.gif\" title=\"\" alt=\"\" />" )
+				: ( ($_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $campus[1] OR $_SESSION["CnxID"] == $row[6])
+					? "<a href=\"".myurlencode("index.php?item=$item&cmde=work&IDmat=$IDmat&IDroot=$IDroot&IDwork=$row[0]&updown=down&submit=unlock")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/locked.gif\" title=\"". $msg->read($CAMPUS_UNLOCK) ."\" alt=\"". $msg->read($CAMPUS_UNLOCK) ."\" /></a>"
+					: "<img src=\"".$_SESSION["ROOTDIR"]."/images/locked.gif\" title=\"\" alt=\"\" />" );
+
+			// date limite de téléchargement
+			$download = ( $row[2] == $row[3] )
+				? $downtime ." ". $msg->read($CAMPUS_NOLIMIT)
+				: $downtime ." ". date2longfmt($row[3]) ;
+
+			// date limite manuelle (téléchargement)
+			$uptime   = ( $row[4] == $row[5] )
+				? ( ($_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $campus[1] OR $_SESSION["CnxID"] == $row[6])
+					? "<a href=\"".myurlencode("index.php?item=$item&cmde=work&IDmat=$IDmat&IDroot=$IDroot&IDwork=$row[0]&updown=up&submit=lock")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/unlocked.gif\" title=\"". $msg->read($CAMPUS_LOCK) ."\" alt=\"". $msg->read($CAMPUS_LOCK) ."\" /></a>"
+					: "<img src=\"".$_SESSION["ROOTDIR"]."/images/unlocked.gif\" title=\"\" alt=\"\" />" )
+				: ( ($_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $campus[1] OR $_SESSION["CnxID"] == $row[6])
+					? "<a href=\"".myurlencode("index.php?item=$item&cmde=work&IDmat=$IDmat&IDroot=$IDroot&IDwork=$row[0]&updown=up&submit=unlock")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/locked.gif\" title=\"". $msg->read($CAMPUS_UNLOCK) ."\" alt=\"". $msg->read($CAMPUS_UNLOCK) ."\" /></a>"
+					: "<img src=\"".$_SESSION["ROOTDIR"]."/images/locked.gif\" title=\"\" alt=\"\" />" );
+
+			// date limite de dépôt
+			$upload   = ( $row[4] == $row[5] )
+				? $uptime ." ". $msg->read($CAMPUS_NOLIMIT)
+				: $uptime ." ". date2longfmt($row[5]) ;
+
+			// lecture du compteur des téléchargements
+			$path    = addslashes("$DOWNLOAD/campus/" . stripaccent($_SESSION["CampusName"]) . "/$row[0]/");
+			$res     = mysql_query("select _IDdown, _count from download_data where _file like '$path%' order by _IDdown limit 1", $mysql_link);
+			$down    = ( $res ) ? remove_magic_quotes(mysql_fetch_row($res)) : 0 ;
+
+			$link   = ( $down[0] )
+				? "<a href=\"#\" onclick=\"popWin('".$_SESSION["ROOTDIR"]."/user_list.php?sid=".$_SESSION["sessID"]."&amp;IDdown=$down[0]&amp;cmde=dwload&amp;lang=".$_SESSION["lang"]."', '450', '200'); return false;\">$down[1]</a>"
+				: "0" ;
+
+			// pour savoir le nombre de travaux rendus
+			$res = mysql_query("select _IDupload from campus_upload where _IDwork = '$row[0]' AND _type = 'R' AND _visible = 'O'", $mysql_link);
+			$val = ( $res ) ? mysql_numrows($res) : 0 ;				
+
+			// pour savoir le nombre de pièces jointes
+			$res = mysql_query("select _IDupload from campus_upload where _IDwork = '$row[0]' AND _type = 'E' AND _visible = 'O'", $mysql_link);
+			$nbf = ( $res ) ? mysql_numrows($res) : 0 ;				
+
+			print("            
+				<tr class=\"$bgcol\">
+					<td class=\"align-center\" style=\"width:1%;\"><img src=\"".$_SESSION["ROOTDIR"]."/images/$img\" title=\"\" alt=\"\" /></td>
+					<td>
+       		    		  	<a href=\"".myurlencode("index.php?item=$item&IDmat=$IDmat&IDwork=$row[0]&IDroot=$IDroot&cmde=download")."\">$row[1]</a> $del $maj<br/>
+       		    		  	<span class=\"x-small\">$download</span>
+      				</td>
+					 <td class=\"align-center\">
+       		    		  	". $msg->read($CAMPUS_LIMIT) ."<br/>
+       		    		  	<span class=\"x-small\">$upload</span>
+					</td>
+					 <td class=\"align-center\">
+						[$link]<br/>
+       		    		  	<img src=\"".$_SESSION["ROOTDIR"]."/images/pj.gif\" title=\"\" alt=\"\" /> <span class=\"x-small\">x$nbf</span>
+					</td>
+					 <td class=\"align-center\">[$val]</td>
+				</tr>
+				");
+
+			$row = remove_magic_quotes(mysql_fetch_row($result));
+			}
+            ?>
+            </table>
+
+	<hr/>
+
+         <table class="width100">
+           <tr>
+              <td style="width:10%" class="valign-middle align-center">
+              	<?php print("<a href=\"index.php?item=$item&amp;IDmat=$IDmat\">"); ?>
+              	<?php print("<img src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/cancel.gif\" title=\"\" alt=\"".$msg->read($CAMPUS_INPUTCANCEL)."\" />"); ?></a>
+              </td>
+              <td class="valign-middle">
+			<?php print($msg->read($CAMPUS_BACK2CAMPUS)); ?>
+              </td>
+           </tr>
+         </table>
+
+	</form>
+
+</div>

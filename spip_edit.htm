@@ -1,0 +1,451 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2003-2007 by Dominique Laporte(C-E-D@wanadoo.fr)
+   Copyright (c) 2006 by Didier Roy (miraceti@free.fr)
+   Copyright (c) 2006 by Nordine Zetoutou (nordine.zetoutou@educagri.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : spip_edit.htm
+ *		projet   : le menu d'édition d'une publication par internet
+ *
+ *		version  : 1.0
+ *		auteur   : laporte
+ *		creation : 14/09/03
+ *		modif    : 16/06/06 - par Didier Roy
+ *		           migration PHP5 
+ *		           17/07/06 - Nordine Zetoutou
+ * 	                 migration des balises HTML en XHTML 1.0 strict
+ */
+
+
+$IDinfos  = ( @$_POST["IDinfos"] )		// ID de l'information
+	? (int) $_POST["IDinfos"]
+	: (int) @$_GET["IDinfos"] ;	
+$IDflash    = ( strlen(@$_POST["IDflash"]) )	// ID du flash
+	? (int) $_POST["IDflash"]
+	: (int) @$_GET["IDflash"] ; 
+$IDitem   = ( @$_POST["IDitem"] )		// ID de l'article
+	? (int) $_POST["IDitem"]
+	: (int) @$_GET["IDitem"] ; 	
+$IDpj    = ( strlen(@$_POST["IDpj"]) )	// ID de la PJ
+	? (int) $_POST["IDpj"]
+	: (int) @$_GET["IDpj"] ; 	
+$repeat   = ( @$_POST["repeat"] )		// boucle sur fichier musical (O : Oui, N : Non)
+	? $_POST["repeat"]
+	: @$_GET["repeat"] ;
+
+$DocTitle = @$_POST["DocTitle"];		// la PJ
+$DocDesc  = @$_POST["DocDesc"];		// description de la PJ
+
+$submit   = ( @$_POST["submit"] )		// bouton de validation
+	? $_POST["submit"]
+	: @$_GET["submit"] ;
+?>
+
+
+<script type="text/javascript" src="script/edit.js"></script>
+
+
+<?php
+	require "msg/spip.php";
+
+	$msg  = new TMessage($_SESSION["ROOTDIR"]."/msg/".$_SESSION["lang"]."/spip.php");
+
+	// interprétation des commandes de l'utilisateur
+	switch ( $submit ) {
+		case "UpldImgRub" :
+			// transfert de l'image de fond de la rubrique
+			$file = @$_FILES["UploadedImage"]["tmp_name"];
+			if ( $file ) {
+				// fichier destination
+				$ext    = extension(@$_FILES["UploadedImage"]["name"]);
+				$myfile = "bg-$IDinfos.$ext";
+				$dest   = "$DOWNLOAD/spip/img/" . $myfile;
+				$small  = "$DOWNLOAD/spip/img/vignettes";
+
+				// copie du fichier temporaire -> répertoire de stockage
+				if ( move_uploaded_file($file, $dest) ) {
+					mychmod($dest, $CHMOD);
+
+					// création de la vignette
+					require_once "include/gallery.php";
+
+					if ( vignette($dest, $small, $myfile, $srcWidth, $srcHeight) ) {
+						$Query  = "UPDATE flash_data ";
+						$Query .= "SET _img = '$ext' ";
+						$Query .= "where _IDinfos = '$IDinfos' ";
+
+						if ( !mysql_query($Query, $mysql_link) )
+							sql_error($mysql_link);
+						}
+					}
+				}
+
+			// transfert du fichier sonore de la rubrique
+			$file = @$_FILES["UploadedSound"]["tmp_name"];
+			if ( $file ) {
+				// fichier destination
+				$ext  = extension(@$_FILES["UploadedSound"]["name"]);
+				$dest = "$DOWNLOAD/spip/snd/bg-$IDinfos.$ext";
+
+				// copie du fichier temporaire -> répertoire de stockage
+				if ( move_uploaded_file($file, $dest) ) {
+					$Query  = "UPDATE flash_data ";
+					$Query .= "SET _snd = '$ext', _repeat = '$repeat' ";
+					$Query .= "where _IDinfos = '$IDinfos' ";
+
+					if ( !mysql_query($Query, $mysql_link) )
+						sql_error($mysql_link);
+					}
+				}
+			break;
+
+		case "DelImgRub" :
+		case "DelSndRub" :
+			$Query  = "UPDATE flash_data ";
+			$Query .= ( $submit == "DelImgRub" ) ? "SET _img = '' " : "SET _snd = '' " ;
+			$Query .= "where _IDinfos = '$IDinfos' ";
+
+			if ( !mysql_query($Query, $mysql_link) )
+				sql_error($mysql_link);
+			break;
+
+		case "UpldImgItem" :
+			// transfert de la Pièce Jointe
+			$file = @$_FILES["UpldImgItem"]["tmp_name"];
+			if ( $file AND authfile(@$_FILES["UpldImgItem"]["name"]) ) {
+				$ext    = extension(@$_FILES["UpldImgItem"]["name"]);
+
+				$Query  = "INSERT INTO flash_pj ";
+				$Query .= "values('', '$IDitem', '$ImgTitle', '$ImgDesc', '$ext', '".@$_FILES["UpldImgItem"]["size"]."', '', 'N', 'O')";
+
+				if ( !mysql_query($Query, $mysql_link) )
+					sql_error($mysql_link);
+				else {
+					$IDpj   = mysql_insert_id();
+
+					// fichier destination
+					$myfile = "$IDitem-$IDpj.$ext";
+					$dest   = "$DOWNLOAD/spip/img/" . $myfile;
+					$small  = "$DOWNLOAD/spip/img/vignettes";
+
+					// copie du fichier temporaire -> répertoire de stockage
+					if ( move_uploaded_file($file, $dest) ) {
+						// création de la vignette
+						require_once "include/gallery.php";
+
+						if ( vignette($dest, $small, $myfile, $srcWidth, $srcHeight) ) {
+							$Query  = "UPDATE flash_pj ";
+							$Query .= "SET _res = '$srcWidth x $srcHeight' ";
+							$Query .= "where _IDpj = '$IDpj' ";
+
+							if ( !mysql_query($Query, $mysql_link) )
+								sql_error($mysql_link);
+							}
+						}
+					}
+				}
+			break;
+
+		case "PJdownload" :
+			// transfert de la Pièce Jointe
+			$file = @$_FILES["UploadedPJ"]["tmp_name"];
+			if ( $file AND authfile(@$_FILES["UploadedPJ"]["name"]) ) {
+				$ext    = extension(@$_FILES["UploadedPJ"]["name"]);
+
+				$Query  = "INSERT INTO flash_pj ";
+				$Query .= "values('', '$IDitem', '$DocTitle', '$DocDesc', '$ext', '".@$_FILES["UploadedPJ"]["size"]."', '', 'O', 'O')";
+
+				if ( !mysql_query($Query, $mysql_link) )
+					sql_error($mysql_link);
+				else {
+					$IDpj = mysql_insert_id();
+
+					// fichier destination
+					$dest = "$DOWNLOAD/spip/doc/$IDitem-$IDpj.$ext";
+
+					// copie du fichier temporaire -> répertoire de stockage
+					move_uploaded_file($file, $dest);
+					}
+				}
+			break;
+
+		case "PJdelete" :
+			$Query  = "DELETE FROM flash_pj ";
+			$Query .= "where _IDpj = '$IDpj'";
+
+			if ( !mysql_query($Query, $mysql_link) )
+				sql_error($mysql_link);
+			break;
+
+		case "PJvisible" :
+		case "PJinvisible" :
+			$Query  = "UPDATE flash_pj ";
+			$Query .= ( $submit == "PJvisible" ) ? "SET _visible = 'N' " : "SET _visible= 'O' ";
+			$Query .= "where _IDpj = '$IDpj'";
+
+			if ( !mysql_query($Query, $mysql_link) )
+				sql_error($mysql_link);
+			break;
+
+		default :
+			break;
+		}
+?>
+
+	<div class="boxtitle" style="padding:2px; text-align:center;">
+		<?php print($msg->read($SPIP_TOPICTITLE)); ?>
+	</div>
+
+      <div class="boxcontent" style="margin:1px; padding:2px;">
+		<?php
+			// sélection de la rubrique
+			$Query   = "select _img, _snd, _repeat, _ID from flash_data ";
+			$Query  .= "where _IDinfos = '$IDinfos' ";
+
+			$result  = mysql_query($Query, $mysql_link);
+			$row     = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+			$imgfile = $row[0];
+			$sndfile = $row[1];
+			$repeat  = $row[2];
+			$IDmod   = $row[3];
+		?>
+
+			<form id="form1" action="index.php" method="post" enctype="multipart/form-data">
+			<?php
+				print("
+					<p class=\"hidden\"><input type=\"hidden\" name=\"item\"     value=\"$item\" /></p>
+					<p class=\"hidden\"><input type=\"hidden\" name=\"IDinfos\"  value=\"$IDinfos\" /></p>
+					<p class=\"hidden\"><input type=\"hidden\" name=\"IDflash\"  value=\"$IDflash\" /></p>
+					<p class=\"hidden\"><input type=\"hidden\" name=\"cmde\"     value=\"$cmde\" /></p>
+					<p class=\"hidden\"><input type=\"hidden\" name=\"submit\"   value=\"UpldImgRub\" /></p>
+					");
+
+				print("
+					<p style=\"margin-top: 0px; margin-bottom: 0px;\">". $msg->read($SPIP_BKGIMAGE) ."</p>
+					");
+
+				if ( strlen($imgfile) )
+					print("
+						<img src=\"$DOWNLOAD/spip/img/vignettes/bg-$IDinfos.$imgfile\" class=\"imgLink\" title=\"\" alt=\"\" style=\"border: 1px solid;\" /><br/>
+						<span class=\"x-small\">
+						[<a href=\"index.php?item=$item&amp;IDinfos=$IDinfos&amp;IDflash=$IDflash&amp;cmde=$cmde&amp;submit=DelImgRub\">". $msg->read($SPIP_DELETE) ."</a>]
+						</span>
+						");
+				else
+					print("
+						<p class=\"hidden\"><input type=\"hidden\" name=\"MAX_FILE_SIZE\" value=\"$FILESIZE\" /></p>
+						<p class=\"hidden\"><input type=\"file\" name=\"UploadedImage\" size=\"25\" style=\"font-size:9px;\" /></p>
+						");
+
+				print("
+					<p style=\"margin-top: 5px; margin-bottom: 0px;\">". $msg->read($SPIP_SOUND) ."</p>
+					");
+
+				if ( strlen($sndfile) )
+					print("
+						<img src=\"".$_SESSION["ROOTDIR"]."/images/wav.gif\" title=\"\" alt=\"\" style=\"border: 1px solid;\" /> 
+						<span class=\"x-small\">
+						[<a href=\"index.php?item=$item&amp;IDinfos=$IDinfos&amp;IDflash=$IDflash&amp;cmde=$cmde&amp;submit=DelSndRub\">". $msg->read($SPIP_DELETE) ."</a>]
+						</span>
+						");
+				else
+					print("
+						<p style=\"margin: 0 0 0 0px;\">
+						<input type=\"hidden\" name=\"MAX_FILE_SIZE\" value=\"$FILESIZE\" />
+						<input type=\"file\" name=\"UploadedSound\" size=\"25\" style=\"font-size:9px;\" />
+						</p>
+
+						<p style=\"margin-top: 5px; margin-bottom: 0px;\">
+						". $msg->read($SPIP_LOOP) ." 
+						<label for=\"repeat_O\"><input type=\"radio\" id=\"repeat_O\" name=\"repeat\" value=\"O\" checked=\"checked\" />". $msg->read($SPIP_YES) ."</label>
+  						<label for=\"repeat_N\"><input type=\"radio\" id=\"repeat_N\" name=\"repeat\" value=\"N\" />". $msg->read($SPIP_NO) ."</label>
+  						</p>
+						");
+
+				if ( $IDitem )
+					if ( !strlen($imgfile) OR !strlen($sndfile) )
+						print("<div style=\"text-align:center;\">
+							<input type=\"submit\" name=\"rubrique\" value=\"". $msg->read($SPIP_DOWNLOAD) ."\" style=\"font-size:9px;\" />
+							</div>");
+			?>
+			</form>
+
+	</div><br />
+
+	<div class="boxtitle" style="padding:2px; text-align:center;">
+		<?php print($msg->read($SPIP_ARTICLE)); ?>
+	</div>
+
+      <div class="boxcontent" style="margin:1px; padding:2px;">
+			<form id="form2" action="index.php" method="post" enctype="multipart/form-data">
+			<?php
+				print("
+					<p class=\"hidden\"><input type=\"hidden\" name=\"item\"     value=\"$item\" /></p>
+					<p class=\"hidden\"><input type=\"hidden\" name=\"IDflash\"  value=\"$IDflash\" /></p>
+					<p class=\"hidden\"><input type=\"hidden\" name=\"IDinfos\"  value=\"$IDinfos\" /></p>
+					<p class=\"hidden\"><input type=\"hidden\" name=\"IDitem\"   value=\"$IDitem\" /></p>
+					<p class=\"hidden\"><input type=\"hidden\" name=\"cmde\"     value=\"$cmde\" /></p>
+					<p class=\"hidden\"><input type=\"hidden\" name=\"submit\"   value=\"UpldImgItem\" /></p>
+					");
+
+				print("
+					<p style=\"margin-top: 0px; margin-bottom: 0px;\">". $msg->read($SPIP_IMAGE) ."</p>
+
+					<p style=\"margin: 0 0 0 0px;\">
+					<input type=\"hidden\" name=\"MAX_FILE_SIZE\" value=\"$FILESIZE\" />
+					<input type=\"file\" name=\"UpldImgItem\" size=\"25\" style=\"font-size:9px;\" />
+					</p>
+
+					<div style=\"border:#cccccc solid 1px; margin-top:1px; padding:4px; background-color:#eeeeee;\">".
+						$msg->read($SPIP_IMAGETITLE) ."<br/>
+						<label for=\"ImgTitle\"><input type=\"text\" id=\"ImgTitle\" name=\"ImgTitle\" size=\"28\" /></label><br/>".
+						$msg->read($SPIP_DESCRIPTION) ."<br/>
+						<label for=\"ImgDesc\"><textarea id=\"ImgDesc\" name=\"ImgDesc\" rows=\"3\" cols=\"25\"></textarea></label>
+					</div>
+					");
+
+				if ( $IDitem )
+					print("<div style=\"text-align:center;\">
+						<input type=\"submit\" name=\"rubrique\" value=\"". $msg->read($SPIP_DOWNLOAD) ."\" style=\"font-size:9px;\" />
+						</div>");
+			?>
+			</form>
+
+			<?php
+				// listage des Images
+				$Query   = "select _IDpj, _title, _ext, _res from flash_pj ";
+				$Query  .= "where _IDitem = '$IDitem' AND _attach = 'N' ";
+				$Query  .= "order by _IDpj asc";
+
+				$result  = mysql_query($Query, $mysql_link);
+				$row     = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+				// pour les liens
+				$link    = "index.php?item=$item&amp;cmde=$cmde&amp;IDflash=$IDflash&amp;IDinfos=$IDinfos&amp;IDitem=$IDitem";
+
+				while ( $row ) {
+					print("
+						<p style=\"margin-top: 5px; margin-bottom: 5px;\"><strong>Image$row[0]</strong> <em>($row[3] pixels)</em></p>
+
+						<p style=\"text-align:center; margin-top: 0px; margin-bottom: 5px;\">
+						<img src=\"$DOWNLOAD/spip/img/vignettes/$IDitem-$row[0].$row[2]\" class=\"imgLink\" title=\"\" alt=\"\" style=\"border: 1px solid;\" />
+						</p>
+
+						<p style=\"text-align:center;margin-top: 0px; margin-bottom: 5px;\">
+						<img src=\"".$_SESSION["ROOTDIR"]."/images/spip/gauche.gif\" onclick=\"Javacript:ajoutsmile('[image$row[0]|gauche]')\" style=\"cursor: hand;\" title=\"\" alt=\"\" />
+						<img src=\"".$_SESSION["ROOTDIR"]."/images/spip/centre.gif\" onclick=\"Javacript:ajoutsmile('[image$row[0]|centre]')\" style=\"cursor: hand;\" title=\"\" alt=\"\" />
+						<img src=\"".$_SESSION["ROOTDIR"]."/images/spip/droite.gif\"onclick=\"Javacript:ajoutsmile('[image$row[0]|droite]')\" style=\"cursor: hand;\" title=\"\" alt=\"\" />
+						</p>
+
+						<span class=\"x-small\">[<a href=\"$link&amp;IDpj=$row[0]&amp;submit=PJdelete\">". $msg->read($SPIP_DELETE) ."</a>]</span>
+						");
+
+					$row = remove_magic_quotes(mysql_fetch_row($result));
+					}
+			?>
+	  </div><br />
+
+<?php
+	// vérification de l'autorisation des PJ
+	$result  = mysql_query("select _PJ from flash where _IDflash = '$IDflash' limit 1", $mysql_link);
+	$row     = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+	if ( $row[0] ) {
+		print("
+			<div class=\"boxtitle\" style=\"padding:2px; text-align:center;\">
+				". $msg->read($SPIP_ATTACHEMENT) ."
+			</div>
+
+		      <div class=\"boxcontent\" style=\"margin:1px; padding:2px;\">
+				<form id=\"form3\" action=\"index.php\" method=\"post\" enctype=\"multipart/form-data\">
+
+					<p class=\"hidden\"><input type=\"hidden\" name=\"item\"     value=\"$item\" /></p>
+					<p class=\"hidden\"><input type=\"hidden\" name=\"IDflash\"  value=\"$IDflash\" /></p>
+					<p class=\"hidden\"><input type=\"hidden\" name=\"IDinfos\"  value=\"$IDinfos\" /></p>
+					<p class=\"hidden\"><input type=\"hidden\" name=\"IDitem\"   value=\"$IDitem\" /></p>
+					<p class=\"hidden\"><input type=\"hidden\" name=\"cmde\"     value=\"$cmde\" /></p>
+					<p class=\"hidden\"><input type=\"hidden\" name=\"submit\"   value=\"PJdownload\" /></p>
+
+				<p style=\"margin-top: 0px; margin-bottom: 0px;\">". $msg->read($SPIP_ATTCHDOC) ."</p>
+
+				<p style=\"margin: 0 0 0 0px;\">
+				<input type=\"hidden\" name=\"MAX_FILE_SIZE\" value=\"$FILESIZE\" />
+				<input type=\"file\" name=\"UploadedPJ\" size=\"25\" style=\"font-size:9px;\" />
+				</p>
+
+				<div style=\"border:#cccccc solid 1px; margin-top:1px; padding:4px; background-color:#eeeeee;\">".
+					$msg->read($SPIP_DOCTITLE) ."<br/><label for=\"DocTitle\"><input type=\"text\" id=\"DocTitle\" name=\"DocTitle\" size=\"28\" /></label><br/>".
+					$msg->read($SPIP_DESCRIPTION) ."<br/>
+					<label for=\"DocDesc\"><textarea id=\"DocDesc\" name=\"DocDesc\" rows=\"3\" cols=\"25\"></textarea></label>
+				</div>
+			");
+
+			if ( $IDitem )
+				print("<div style=\"text-align:center;\">
+					<input type=\"submit\" name=\"rubrique\" value=\"". $msg->read($SPIP_DOWNLOAD) ."\" style=\"font-size:9px;\" />
+					</div>");
+
+			print("</form>");
+
+			// listage des Pièces Jointes
+			$Query   = "select _IDpj, _title, _visible, _ext from flash_pj ";
+			$Query  .= "where _IDitem = '$IDitem' AND _attach = 'O' ";
+			$Query  .= "order by _IDpj asc";
+
+			$result  = mysql_query($Query, $mysql_link);
+			$row     = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+			// pour les liens
+			$link    = "index.php?item=$item&amp;cmde=$cmde&amp;IDflash=$IDflash&amp;IDinfos=$IDinfos&amp;IDitem=$IDitem";
+
+			while ( $row ) {
+				// validation d'une rubrique
+				$image  = ( $row[2] == 'O' ) ? "visible" : "invisible" ;
+
+				// message d'avertissement
+				$req    = ( $row[2] == 'O' )
+					? $msg->read($SPIP_ATTACHNOTOK)
+					: $msg->read($SPIP_ATTACHOK) ;
+
+				// action sur le lien
+				$valide = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $IDmod )
+					? "<a href=\"$link&amp;IDpj=$row[0]&amp;submit=PJ$image\" onclick=\"return confirmLink(this, '$req');\"><img src=\"".$_SESSION["ROOTDIR"]."/images/$image.gif\" title=\"\" alt=\"\" /></a>"
+					: "" ;
+
+				// suppression de la PJ
+				$req    = $msg->read($SPIP_DELATTACH);
+				$delete = "<a href=\"$link&amp;IDpj=$row[0]&amp;submit=PJdelete\" onclick=\"return confirmLink(this, '$req');\"><img src=\"".$_SESSION["ROOTDIR"]."/images/spip/delete.gif\" title=\"$req\" alt=\"$req\" /></a>";
+
+				print("
+					<div style=\"border:#cccccc solid 1px; padding:4px; background-color:#eeeeee;\">
+						<a href=\"$DOWNLOAD/spip/doc/$IDitem-$row[0].$row[3]\" onclick=\"window.open(this.href, '_blank'); return false;\">
+						<img src=\"".$_SESSION["ROOTDIR"]."/images/mime/$row[3].gif\" title=\"". $msg->read($SPIP_OPENATTACH) ."\" alt=\"". $msg->read($SPIP_OPENATTACH) ."\" /></a>
+						$row[1] $delete $valide
+					</div>
+					");
+
+				$row = remove_magic_quotes(mysql_fetch_row($result));
+				}
+
+		print("</div>");
+		}
+?>

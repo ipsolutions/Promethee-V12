@@ -1,0 +1,152 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2006-2007 by Dominique Laporte(C-E-D@wanadoo.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : exam_visu.htm
+ *		projet   : page de résultats des examens
+ *
+ *		version  : 1.0
+ *		auteur   : laporte
+ *		creation : 17/09/06
+ *		modif    : 
+ */
+
+
+$IDcentre = (int) @$_GET["IDcentre"]; 	// ID du centre
+$IDexam   = (int) @$_GET["IDexam"];		// ID de l'examen
+$year     = (int) @$_GET["year"];		// année de l'exam
+?>
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($EXAM_TITLE)); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+
+         <?php
+		// lecture de l'examen
+		$Query  = "select _title, _year, _IDclass from exam ";
+		$Query .= "where _IDexam = '$IDexam' ";
+		$Query .= "limit 1";
+
+		$result = mysql_query($Query, $mysql_link);
+		$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+         ?>
+
+		<table class="width100">
+		    <tr>
+		      <td style="width:15%;" class="align-right"><?php print($msg->read($EXAM_TEST)); ?></td>
+		      <td><?php print("$row[0]"); ?></td>
+		    </tr>
+
+		    <tr>
+		      <td style="width:15%;" class="align-right"><?php print($msg->read($EXAM_YEAR)); ?></td>
+		      <td><?php print("$row[1]"); ?></td>
+		    </tr>
+		</table>
+
+		<hr/>
+
+            <table class="width100">
+              <tr class="align-center" style="background-color:#c0c0c0">
+                <td style="width:50%;"><?php print($msg->read($EXAM_NAME)); ?></td>
+                <td style="width:20%;"><?php print($msg->read($EXAM_BIRTH)); ?></td>
+                <td style="width:20%;"><?php print($msg->read($EXAM_CLASS)); ?></td>
+                <td style="width:10%;"><?php print($msg->read($EXAM_RESULT)); ?></td>
+              </tr>
+
+            <?php
+			// lecture de la classe
+			$Query  = "select _ident from campus_classe ";
+			$Query .= "where _IDclass = '$row[2]' ";
+			$Query .= "limit 1";
+
+			$result = mysql_query($Query, $mysql_link);
+			$mytext = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+			// lecture des résultats
+			$Query  = "select _IDeleve, _IDitem from exam_data ";
+			$Query .= "where _IDexam = '$IDexam' ";
+			$Query .= "order by _IDeleve";
+
+			$result = mysql_query($Query, $mysql_link);
+			$row    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+			$i = 0;
+			while ( $row ) {
+				$bgcolor = ( $i++ % 2 ) ? "item" : "menu" ;
+
+				// recherche élève
+				$Query  = "select _born, _name, _fname from user_id ";
+				$Query .= "where _ID = '$row[0]' AND _IDgrp = '1' ";
+				$Query .= "limit 1" ;
+
+				$return = mysql_query($Query, $mysql_link);
+				$myrow  = ( $return ) ? remove_magic_quotes(mysql_fetch_row($return)) : 0 ;
+
+				// lecture des résultats
+				$Query  = "select _title from exam_items ";
+				$Query .= "where _IDitem = '$row[1]' AND _lang = '".$_SESSION["lang"]."' ";
+				$Query .= "limit 1" ;
+
+				$return = mysql_query($Query, $mysql_link);
+				$index  = ( $return ) ? remove_magic_quotes(mysql_fetch_row($return)) : 0 ;
+
+				print("
+					<tr class=\"$bgcolor\">
+     					  <td>
+          		    		  	$myrow[1] $myrow[2]
+	       			  </td>
+	       			  <td class=\"align-center\">
+	       				$myrow[0]
+	       			  </td>
+					  <td class=\"align-center\">
+	       				$mytext[0]
+	       			  </td>
+					  <td class=\"align-center\">
+	       				$index[0]
+	       			  </td>
+	     				</tr>
+		     		       ");
+
+				$row = remove_magic_quotes(mysql_fetch_row($result));
+				}
+            ?>
+            </table>
+
+		<hr/>
+
+         <table class="width100">
+           <tr>
+              <td style="width:10%;" class="valign-middle align-center">
+              	<?php print("<a href=\"index.php?item=$item&amp;IDcentre=$IDcentre&amp;year=$year\">"); ?>
+              	<?php print("<img src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/cancel.gif\" title=\"\" alt=\"".$msg->read($EXAM_INPUTCANCEL)."\" />"); ?></a>
+              </td>
+              <td class="valign-middle">
+              	<?php print($msg->read($EXAM_GOBACK)); ?>
+              </td>
+           </tr>
+         </table>
+
+</div>

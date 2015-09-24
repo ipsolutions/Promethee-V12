@@ -1,0 +1,389 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2002-2007 by Dominique Laporte(C-E-D@wanadoo.fr)
+   Copyright (c) 2006 by FG (persofg@gmail.com)
+   Copyright (c) 2006 by Nordine Zetoutou (nordine.zetoutou@educagri.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : weblog.htm
+ *		projet   : la page des weblogs
+ *
+ *		version  : 1.0
+ *		auteur   : laporte
+ *		creation : 2/10/04
+ *		modif    : 16/06/05 par FG
+ *                     migration -> PHP5
+ * 		           17/07/06 - par Nordine Zetoutou
+ * 	                 migration des balises HTML en XHTML 1.0 strict
+ */
+
+
+$IDcentre = ( @$_POST["IDcentre"] )		// identification du centre
+	? (int) $_POST["IDcentre"]
+	: (int) (@$_GET["IDcentre"] ? $_GET["IDcentre"] : $_SESSION["CnxCentre"]) ;
+$IDsel    = ( strlen(@$_POST["IDsel"]) )	// identification de la catégorie
+	? (int) $_POST["IDsel"]
+	: (int) @$_GET["IDsel"] ;
+$name     = ( @$_POST["name"] )		// nom alpha
+	? $_POST["name"]
+	: @$_GET["name"] ;
+
+$IDlog    = (int) @$_GET["IDlog"];		// ID du blog
+
+$skpage   = ( @$_GET["skpage"] )		// n° de la page affichée
+	? (int) $_GET["skpage"]
+	: 1 ;
+$skshow   = ( @$_GET["skshow"] )		// n° du flash info
+	? (int) $_GET["skshow"]
+	: 1 ;
+
+$submit   = @$_GET["submit"];			// bouton de validation
+?>
+
+
+<?php
+	// initialisation
+	$IDclass = 10000 * ((int) ($IDsel / 10000)) - $IDsel;
+	if ( $IDsel < 0 )
+		$IDsel = abs($IDsel / 10000);
+
+	// fermeture des blogs
+	switch ( $submit ) {
+		case "close" :
+		case "open" :
+			$query  = "update weblog ";
+			$query .= "set _visible = ";
+			$query .= ( $submit == "open" ) ? "'O'" : "'N'" ;
+			$query .= " where _IDlog = '$IDlog'";
+
+			if ( $_SESSION["CnxAdm"] == 255 )
+				mysql_query($query, $mysql_link);
+			break;
+		default :
+			break;
+		}
+?>
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($WEBLOG_BLOG)); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+
+	<p style="margin-top:0px; margin-bottom:10px; text-align:justify;">
+	<?php print($msg->read($WEBLOG_DISCLAIMER)); ?>
+	</p>
+
+	<form id="formulaire" action="index.php?item=36" method="post">
+
+		<hr style="width:80%;" />
+
+		  <table class="width100">
+		    <tr>
+			<td style="width:50%;"  class="align-right">
+			    	<?php print($msg->read($WEBLOG_CHOOSECENTER)); ?> 
+			</td>
+			<td style="width:50%;">
+				<label for="IDcentre">
+			  	<select id="IDcentre" name="IDcentre" onchange="document.forms.formulaire.submit()">
+				<?php
+					// lecture des centres constitutifs
+					$query  = "select _IDcentre, _ident from config_centre ";
+					$query .= "where _visible = 'O' AND _lang = '".$_SESSION["lang"]."' ";
+					$query .= "order by _IDcentre";
+
+					$result = mysql_query($query, $mysql_link);
+					$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+					while ( $row ) {			
+						if ( $IDcentre == $row[0] )
+							print("<option selected=\"selected\" value=\"$row[0]\">$row[1]</option>");
+						else
+							print("<option value=\"$row[0]\">$row[1]</option>");
+
+						$row = remove_magic_quotes(mysql_fetch_row($result));
+						}				
+				?>
+				</select> <img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/home.gif" alt="" title="" />
+				</label>
+			</td>
+		    </tr>
+
+		    <tr>
+			<td style="width:50%;" class="align-right">
+			  <?php print($msg->read($WEBLOG_CHOOSECATEGORY)); ?> 
+			</td>
+			<td style="width:50%;">
+			  <label for="IDsel">
+		  	  <select id="IDsel" name="IDsel" onchange="document.forms.formulaire.submit()">
+			  <?php
+				// recherche des groupes
+				$query  = "select _IDgrp, _ident from user_group ";
+				$query .= "where _visible = 'O' AND _lang = '".$_SESSION["lang"]."' ";
+				$query .= "order by _IDgrp asc";
+
+				$result = mysql_query($query, $mysql_link);
+				$cat    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+				print("<option value=\"0\">&nbsp;</option>");
+
+				while ( $cat ) {			
+					if ( getAccess($cat[0]) == 1 ) {
+						print("<optgroup label=\"$cat[1]\">");
+
+						// intialisation
+						$Query  = "select _IDclass, _ident from campus_classe ";
+						$Query .= "where _visible = 'O' AND _IDcentre = '$IDcentre' ";
+						$Query .= "order by _ident";
+
+						// affichage des classes
+						$return = mysql_query($Query, $mysql_link);
+						$myrow  = ( $return ) ? remove_magic_quotes(mysql_fetch_row($return)) : 0 ;
+
+						while ( $myrow ) {
+							$value  = ( $cat[0] * 10000) + $myrow[0];
+							$select = ( $IDclass == $myrow[0] ) ? "selected=\"selected\"" : "" ;
+
+							print("<option value=\"-$value\" $select>$myrow[1]</option>");
+
+							$myrow  = remove_magic_quotes(mysql_fetch_row($return));
+							}	// endwhile classe
+
+						print("</optgroup>");
+						}
+					else {
+						$select = ( $IDsel == $cat[0] ) ? "selected=\"selected\"" : "" ;
+
+						print("<option value=\"$cat[0]\" $select>$cat[1]</option>");
+						}
+
+					$cat = remove_magic_quotes(mysql_fetch_row($result));
+					}	// endwhile catégorie
+			  ?>
+			  </select> <img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/group.gif" title="" alt="" />
+			  </label>
+			</td>
+		    </tr>
+
+		  </table>
+
+		<hr style="width:80%;" />
+
+		<table class="width100">
+		  <tr style="background-color:#C0C0C0;">
+                <td class="align-left" style="width:50%;">
+			<?php print($msg->read($WEBLOG_MODO)); ?>
+			  	<label for="name">
+			  	<select id="name" name="name" onchange="document.forms.formulaire.submit()" style="font-size: 9px;">
+				<?php
+					// accès par ordre alphabétique
+					$alpha = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
+					printf("<option value=\"\">". $msg->read($WEBLOG_ALL) ."</option>");
+					for ($i = 0; $i < 26; $i++)
+						printf("<option value=\"".$alpha[$i]."\" %s>".$alpha[$i]."</option>", ($alpha[$i] == $name) ? "selected=\"selected\"" : "");
+				?>
+			  	</select>
+			  	</label>
+		    </td>
+                <td class="align-center" style="width:10%; white-space: nowrap;"><?php print($msg->read($WEBLOG_CATEGORY)); ?></td>
+                <td class="align-center" style="width:20%; white-space: nowrap;"><?php print($msg->read($WEBLOG_MESSAGE)); ?></td>
+                <td class="align-center" style="width:20%; white-space: nowrap;"><?php print($msg->read($WEBLOG_AUTHCOMMENTS)); ?></td>
+		  </tr>
+
+		<?php
+			require_once "include/user.php";
+			$acl = new user_acl("weblog");
+
+			// lecture de la base de données
+			// NB : les élèves n'ont pas accès aux weblogs
+			//      et seuls les weblogs ouverts sont accessibles aux utilisateurs
+			$Query  = "select distinctrow ";
+			$Query .= "weblog._IDlog, weblog._ID, weblog._text, weblog._date, weblog._private, weblog._visible, weblog._IP, ";
+			$Query .= "user_id._IDgrp ";
+			$Query .= "from weblog, user_id ";
+			$Query .= "where weblog._IDgroup = '0' AND weblog._ID ";
+			$Query .= "AND weblog._ID = user_id._ID ";
+			$Query .= ( $IDsel ) ? "AND user_id._IDgrp = '$IDsel' " : "" ;
+			$Query .= ( $_SESSION["CnxAdm"] == 255 ) ? "" : "AND weblog._visible = 'O' AND (weblog._IDgrprd & ". pow(2, $_SESSION["CnxGrp"] - 1) .") ";
+			$Query .= "order by user_id._name, user_id._fname";
+
+			// détermination du nombre de pages
+			$result = mysql_query($Query, $mysql_link);
+			$nbelem = ( $result ) ? mysql_affected_rows($mysql_link) : 0 ;
+
+			$page   = $nbelem;
+			$show   = 1;
+
+			if ( $nbelem ) {
+				$page  = ( $page % $MAXPAGE )
+					? (int) ($page / $MAXPAGE) + 1
+					: (int) ($page / $MAXPAGE) ;
+
+				$show  = ( $page % $MAXSHOW )
+					? (int) ($page / $MAXSHOW) + 1
+					: (int) ($page / $MAXSHOW) ;
+
+				// initialisation
+				$i     = 1;
+				$first = 1 + (($skpage - 1) * $MAXPAGE);
+				$pos   = $first;
+				
+				// se positionne sur la page ad hoc
+				mysql_data_seek($result, $first - 1);
+				$row = remove_magic_quotes(mysql_fetch_row($result));
+
+				while ( $row AND $i <= $MAXPAGE ) {
+					$bgcol  = ( $i % 2 ) ? "item" : "menu" ;
+
+					$icon   = ( $row[5] == "O" )
+						? ($row[4] == "O" ? "forbidden.gif" : "folder-opened.gif")
+						: "folder-lock.jpg" ;
+
+					$action = ( $row[5] == "O" ) ? "close" : "open" ;
+					$title  = ( $row[5] == "O" ) ? $msg->read($WEBLOG_CLOSE) : $msg->read($WEBLOG_OPEN) ;
+
+					$close  = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $row[1] )
+						? "<a href=\"".myurlencode("index.php?item=$item&IDlog=$row[0]&submit=$action")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/$icon\" title=\"$title\" alt=\"$title\" /></a>"
+						: "<img src=\"".$_SESSION["ROOTDIR"]."/images/$icon\" title=\"\" alt=\"\" />" ;
+					$link   = ( $_SESSION["CnxAdm"] == 255 OR $row[5] == "O" )
+						? "<a href=\"".myurlencode("index.php?item=$item&cmde=visu&IDlog=$row[0]")."\">".getUserName($row[1], false)."</a>"
+						: getUserName($row[1], false) ;
+
+			            $secure = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $row[1] )
+        			      	? "<a href=\"".myurlencode("index.php?item=$item&cmde=gestion&IDlog=$row[0]")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/tools.gif\" title=\"".$msg->read($WEBLOG_UPDTBLOG)."\" alt=\"".$msg->read($WEBLOG_UPDTBLOG)."\" /></a>"
+              				: "" ;
+
+					// le weblog est-il privé ?
+					$info  = ( $row[4] == "N" ) ? $msg->read($WEBLOG_PUBLIC) : $msg->read($WEBLOG_PRIVATE) ;
+
+					// accès au backoffice pour paramétrage
+					$acl   = ( $row[4] == "O" AND ($_SESSION["CnxAdm"] == 255 OR $row[1] == $_SESSION["CnxID"]) )
+						? "<a href=\"".myurlencode("index.php?item=1&cmde=acl&ident=weblog&IDident=$row[0]")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/invisible.gif\" title=\"$info\" alt=\"$info\" /></a>"
+						: "" ;
+
+					// pour savoir le nombre total de catégories
+					$res   = mysql_query("select _IDdata from weblog_data where _IDlog = '$row[0]'", $mysql_link);
+					$nbcat = ( $res ) ? mysql_numrows($res) : 0 ;				
+
+					// pour savoir le nombre de messages
+					$sql   = "select distinctrow weblog_items._IDitem, weblog_items._ID, weblog_items._IP, weblog_items._date, weblog_items._IDdata ";
+					$sql  .= "from weblog_items, weblog_data ";
+					$sql  .= "where weblog_data._IDlog = '$row[0]' AND weblog_data._IDdata = weblog_items._IDdata AND weblog_items._parent = '0' ";
+					$sql  .= "order by weblog_items._IDitem desc";
+
+					$mymsg = mysql_query($sql, $mysql_link);
+					$myrow = ( $mymsg ) ? mysql_fetch_row($mymsg) : 0 ;
+					$nbmsg = ( $mymsg ) ? mysql_numrows($mymsg) : 0 ;			
+
+					if ( $nbmsg ) {
+						$mysql = mysql_query("select _title from weblog_data where _IDdata = '$myrow[4]' limit 1" , $mysql_link);
+						$cat   = ( $mysql ) ? mysql_fetch_row($mysql) : 0 ;
+
+						$lastmsg  = "<span class=\"x-small\">";
+						$lastmsg .= $msg->read($WEBLOG_POSTEDBY, Array(getUserName($row[1]), '', $cat[0])) . " ";
+						$lastmsg .= "<a href=\"".myurlencode("index.php?item=$item&cmde=visu&IDlog=$row[0]&IDitem=$myrow[0]")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/minireply.gif\" title=\"\" alt=\"\" /></a>";
+						$lastmsg .= "</span>";
+						}
+					else
+						$lastmsg = "";
+
+					// pour savoir le nombre de commentaires
+					$sql  = "select distinctrow weblog_items._IDitem, weblog_items._ID, weblog_items._IP, weblog_items._date, weblog_items._IDdata ";
+					$sql .= "from weblog_items, weblog_data ";
+					$sql .= "where weblog_data._IDlog = '$row[0]' AND weblog_data._IDdata = weblog_items._IDdata AND weblog_items._parent ";
+					$sql .= "order by weblog_items._IDitem desc";
+
+					$mymsg = mysql_query($sql, $mysql_link);
+					$myrow = ( $mymsg ) ? mysql_fetch_row($mymsg) : 0 ;
+					$nbrow = ( $myrow ) ? mysql_numrows($myrow) : 0 ;				
+
+					if ( $nbrow ) {
+						$mysql = mysql_query("select _title from weblog_data where _IDdata = '$myrow[4]' limit 1" , $mysql_link);
+						$cat   = ( $mysql ) ? mysql_fetch_row($mysql) : 0 ;
+
+						$lastrow  = "<span class=\"x-small\">";
+						$lastrow .= $msg->read($WEBLOG_POSTEDBY, Array(getUserName($row[1]), '', $cat[0])) . " ";
+						$lastrow .= "<a href=\"".myurlencode("index.php?item=$item&cmde=visu&IDlog=$row[0]&IDitem=$myrow[0]")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/minireply.gif\" title=\"\" alt=\"\" /></a>";
+						$lastrow .= "</span>";
+						}
+					else
+						$lastrow = "";
+
+					print("
+						<tr class=\"$bgcol\">
+	          		    		    <td style=\"width:1%;\" class=\"valign-top\">$close</td>
+	          		    		    <td style=\"width:49%;\">
+							[<img src=\"".$_SESSION["ROOTDIR"]."/images/smiley/$row[7].gif\" title=\"\" alt=\"\" />] $link $acl $secure<br />
+							<span class=\"x-small\">". $msg->read($WEBLOG_HEADER, Array(getUserName($row[1]), _getHostName($row[6]), date2longfmt($row[3]))) ."</span>
+						    </td>
+						   <td class=\"align-center\">$nbcat</td>
+						   <td class=\"align-center\">$nbmsg<br/>$lastmsg</td>
+						   <td class=\"align-center\">$nbrow<br/>$lastrow</td>
+		       		       </tr>
+		       		       ");
+
+					$i++;
+					$row = remove_magic_quotes(mysql_fetch_row($result));
+					}
+				}
+            ?>
+            </table>
+
+		<?php
+			// bouton précédent
+			$where = $skshow - 1;
+			if ( $skshow == 1 )
+				$prev = "";
+			else {
+				$skpg = 1 + (($skshow - 2) * $MAXSHOW);
+				$prev = "[<a href=\"".myurlencode("index.php?item=$item&IDcentre=$IDcentre&IDsel=$IDsel&name=$name&skpage=$skpg&skshow=$where")."\">".$msg->read($WEBLOG_PREV)."</a>]";
+				}
+
+			// liens directs sur n° de page
+			$start = 1 + (($skshow - 1) * $MAXSHOW);
+			$end   = $skshow * $MAXSHOW;
+
+			$choix = ( $skpage == $start )
+				? "<img src=\"".$_SESSION["ROOTDIR"]."/images/nav_left.gif\" title=\"«\" alt=\"«\" /><strong>$start</strong><img src=\"".$_SESSION["ROOTDIR"]."/images/nav_right.gif\" title=\"»\" alt=\"»\" />"
+				: "<a href=\"".myurlencode("index.php?item=$item&IDcentre=$IDcentre&IDsel=$IDsel&name=$name&skpage=$start&skshow=$skshow")."\">$start</a>" ;
+
+			for ($j = $start + 1; $j <= $end AND $j <= $page; $j++)
+				$choix .= ( $skpage == $j )
+					? "|<img src=\"".$_SESSION["ROOTDIR"]."/images/nav_left.gif\" title=\"«\" alt=\"«\" /><strong>$j</strong><img src=\"".$_SESSION["ROOTDIR"]."/images/nav_right.gif\" title=\"»\" alt=\"»\" />"
+					: "|<a href=\"".myurlencode("index.php?item=$item&IDcentre=$IDcentre&IDsel=$IDsel&name=$name&skpage=$j&skshow=$skshow")."\">$j</a>" ;
+
+			// bouton suivant
+			$where = $skshow + 1;
+			$next  = ( $skshow == $show )
+				? ""
+				: "[<a href=\"".myurlencode("index.php?item=$item&IDcentre=$IDcentre&IDsel=$IDsel&name=$name&skpage=$j&skshow=$where")."\">".$msg->read($WEBLOG_NEXT)."</a>]" ;
+		?>
+
+	      <hr/>
+
+		<?php if ( $nbelem ) print("<div style=\"text-align:center;\">$prev $choix $next</div>"); ?>
+
+	</form>
+
+</div>

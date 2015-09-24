@@ -1,0 +1,754 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2002-2008 by Dominique Laporte(C-E-D@wanadoo.fr)
+   Copyright (c) 2006 by Hugues Lecocq(hugues.lecocq@laposte.net)
+   Copyright (c) 2006 by Nordine Zetoutou (nordine.zetoutou@educagri.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : flash_post.htm
+ *		projet   : la page de saisie des flash infos
+ *
+ *		version  : 1.2
+ *		auteur   : laporte
+ *		creation : 20/10/02
+ *		modif    : 28/05/03 - par D. Laporte
+ *                     mise en place des smileys
+ *
+ *		           7/03/04 - par D. Laporte
+ *                     mise en place de l'éditeur HTML
+ *
+ *                     15/06/06 - par hugues lecocq
+ *                     migration PHP5 
+ *
+ *		           17/07/06 - Nordine Zetoutou
+ * 	                 migration des balises HTML en XHTML 1.0 strict
+ */
+
+
+$IDflash = ( @$_POST["IDflash"] )		// identifiant des flash infos
+	? (int) $_POST["IDflash"]
+	: (int) @$_GET["IDflash"] ;
+$IDinfos = ( @$_POST["IDinfos"] )		// identifiant des rubriques des publications par internet
+	? (int) $_POST["IDinfos"]
+	: (int) @$_GET["IDinfos"] ;
+
+$IDitem = ( @$_POST["IDitem"] )		// Identifiant d'un article
+	? (int) $_POST["IDitem"]
+	: (int) @$_GET["IDitem"] ;
+$edit = ( strlen(@$_POST["edit"]) )		// mode d'édition : basique ou avancé
+	? (int) $_POST["edit"]
+	: (int) (strlen(@$_GET["edit"]) ? $_GET["edit"] : $WYSIWYG) ;
+$titre = ( @$_POST["titre"] )			// titre de l'item flash_data
+	? $_POST["titre"]
+	: @$_GET["titre"] ;
+$article = ( @$_POST["article"] )		// titre de l'annonce
+	? $_POST["article"]
+	: @$_GET["article"] ;
+$texte = ( @$_POST["texte"] )			// texte de l'annonce
+	? $_POST["texte"]
+	: @$_GET["texte"] ;
+
+$submit = ( @$_POST["submit"] )		// bouton de validation
+	? $_POST["submit"]
+	: @$_GET["submit"] ;
+?>
+
+
+<script src="script/ckeditor/ckeditor.js"></script>
+
+<?php
+//---------------------------------------------------------------------------
+function attachment($IDitem)
+{
+/*
+ * fonction :	enregistrement des PJ
+ * in :		$IDitem : ID de l'article
+ * out :		tableau du path des différentes PJ
+ */
+
+	require "globals.php";
+
+	// transfert d'une Pièce Jointe
+	$file = @$_FILES["UploadPJ"]["tmp_name"];
+	$pj   = Array();
+
+	for ($j = 0; $j < count($file); $j++)
+		if (  @$file[$j] AND authfile(@$_FILES["UploadPJ"]["name"][$j]) ) {
+			// extension du fichier en PJ
+			$ext    = extension(@$_FILES["UploadPJ"]["name"][$j]);
+			$pjdesc = addslashes(trim(@$_POST["PJdesc"][$j]));
+
+			$Query  = "insert into flash_pj ";
+			$Query .= "values('', '$IDitem', '".@$_FILES["UploadPJ"]["name"][$j]."', '$pjdesc', '$ext', '".@$_FILES["UploadPJ"]["size"][$j]."', '', 'O', 'O')";
+
+			if ( !mysql_query($Query, $mysql_link) )
+				sql_error($mysql_link);
+			else {
+				// fichier destination
+				$dest   = "$DOWNLOAD/flash/". mysql_insert_id() .".$ext";
+				$pj[$j] = $dest;
+
+				// copie du fichier temporaire -> répertoire de stockage
+				if ( move_uploaded_file($file[$j], $dest) )
+					mychmod($dest, $CHMOD);
+				}
+			}
+
+	return $pj;
+}
+//---------------------------------------------------------------------------
+function removePJ($IDitem)
+{
+/*
+ * fonction :	supprime les PJ d'un article
+ * in :		$IDitem, id de l'article
+ * out :		1 si requête correcte, 0 sinon
+ */
+	require "globals.php";
+
+	$Query  = "select _IDpj, _ext from flash_pj ";
+	$Query .= "where _IDitem = '$IDitem' ";
+	$Query .= "order by _IDpj";
+
+	$result  = mysql_query($Query, $mysql_link);
+	$row     = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+	while ( $row ) {
+		unlink("$DOWNLOAD/flash/$row[0].$row[1]");
+
+		$row = mysql_fetch_row($return);
+		}
+
+	$Query  = "delete from flash_pj ";
+	$Query .= "where _IDitem = '$IDitem' ";
+
+	return mysql_query($Query, $mysql_link);
+}
+//---------------------------------------------------------------------------
+
+	// lecture de la base de données des flash info
+	$query  = "select _title, _IDmod, _PJ, _rss, _IDgrpwr from flash ";
+	$query .= "where _IDflash = '$IDflash' AND _visible = 'O' ";
+	$query .= "limit 1";
+
+	$result = mysql_query($query, $mysql_link);
+	$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+	$title  = $row[0];
+	$is_pj  = $row[2];
+	$is_rss = $row[3];
+
+	$modo   = (bool) ( $row[1] == -1 AND ($_SESSION["CnxAdm"] & 4) AND ($row[4] & pow(2, $_SESSION["CnxGrp"] - 1)) );
+
+	// si pas d'autorisation => bye, bye
+	if ( $_SESSION["CnxAdm"] != 255 AND $_SESSION["CnxID"] != $row[1] AND $modo == false )
+		logadmSessionAccess();
+
+	// initialisation du statut et des erreurs
+	$status = $Query = "";
+	$error1 = $error2 = $error3 = "";
+
+	$titre   = addslashes(trim($titre));
+	$article = addslashes(trim($article));
+	$texte   = addslashes(trim($texte));
+
+	if ( !isset($IDinfos) ) {
+		// sélection de la rubrique
+		$Query   = "select _IDinfos from flash_data ";
+		$Query  .= "where _IDflash = '$IDflash' ";
+		$Query  .= "order by _IDinfos desc ";
+		$Query  .= "limit 1";
+
+		$result  = mysql_query($Query, $mysql_link);
+		$row     = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+		$IDinfos = $row[0];
+		}
+
+	// l'utilisateur a cliqué sur un lien
+	switch ( $submit ) {
+		case "NewRub" :	// ajout d'une nouvelle rubrique
+			// initialisation des contrôles
+			$IDinfos = 0;
+
+			// et on enchaîne...
+
+		case "NewItem" :	// ajout d'un nouvel article dans une rubrique
+			$IDitem  = -1;
+			break;
+
+		case "ShowRub" :		// validation d'une rubrique
+			$Query  = "UPDATE flash_data ";
+			$Query .= ( @$_GET["show"] == "N" ) ? "SET _visible = 'O' " : "SET _visible = 'N' " ;
+			$Query .= "where _IDinfos = '$IDinfos' ";
+			$Query .= "limit 1";
+
+			if ( !mysql_query($Query, $mysql_link) )
+				sql_error($mysql_link);
+			break;
+
+		case "ShowItem" :		// validation d'un article
+			$Query  = "UPDATE flash_items ";
+			$Query .= ( @$_GET["show"] == "N" ) ? "SET _visible = 'O' " : "SET _visible = 'N' " ;
+			$Query .= "where _IDitem = '$IDitem' ";
+			$Query .= "limit 1";
+
+			if ( !mysql_query($Query, $mysql_link) )
+				sql_error($mysql_link);
+			break;
+
+		case "DelRub" :
+			$status = $msg->read($FLASH_ERASE) ." ";
+
+			$Query  = "select _IDitem from flash_items ";
+			$Query .= "where _IDinfos = '$IDinfos' ";
+			$Query .= "order by _IDitem";
+
+			$result = mysql_query($Query, $mysql_link);
+			$row    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+			while ( $row ) {
+				// suppression des PJ
+				removePJ($row[0]);
+
+				$row = mysql_fetch_row($return);
+				}
+
+			$Query  = "delete from flash_items ";
+			$Query .= "where _IDinfos = '$IDinfos' ";
+
+			if ( mysql_query($Query, $mysql_link) ) {
+				$Query  = "delete from flash_data ";
+				$Query .= "where _IDinfos = '$IDinfos' ";
+				$Query .= "limit 1";
+
+				if ( mysql_query($Query, $mysql_link) ) {
+					$IDinfos = 0;
+					$IDitem  = -1;
+					}
+				}
+			break;
+
+		case "DelItem" :
+			$status = $msg->read($FLASH_ERASE) ." ";
+
+			// suppression des PJ
+			removePJ($IDitem);
+
+			$Query  = "DELETE from flash_items ";
+			$Query .= "where _IDitem = '$IDitem' ";
+			$Query .= "limit 1";
+
+			if ( !mysql_query($Query, $mysql_link) ) { 
+				$status .= "<img src=\"".$_SESSION["ROOTDIR"]."/images/bad.gif\" title=\"\" alt=\"\" />";
+				sql_error($mysql_link);
+				}
+			else {
+				$status .= "<img src=\"".$_SESSION["ROOTDIR"]."/images/ok.gif\" title=\"\" alt=\"\" />";
+				$IDitem  = 0;
+				}
+			break;
+
+		case "Modifier" :		// modification
+		case "UpdItem" :		// modification du titre de l'article
+			// permet de modifier l'appartion de l'ordre chrono des annonces
+			$Query  = "UPDATE flash_data ";
+			$Query .= "SET _modif = '". date("Y-m-d H:i:s", time()) ."' ";
+			$Query .= "where _IDinfos = '$IDinfos' ";
+			$Query .= "limit 1";
+
+			if ( !mysql_query($Query, $mysql_link) )
+				sql_error($mysql_link);
+			break;
+
+		default :
+			break;
+		}
+
+	// saisie d'un article
+	if ( @$_POST["valid_x"] ) {
+		// on récupère la date pour maj
+		$date = date("Y-m-d H:i:s", time());
+
+		// si c'est une nouvelle rubrique => on enregistre
+		if ( !$IDinfos ) {
+			// vérification de la saisie
+			if ( !strlen($titre) )
+				$error1 = "<span style=\"color:#FF0000\">". $msg->read($FLASH_ERRTITLE) ."</span>";
+
+			// insertion d'une nouvelle rubrique dans la base de données
+			if ( $error1 == "" ) {
+				$Query  = "INSERT INTO flash_data ";
+				$Query .= "VALUES('', '$IDflash', '$date', '$date', '".$_SESSION["CnxID"]."', '".$_SESSION["CnxIP"]."', '$titre', '', '', '', '', 'O', '0', 'O') ";
+
+				if ( !mysql_query($Query, $mysql_link) )
+					sql_error($mysql_link);
+				else
+					$IDinfos = mysql_insert_id();
+				}
+			}
+		// sinon on effectue la mise à jour
+		else
+			if ( strlen($titre) ) {
+				$Query  = "update flash_data ";
+				$Query .= "set _title = '$titre', ";
+				$Query .= "_modif = '". date("Y-m-d H:i:s", time()) ."', ";
+				$Query .= "_ID = '".$_SESSION["CnxID"]."', ";
+				$Query .= "_IP = '".$_SESSION["CnxIP"]."' ";
+				$Query .= "where _IDinfos = '$IDinfos' ";
+				$Query .= "limit 1";
+
+				if ( !mysql_query($Query, $mysql_link) )
+					sql_error($mysql_link);
+				}
+
+		// si c'est un nouvel article => on enregistre
+		if ( !$IDitem ) {
+			$status = $msg->read($FLASH_INSERT) ." ";
+
+			// vérification de la saisie
+			if ( !strlen($article) )
+				$error2 = "<span style=\"color:#FF0000\">". $msg->read($FLASH_ERRIDENT) ."</span>";
+			if ( !strlen($texte) )
+				$error3 = "<span style=\"color:#FF0000\">". $msg->read($FLASH_ERRTEXT) ."</span>";
+
+			// insertion d'un nouvel article dans la base de données
+			if ( $IDinfos AND $error1 == "" AND $error2 == "" AND $error3 == "" ) {
+				// mode SPIP ou WYSIWYG
+				$raw    = ( $edit ) ? "N" : "O" ;
+
+				$Query  = "INSERT INTO flash_items ";
+				$Query .= "VALUES ('', '$IDinfos', '$date', '$date', '".$_SESSION["CnxID"]."', '".$_SESSION["CnxIP"]."', '$article', '$texte', '$raw', '', '', '', '', '', '0', 'O') ";
+
+				if ( !mysql_query($Query, $mysql_link) )
+					sql_error($mysql_link);
+				else {
+					$IDitem = mysql_insert_id();
+
+					mysql_query("update flash_items set _order = '$IDitem' limit 1", $mysql_link);
+
+					// transfert d'une Pièce Jointe
+					attachment($IDitem);
+					}
+
+				// alimentation flux rss
+				if ( $is_rss == "O" ) {
+					$query  = "insert into rss_items ";
+					$query .= "values('', '0', '$title, $article', '', '$texte', '".addslashes(getUserName($_SESSION["CnxID"], false))."', '".addslashes($msg->read($FLASH_SUBMIT))."', '".date("Y-m-d H:i:s", time())."', '".$_SESSION["lang"]."')";
+
+					mysql_query($query, $mysql_link);
+					}
+				}
+			}
+		// sinon on effectue la mise à jour
+		else { 
+			$status = $msg->read($FLASH_MODIFY) ." ";
+
+			// seuls les propriétaires peuvent modifier leurs articles
+			$Query  = "UPDATE flash_items ";
+			$Query .= "SET _modif = '$date', ";
+			$Query .= "_ID = '".$_SESSION["CnxID"]."', ";
+			$Query .= "_IP = '".$_SESSION["CnxIP"]."' ";
+			$Query .= ( strlen($article) ) ? ", _title = '$article' " : " " ;
+			$Query .= ( strlen($texte) )   ? ", _texte = '$texte' "   : " " ;
+			$Query .= "where _IDitem = '$IDitem' ";
+			$Query .= "limit 1" ;
+
+			if ( !mysql_query($Query, $mysql_link) )
+				sql_error($mysql_link);
+			else
+				// transfert d'une Pièce Jointe
+				attachment($IDitem);
+			}
+
+		// icone du statut
+		$status .= ( $IDinfos AND $error1 == "" AND $error2 == "" AND $error3 == "" )
+			? "<img src=\"".$_SESSION["ROOTDIR"]."/images/ok.gif\" title=\"\" alt=\"\" />"
+			: "<img src=\"".$_SESSION["ROOTDIR"]."/images/bad.gif\" title=\"\" alt=\"\" />" ;
+
+		// on revient sur l'article en cours
+//			$IDitem  = 0;
+		}
+
+	// nbr d'articles dans la rubrique
+	if ( !strlen($status) ) {
+		$Query   = "select _IDitem from flash_items ";
+		$Query  .= "where _IDinfos = '$IDinfos' ";
+
+		$result  = mysql_query($Query, $mysql_link);
+		$nbrec   = ( $result ) ? mysql_numrows($result) : 0 ;
+
+		// initialisation des contrôles
+		$msg->isPlural = (bool) ($nbrec > 1);
+		$status  = $msg->read($FLASH_NBTEXT, strval($nbrec));
+		}
+
+	// sélection de la rubrique
+	$Query   = "select _title, _align, _color, _visible from flash_data ";
+	$Query  .= "where _IDinfos = '$IDinfos' ";
+	$Query  .= "limit 1" ;
+
+	$result  = mysql_query($Query, $mysql_link);
+	$myrow   = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+	$titre   = $myrow[0];
+	$align   = ( $myrow[1] ) ? $myrow[1] : "G" ;
+	$color   = ( $myrow[2] ) ? $myrow[2] : "#FFFFFF" ;
+
+	// sélection de l'article
+	$Query   = "select _title, _texte, _color, _IDitem, _ID, _visible, _raw from flash_items ";
+	$Query  .= ( $IDitem ) ? "where _IDitem = '$IDitem' " : "where _IDinfos = '$IDinfos' " ;
+	$Query  .= ( $IDitem ) ? "" : "order by _IDitem asc " ;
+	$Query  .= "limit 1" ;
+
+	$result  = mysql_query($Query, $mysql_link);
+	$row     = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+	$article = "$row[0]";
+	$texte   = "$row[1]";
+	$color2  = ( $row[2] ) ? $row[2] : "#FFFFFF" ;
+	$IDitem  = $row[3];
+	$IDmod   = $row[4];
+	$visible = $row[5];
+
+	$raw     = $row[6];
+?>
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($FLASH_SUBMIT, $title)); ?><br/>
+		<?php print($msg->read($FLASH_FORMPOST)); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+
+		<table class="width100">
+		  <tr>
+		    <td style="width:70%;"><?php print($msg->read($FLASH_AUTHOR)." ".$_SESSION["CnxName"]); ?></td>
+		    <td style="width:30%;" class="align-right"><?php print($msg->read($FLASH_STATUS)." $status"); ?></td>
+		  </tr>
+		  <tr>
+		    <td style="height:15px;"></td>
+		  </tr>
+		</table>
+
+		<form id="formulaire" action="index.php" method="post" enctype="multipart/form-data">
+		<?php
+			print("
+				<p class=\"hidden\"><input type=\"hidden\" name=\"item\"    value=\"$item\" /></p>
+				<p class=\"hidden\"><input type=\"hidden\" name=\"cmde\"    value=\"$cmde\" /></p>
+				<p class=\"hidden\"><input type=\"hidden\" name=\"IDflash\" value=\"$IDflash\" /></p>
+				<p class=\"hidden\"><input type=\"hidden\" name=\"IDinfos\" value=\"$IDinfos\" /></p>
+				<p class=\"hidden\"><input type=\"hidden\" name=\"IDitem\"  value=\"$IDitem\" /></p>
+				<p class=\"hidden\"><input type=\"hidden\" name=\"edit\"    value=\"$edit\" /></p>
+				");
+		?>
+
+              <table class="width100">
+                <tr>
+                  <td style="background-color:#eeeeee;">
+                    <?php print($msg->read($FLASH_FLASHTITLE, $error1)); ?>
+                  </td>
+                  <td style="background-color:#eeeeee;" class="align-right">
+                    [ <?php print("<a href=\"index.php?IDflash=$IDflash\">".$msg->read($FLASH_VISUALIZE)."</a>"); ?> ]
+                  </td>
+                </tr>
+
+                <tr>
+                  <td colspan="2">
+                  <?php
+                 		if ( $IDinfos AND $submit != "UpdRub" ) {
+	                  	$add    =
+						"<a href=\"index.php?item=$item&amp;cmde=$cmde&amp;IDflash=$IDflash&amp;IDinfos=$IDinfos&amp;submit=NewRub\">
+                  			<img src=\"".$_SESSION["ROOTDIR"]."/images/spip/data.gif\" title=\"".$msg->read($FLASH_NEWFLASH)."\" alt=\"".$msg->read($FLASH_NEWFLASH)."\" />
+                  			</a>";
+
+                  		$update = "
+                  			<a href=\"index.php?item=$item&amp;cmde=$cmde&amp;IDflash=$IDflash&amp;IDinfos=$IDinfos&amp;submit=UpdRub\">
+                  			<img src=\"".$_SESSION["ROOTDIR"]."/images/spip/update.gif\" title=\"".$msg->read($FLASH_UPDATEANNOUNCE)."\" alt=\"".$msg->read($FLASH_UPDATEANNOUNCE)."\" />
+                  			</a>";
+
+					// suppression de la rubrique
+					$req    = $msg->read($FLASH_DELANNOUNCE);
+					$delete = "
+						<a href=\"index.php?item=$item&amp;cmde=$cmde&amp;IDflash=$IDflash&amp;IDinfos=$IDinfos&amp;submit=DelRub\" onclick=\"return confirmLink(this, '$req');\">
+						<img src=\"".$_SESSION["ROOTDIR"]."/images/spip/corb.gif\" title=\"".$msg->read($FLASH_DELANNOUNCE)."\" alt=\"".$msg->read($FLASH_DELANNOUNCE)."\" />
+						</a>";
+
+					$show   = "<a href=\"index.php?item=$item&amp;cmde=$cmde&amp;IDflash=$IDflash&amp;IDinfos=$IDinfos&amp;submit=ShowRub&amp;show=$myrow[3]\">";
+	                  	$show  .= ( $myrow[3] == "O" )
+                  			? "<img src=\"".$_SESSION["ROOTDIR"]."/images/visible.gif\" title=\"".$msg->read($FLASH_NOTVALID)."\" alt=\"".$msg->read($FLASH_NOTVALID)."\" />"
+                  			: "<img src=\"".$_SESSION["ROOTDIR"]."/images/invisible.gif\" title=\"".$msg->read($FLASH_VALID)."\" alt=\"".$msg->read($FLASH_VALID)."\" />" ;
+                  		$show  .= "</a>";
+
+		              	print("<span style=\"padding:2px; background-color:#ffffff; border-style:solid; border-color:#000000; border-width:1px;\">$titre</span> $add $update $delete $show");
+		              	}
+		              else
+					print("<label for=\"titre\"><input type=\"text\" id=\"titre\" name=\"titre\" size=\"40\" value=\"$titre\" /></label>");
+                  ?>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="height:10px;"></td>
+                </tr>
+              </table>
+
+              <table class="width100">
+                <tr>
+                  <td style="background-color:#eeeeee;">
+                    <?php print($msg->read($FLASH_ANNOUNCE, $error2)); ?>
+                  </td>
+                </tr>
+
+                <tr>
+                  <td>
+                  <?php
+                  	if ( $IDitem AND $submit != "UpdItem" ) {
+                  		$add   = "
+                  			<a href=\"index.php?item=$item&amp;cmde=$cmde&amp;IDflash=$IDflash&amp;IDinfos=$IDinfos&amp;submit=NewItem\">
+                  			<img src=\"".$_SESSION["ROOTDIR"]."/images/spip/item.gif\" title=\"".$msg->read($FLASH_NEWANNOUNCE)."\" alt=\"".$msg->read($FLASH_NEWANNOUNCE)."\" />
+                  			</a>";
+
+                  		$update = "
+                  			<a href=\"index.php?item=$item&amp;cmde=$cmde&amp;IDflash=$IDflash&amp;IDinfos=$IDinfos&amp;IDitem=$IDitem&amp;submit=UpdItem\">
+                  			<img src=\"".$_SESSION["ROOTDIR"]."/images/spip/update.gif\" title=\"".$msg->read($FLASH_UPDATEANNOUNCE)."\" alt=\"".$msg->read($FLASH_UPDATEANNOUNCE)."\" />
+                  			</a>";
+
+					// suppression de l'article
+					$req    = $msg->read($FLASH_DELANNOUNCE);
+					$delete = "
+						<a href=\"index.php?item=$item&amp;cmde=$cmde&amp;IDflash=$IDflash&amp;IDinfos=$IDinfos&amp;IDitem=$IDitem&amp;submit=DelItem\" onclick=\"return confirmLink(this, '$req');\">
+						<img src=\"".$_SESSION["ROOTDIR"]."/images/spip/corb.gif\" title=\"".$msg->read($FLASH_DELANNOUNCE)."\" alt=\"".$msg->read($FLASH_DELANNOUNCE)."\" />
+						</a>";
+
+					$show  = "<a href=\"index.php?item=$item&amp;cmde=$cmde&amp;IDflash=$IDflash&amp;IDinfos=$IDinfos&amp;IDitem=$IDitem&amp;submit=ShowItem&amp;show=$visible\">";
+	                  	$show .= ( $visible == "O" )
+                  			? "<img src=\"".$_SESSION["ROOTDIR"]."/images/visible.gif\" title=\"".$msg->read($FLASH_NOTVALID)."\" alt=\"".$msg->read($FLASH_NOTVALID)."\" />"
+                  			: "<img src=\"".$_SESSION["ROOTDIR"]."/images/invisible.gif\" title=\"".$msg->read($FLASH_VALID)."\" alt=\"".$msg->read($FLASH_VALID)."\" />" ;
+                  		$show .= "</a>";
+
+					print("<label for=\"IDitem\">");
+					print("<select id=\"IDitem\" name=\"IDitem\" onchange=\"document.forms.formulaire.submit()\">");
+
+					// recherche des articles
+					$query  = "select _IDitem, _title from flash_items ";
+					$query .= "where _IDinfos = '$IDinfos' ";
+					$query .= "order by _IDitem asc";
+
+					$result = mysql_query($query, $mysql_link);
+					$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+					while ( $row ) {
+						$select = ( $IDitem == $row[0] ) ? "selected=\"selected\"" : "" ;
+
+						print("<option value=\"$row[0]\" $select>$row[1]</option>");
+
+						$row = remove_magic_quotes(mysql_fetch_row($result));
+						}
+
+	                  	print("</select> $add $update $delete $show");
+	                  	print("</label>");
+                    		}
+                  	else
+					print("<label for=\"article\"><input type=\"text\" id=\"article\" name=\"article\" size=\"40\" value=\"$article\" /></label>");
+                  ?>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="height:10px;"></td>
+                </tr>
+              </table>
+
+              <table class="width100">
+                <tr>
+                  <td class="valign-bottom" style="background-color:#eeeeee;">
+			<?php
+				// une fois un texte saisi dans un certain mode, il n'est plus possible d'en changer
+				if ( $raw ) {
+					$edit    = ( $raw == "O" ) ? 0 : 1 ;
+					$editor  = ( $raw == "O" ) ? $msg->read($FLASH_BASIC) : $msg->read($FLASH_ADVANCED) ;
+					}
+				else {
+					$toggle  = (int) !$edit;
+					$editor  = "<a href=\"index.php?item=$item&amp;cmde=$cmde&amp;IDflash=$IDflash&amp;IDinfos=$IDinfos&amp;edit=$toggle&amp;submit=$submit\">";
+					$editor .= ( $edit ) ? $msg->read($FLASH_SWAPBASIC) : $msg->read($FLASH_SWAPADVANCED) ;
+					$editor .= "</a>";
+					}
+
+				print("".$msg->read($FLASH_TEXTANNOUNCE)." [$editor] <strong>$error3&nbsp;</strong>");
+			?>
+                  </td>
+                  <td class="valign-bottom align-right" style="background-color:#eeeeee;">
+			<?php
+				if ( !$edit )
+					print("
+						". $msg->read($FLASH_TYPO) ."
+						<a href=\"#\" onclick=\"popWin('".$_SESSION["ROOTDIR"]."/spip_typo.php?lang=".$_SESSION["lang"]."', '450', '350'); return false;\"><img src=\"".$_SESSION["ROOTDIR"]."/images/spip/aide.gif\" title=\"".$msg->read($FLASH_HELP)."\" alt=\"".$msg->read($FLASH_HELP)."\" /></a>
+						");
+			?>
+                  </td>
+                </tr>
+                <tr>
+                  <td colspan="2">
+			<?php
+				if ( $edit ) {
+					/*$oFCKeditor           = new FCKeditor("texte") ;
+					$oFCKeditor->BasePath = "./script/fckeditor/";
+					$oFCKeditor->Height   = 500;
+					$oFCKeditor->Value    = $texte;
+					$oFCKeditor->Value    = $texte;
+					$oFCKeditor->Create() ;*/
+					?>
+						<textarea name="texte" id="texte"><?php echo $texte; ?></textarea>
+						<script>
+						CKEDITOR.replace('texte');
+						</script>
+					<?php
+					}
+				else
+					print("<label for=\"texte\"><textarea rows=\"20\" id=\"texte\" name=\"texte\" cols=\"60\">$texte</textarea></label>");
+			?>
+			</td>
+                </tr>
+
+                <tr>
+                  <td colspan="2">
+                  <?php
+				if ( !$edit ) {
+					// affichage des smileys d'édition
+					$result = mysql_query("select _code, _ident from smileys where _type = 'T'", $mysql_link);
+					$smile  = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+					while ( $smile ) {
+						print("
+							<img src=\"".$_SESSION["ROOTDIR"]."/images/smiley/forum/$smile[1].gif\" title=\" code: $smile[0] \" alt=\" code: $smile[0] \"
+							onclick=\"Javacript:ajoutsmile('$smile[0]')\" style=\"cursor: hand;\" />
+							");
+				
+						$smile = ( $result ) ? mysql_fetch_row($result) : 0 ;
+						}
+					}
+			?>
+			</td>
+                </tr>
+              </table>
+
+                <?php
+			// Pièce Jointe sur un message
+			if ( $is_pj ) {
+			    	print("<table class=\"width100\">");
+
+				// lecture des Pièces Jointes
+				$res = mysql_query("select _IDpj, _ext, _size, _title from flash_pj where _IDitem = '$IDitem'", $mysql_link);
+				$row = ( $res ) ? mysql_fetch_row($res) : 0 ;
+
+				if ( $row ) {
+				    	print("
+					    <tr>
+					      <td class=\"valign-middle align-right\"><img src=\"".$_SESSION["ROOTDIR"]."/images/pj.gif\" title=\"\" alt=\"\" /></td>
+					      <td>
+						");
+
+					while ( $row ) {
+						// description de la pièce jointe
+						$desc = $msg->read($FLASH_FILESIZE, $row[2]) ."<br/>". $row[3];
+
+						print("
+							<img src=\"".$_SESSION["ROOTDIR"]."/images/mime/$row[1].gif\" title=\"$row[1]\" alt=\"$row[1]\" />
+							". $msg->read($FLASH_DOC, Array("#", addslashes($desc), "")) ."<br />
+							");
+
+						$row  = ( $res ) ? mysql_fetch_row($res) : 0 ;
+						}
+
+				    	print("
+					      </td>
+					    </tr>
+					    	");
+					}
+
+				$addpj = ( $is_pj > 1 )
+					? "<span style=\"cursor: pointer;\" onclick=\"$('more')._display.toggle(); return false;\"><img src=\"".$_SESSION["ROOTDIR"]."/images/ajouter.gif\" title=\"\" alt=\"+\" /></span>"
+					: "" ;
+
+			    	print("
+				    <tr>
+				      <td class=\"align-right valign-top\">
+						<strong>". $msg->read($FLASH_ATTACHMENT) ." :</strong><br />
+						$addpj
+					</td>
+					<td>");
+
+				print("
+					<fieldset style=\"width:80%; border:#cccccc solid 1px;\">
+					<legend>". $msg->read($FLASH_ATTACHMENT) ." 1</legend>
+						<p class=\"hidden\"><input type=\"hidden\" name=\"MAX_FILE_SIZE\" value=\"$FILESIZE\" /></p>
+						<input type=\"file\" name=\"UploadPJ[]\" size=\"50\" style=\"font-size:9px; margin-bottom:5px;\" /><br />
+						<label for=\"PJdesc_1\"><input type=\"text\" id=\"PJdesc_1\" name=\"PJdesc[]\" size=\"50\" /></label>
+						". $msg->read($FLASH_ATTDESCRIPTION) ."
+					</fieldset>");
+
+				print("<div id=\"more\" style=\"display:none;\">");
+
+				for ($i = 2; $i <= $is_pj; $i++) {
+					print("
+						<fieldset style=\"width:80%; border:#cccccc solid 1px;\">
+						<legend>". $msg->read($FLASH_ATTACHMENT) ." $i</legend>
+							<input type=\"file\" name=\"UploadPJ[]\" size=\"50\" style=\"font-size:9px; margin-bottom:5px;\" /><br />
+							<label for=\"PJdesc_$i\"><input type=\"text\" id=\"PJdesc_$i\" name=\"PJdesc[]\" size=\"50\" /></label>
+							". $msg->read($FLASH_ATTDESCRIPTION) ."
+						</fieldset>");
+					}
+
+				print("</div>");
+
+				print("
+				      </td>
+				    </tr>
+		              </table>");
+				}
+                ?>
+
+			<hr style="width:80%;" />
+
+	         <table class="width100">
+	           <tr>
+	              <td style="width:10%;" class="valign-middle align-center">
+	              	<?php print("<input type=\"image\" src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/valid.gif\" name=\"valid\" alt=\"".$msg->read($FLASH_INPUTOK)."\" />"); ?>
+	              </td>
+	              <td class="valign-middle">
+	              	<?php print($msg->read($FLASH_UPDATARTICLE)); ?>
+	              </td>
+	           </tr>
+	           <tr>
+	              <td class="valign-middle align-center">
+	              	<a href="index.php"><?php print("<img src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/cancel.gif\" title=\"\" alt=\"".$msg->read($FLASH_INPUTCANCEL)."\" />"); ?></a>
+	              </td>
+	              <td class="valign-middle">
+	              	<?php print($msg->read($FLASH_QUIT)); ?>
+	              </td>
+	           </tr>
+	         </table>
+                
+            </form>
+
+</div>

@@ -1,0 +1,408 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2005-2008 by Dominique Laporte(C-E-D@wanadoo.fr)
+   Copyright (c) 2006 by frédéric poyet(frederic.poyet@free.fr)
+   Copyright (c) 2006 by Nordine Zetoutou (nordine.zetoutou@educagri.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : cours_gestion.htm
+ *		projet   : la page de gestion des cours en ligne
+ *
+ *		version  : 1.1
+ *		auteur   : laporte
+ *		creation : 25/06/05
+ *		modif    : 11/06/06 - par Fred POYET
+ *                     migration php5
+ *		           17/07/06 - Nordine Zetoutou
+ * 	                 migration des balises HTML en XHTML 1.0 strict
+ */
+
+$IDcours  = ( @$_POST["IDcours"] )		// Identifiant du cours
+	? (int) $_POST["IDcours"]
+	: (int) @$_GET["IDcours"] ;
+$IDroot   = ( @$_POST["IDroot"] )		// Identifiant du répertoire racine
+	? (int) $_POST["IDroot"]
+	: (int ) @$_GET["IDroot"] ;
+$IDparent = ( @$_POST["IDparent"] )		// Identifiant du répertoire parent
+	? (int) $_POST["IDparent"]
+	: (int) @$_GET["IDparent"] ;
+$IDitem   = ( @$_POST["IDitem"] )		// Identifiant du document
+	? (int) $_POST["IDitem"]
+	: (int) @$_GET["IDitem"] ;
+$IDres    = ( @$_POST["IDres"] )		// Identifiant du type de ressource
+	? (int) $_POST["IDres"]
+	: (int) @$_GET["IDres"] ;
+$IDmat    = ( @$_POST["IDmat"] )		// Identifiant de la matière/formation
+	? (int) $_POST["IDmat"]
+	: (int) @$_GET["IDmat"] ;
+$IDdata   = ( @$_POST["IDdata"] )		// Identifiant de la matière sélectionnée
+	? (int) $_POST["IDdata"]
+	: (int) @$_GET["IDdata"] ;
+
+$titre   = @$_POST["titre"];
+$texte   = @$_POST["texte"];
+$year    = @$_POST["year"];
+$month   = @$_POST["month"];
+$day     = @$_POST["day"];
+$hour    = @$_POST["hour"];
+$min     = @$_POST["min"];
+$time_h  = @$_POST["time_h"];
+$time_m  = @$_POST["time_m"];
+$vak     = @$_POST["vak"];
+$visible = ( @$_POST["visible"] ) ? "N" : "O" ;
+
+$submit  = @$_POST["valid_x"];		// bouton de validation
+?>
+
+
+<?php
+	// lecture de la base de données
+	$Query  = "select _titre, _IDgrpwr, _IDgrprd from cours ";
+	$Query .= "where _IDcours = '$IDcours' " ;
+
+	// détermination du nombre de pages
+	$result = mysql_query($Query, $mysql_link);
+	$dir    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+	// l'utilisateur a validé la saisie
+	if ( $submit ) {
+		$status  = $msg->read($COURS_MODIFICATION) . " ";
+
+		$date    = date("Y-m-d H:i:s");
+
+		// niveau d'utilisabilité
+		$access  = 0;
+		for ( $i = 0; $i < count($vak); $i++ )
+			$access += @$vak[$i];
+
+		// modification du répertoire
+		$Query  = ( $IDparent )
+			? "update cours_data "
+			: "update cours_items " ;
+		$Query .= "SET _texte = '". addslashes($texte) ."', _open = '$year-$month-$day $hour:$min:00', _visible = '$visible', _usability = '$access', ";
+		$Query .= ( $IDparent )
+			? "_info = '$date' "
+			: "_titre = '". addslashes($titre) ."', _time = '$time_h:$time_m:00' " ;
+		$Query .= ( $IDparent ) 
+			? "where _IDdata = '$IDparent' "
+			: "where _IDitem = '$IDitem' " ;
+		$Query .= "limit 1";
+
+		if ( !mysql_query($Query, $mysql_link) ) {
+			$status .= "<img src=\"".$_SESSION["ROOTDIR"]."/images/bad.gif\" title=\"\" alt=\"\" />";
+			sql_error($mysql_link);
+			}
+		else
+			$status .= "<img src=\"".$_SESSION["ROOTDIR"]."/images/ok.gif\" title=\"\" alt=\"\" />";
+		}
+	// initialisation
+	else
+		$status = "-";
+
+	// recherche du répertoire
+	$Query  = ( $IDparent ) 
+		? "select _IDdata, _open, _visible, _titre, _texte, _usability from cours_data "
+		: "select _IDitem, _open, _visible, _titre, _texte, _usability, _time from cours_items " ;
+	$Query .= "where _IDcours = '$IDcours' ";
+	$Query .= ( $IDparent ) 
+		? "AND _IDdata ='$IDparent' "
+		: "AND _IDitem ='$IDitem' " ;
+
+	$result = mysql_query($Query, $mysql_link);
+	$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+	// initialisation des champs de saisie
+	$IDsel   = $row[0];
+	$visible = $row[2];
+	$titre   = $row[3];
+	$texte   = $row[4];
+	$vak     = (int) $row[5];
+	$time    = (int) @$row[6];
+
+	list($year, $month, $day) = explode("-", $row[1]);
+	list($hour, $min)         = explode(":", substr($row[1], strpos($row[1], " ")+1, 8));
+
+	@list($time_h, $time_m)   = @explode(":", $row[6]);
+?>
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print("<strong>".$_SESSION["CampusName"]."::$dir[0]</strong>"); ?><br/>
+		<?php print($msg->read($COURS_TUNING)); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+
+	<p><?php print($msg->read($COURS_STATUS) . " $status"); ?></p>
+
+	<form id="formulaire" action="index.php" method="post">
+	<?php
+		print("
+			<p class=\"hidden\"><input type=\"hidden\" name=\"item\"       value=\"$item\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"IDcours\"    value=\"$IDcours\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"IDparent\"   value=\"$IDparent\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"IDitem\"     value=\"$IDitem\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"IDroot\"     value=\"$IDroot\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"IDmat\"      value=\"$IDmat\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"IDdata\"     value=\"$IDdata\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"cmde\"       value=\"$cmde\" /></p>
+			");
+	?>
+
+	<div style="border:#cccccc solid 1px; padding:4px;">
+
+		  <table class="width100">
+		    <tr style="background-color:#eeeeee;">
+			<?php
+				$field1 = ( $IDparent ) ? $msg->read($COURS_MODULE) : $msg->read($COURS_DOC) ;
+				$field2 = ( $IDparent ) ? $msg->read($COURS_CLOSEMODULE) : $msg->read($COURS_CLOSEDOC) ;
+
+				print("
+				      <td style=\"width:33%;\"><strong>$field1</strong></td>
+				      <td style=\"width:33%;\"><strong>$field2</strong></td>
+				      <td style=\"width:33%;\">". $msg->read($COURS_USABILITY) ."</td>
+					");
+			?>
+		    </tr>
+	    
+		    <tr>
+		      <td>
+				<label for="IDitem">
+				<?php
+					if ( $IDparent )
+						print("<select id=\"IDitem\" name=\"IDparent\" onchange=\"document.forms.formulaire.submit()\">");
+					else
+						print("<select id=\"IDitem\" name=\"IDitem\" onchange=\"document.forms.formulaire.submit()\">");
+
+						// recherche du répertoire
+						$query  = ( $IDparent ) 
+							? "select _IDdata, _titre from cours_data "
+							: "select _IDitem, _file from cours_items " ;
+						$query .= "where _IDcours = '$IDcours' ";
+						$query .= "order by _open asc";
+
+						$result = mysql_query($query, $mysql_link);
+						$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+						while ( $row ) {
+							$select = ( $IDsel == $row[0] ) ? "selected=\"selected\"" : "" ;
+
+							print("<option value=\"$row[0]\" $select>$row[1]</option>");
+
+							$row = remove_magic_quotes(mysql_fetch_row($result));
+							}
+
+					print("</select>");
+				?>
+				</label>
+		      </td>
+		      <td>
+             		<label for="visible">
+				<input type="checkbox" id="visible" name="visible" value="O" <?php print(($visible == "N") ? "checked=\"checked\"" : ""); ?> />
+				</label>
+		      </td>
+		      <td>
+		        <?php
+				$alt = explode(",", $msg->read($COURS_ACCESSIBILITY));
+
+				for ($i = 1; $i <= 3; $i++) {
+					$check = ( $vak & pow(2, $i - 1) ) ? "checked=\"checked\"" : "" ;
+
+					print("
+						<label for=\"vak_$i\">
+						<input type=\"checkbox\" id=\"vak_$i\" name=\"vak[]\" value=\"".pow(2, $i - 1)."\" $check /> 
+						<img src=\"".$_SESSION["ROOTDIR"]."/images/usability/vak$i.png\" title=\"".$alt[$i - 1]."\" alt=\"".$alt[$i - 1]."\" />
+						</label>  ");
+					}
+			  ?>
+		      </td>
+		    </tr>
+
+		    <tr>
+		      <td style="height:10px;"></td>
+		    </tr>
+
+		    <tr style="background-color:#eeeeee;">
+		      <td colspan="2">
+				<?php print($msg->read($COURS_PUBLICATION)); ?>
+		      </td>
+		      <td>
+				<?php
+					if ( $IDitem )
+						print($msg->read($COURS_LENGTH));
+				?>
+		      </td>
+		    </tr>
+
+		    <tr>
+		      <td colspan="2">
+			<?php
+				$mois = array_merge(Array(''), explode(",", $msg->read($COURS_MONTHFULL)));
+
+				// sélection de l'année
+				print("<label for=\"year\">");
+				print("<select id=\"year\" name=\"year\">");
+				for ($i = date("Y"); $i <= date("Y") + 1; $i++) {
+					$select = ( $year == $i ) ? "selected=\"selected\"" : "" ;
+					print("<option value=\"$i\" $select>$i</option>");
+					}
+			    	print("</select>");
+			    	print("</label>");
+
+				// sélection du mois
+				print("<label for=\"month\">");
+				print("<select id=\"month\" name=\"month\">");
+				for ($i = 1; $i <= 12; $i++) {
+					$select = ( $month == $i ) ? "selected=\"selected\"" : "" ;
+					print("<option value=\"$i\" $select>$mois[$i]</option>");
+					}
+			    	print("</select>");
+			    	print("</label>");
+
+				// sélection du jour
+				print("<label for=\"day\">");
+				print("<select id=\"day\" name=\"day\">");
+				for ($i = 1; $i <= 31; $i++) {
+					$select = ( $day == $i ) ? "selected=\"selected\"" : "" ;
+					print("<option value=\"$i\" $select>$i</option>");
+					}
+			    	print("</select>");
+			    	print("</label>");
+
+				print(" - ");
+
+				// sélection de l'heure
+				print("<label for=\"hour\">");
+				print("<select id=\"hour\" name=\"hour\">");
+				for ($i = 0; $i < 24; $i++) {
+					$select = ( $hour == $i ) ? "selected=\"selected\"" : "" ;
+					print("<option value=\"$i\" $select>$i</option>");
+					}
+			    	print("</select>");
+			    	print("</label>");
+
+				print(" ". $msg->read($COURS_HOUR) ." ");
+
+				//sélection des minutes
+				print("<label for=\"min\">");
+				print("<select id=\"min\" name=\"min\">");
+				for ($i = 0; $i < 60; $i += 5) {
+					$select = ( $min == $i ) ? "selected=\"selected\"" : "" ;
+					print("<option value=\"$i\" $select>$i</option>");
+					}
+			    	print("</select>");
+			    	print("</label>");
+
+				print(" ". $msg->read($COURS_MIN));
+			?>
+		      </td>
+		      <td>
+			<?php
+				if ( $IDitem ) {
+					// sélection de l'heure
+					print("<label for=\"time_h\">");
+					print("<select id=\"time_h\" name=\"time_h\">");
+					for ($i = 0; $i <= 20; $i++) {
+						$select = ( $time_h == $i ) ? "selected=\"selected\"" : "" ;
+						print("<option value=\"$i\" $select>$i</option>");
+						}
+				    	print("</select>");
+				    	print("</label>");
+
+					print(" ". $msg->read($COURS_HOUR) ." ");
+
+					//sélection des minutes
+					print("<label for=\"time_m\">");
+					print("<select id=\"time_m\" name=\"time_m\">");
+					for ($i = 0; $i < 60; $i += 15) {
+						$select = ( $time_m == $i ) ? "selected=\"selected\"" : "" ;
+						print("<option value=\"$i\" $select>$i</option>");
+						}
+				    	print("</select>");
+				    	print("</label>");
+
+					print(" ". $msg->read($COURS_MIN));
+					}
+			?>
+		      </td>
+		    </tr>
+
+		<?php
+			if ( $IDitem )
+				print("
+				    <tr>
+				      <td colspan=\"3\">". $msg->read($COURS_IDENT) ."</td>
+				    </tr>
+
+				    <tr>
+				      <td colspan=\"3\">
+						<label for=\"titre\"><input type=\"text\" id=\"titre\" name=\"titre\" size=\"45\" value=\"$titre\" /></label>
+				      </td>
+				    </tr>
+					");
+		?>
+
+		    <tr>
+		      <td colspan="3">
+			<?php
+				if ( $IDparent )
+					print($msg->read($COURS_GLOBALINFO));
+				else
+					print($msg->read($COURS_DESCRIPTION));
+			?>
+		      </td>
+		    </tr>
+
+		    <tr>
+		      <td colspan="3">
+				<label for="texte"><textarea id="texte" name="texte" rows="4" cols="35"><?php print("$texte"); ?></textarea></label>
+		      </td>
+		    </tr>
+
+		  </table>
+
+    </div>
+
+	<hr style="width:80%;" />
+
+	<table class="width100">
+           <tr>
+              <td style="width:10%;" class="valign-middle align-center">
+              	<?php print("<input type=\"image\" src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/valid.gif\" name=\"valid\" alt=\"".$msg->read($COURS_INPUTOK)."\" />"); ?>
+              </td>
+              <td class="valign-middle">
+              	<?php print($msg->read($COURS_RECORD)); ?>
+              </td>
+           </tr>
+           <tr>
+              <td class="valign-middle align-center">
+              	<?php print("<a href=\"".myurlencode("index.php?item=$item&IDcours=$IDcours&IDroot=$IDroot&IDmat=$IDmat&IDdata=$IDdata&cmde=visu")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/cancel.gif\" title=\"\" alt=\"".$msg->read($COURS_INPUTCANCEL)."\" />"); ?></a>
+              </td>
+              <td class="valign-middle">
+              	<?php print($msg->read($COURS_GOBACK)); ?>
+              </td>
+           </tr>
+	</table>
+
+	</form>
+
+</div>

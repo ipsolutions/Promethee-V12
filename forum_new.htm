@@ -1,0 +1,395 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2003-2007 by Dominique Laporte(C-E-D@wanadoo.fr)
+   Copyright (c) 2006 by Cyril Fresne (cyril.fresne@gmail.com)
+   Copyright (c) 2006 by Nordine Zetoutou (nordine.zetoutou@educagri.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : forum_new.htm
+ *		projet   : la page de création/modification des forums
+ *
+ *		version  : 1.3
+ *		auteur   : laporte
+ *		creation : 2/07/03
+ *		modif    : 24/09/03 - par D. Laporte
+ *                     Pièces Jointes
+ *                     1/11/03 - par D. Laporte
+ *                     interface de saisie
+ *                     15/06/06 - par cyril fresne
+ *                     migration PHP5
+ *		           17/07/06 - Nordine Zetoutou
+ * 	                 migration des balises HTML en XHTML 1.0 strict
+ */
+
+
+$IDgroup = ( @$_POST["IDgroup"] )		// identifiant du e-groupe
+	? (int) $_POST["IDgroup"]
+	: (int) @$_GET["IDgroup"] ;
+$IDroot  = ( @$_POST["IDroot"] ) 		// ID du répertoire racine
+	? (int) $_POST["IDroot"]
+	: (int) @$_GET["IDroot"] ;
+$IDforum = ( @$_POST["IDforum"] ) 		// ID du forum
+	? (int) $_POST["IDforum"]
+	: (int) @$_GET["IDforum"] ;
+
+$IDsel   = (int) @$_POST["IDsel"];
+$title   = addslashes(trim(@$_POST["title"]));
+$texte   = addslashes(trim(@$_POST["texte"]));
+$PJ      = (int) @$_POST["PJ"];
+$update  = ( @$_POST["update"] )  ? "O" : "N" ;
+$erase   = ( @$_POST["erase"] )   ? "O" : "N" ;
+$private = ( @$_POST["private"] ) ? "O" : "N" ;
+$mylang  = ( @$_POST["mylang"] ) ? $_POST["mylang"] : $_SESSION["lang"] ;
+
+$submit  = @$_POST["valid_x"];			// bouton de validation
+?>
+
+
+<?php
+	// initialisation des erreurs
+	$error  = 0;
+	$status = "-";
+
+	// lecture de la base de données des forums
+	$query  = "select _IDmod, _IDgrpwr from forum_data ";
+	$query .= "where _IDforum = '$IDforum' ";
+	$query .= "limit 1";
+
+	$result = mysql_query($query, $mysql_link);
+	$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+	// vérification des autorisations
+	verifySessionAccess($row[0], $row[1]);
+
+	// l'utilisateur a validé
+	if ( $submit ) {
+		// test d'erreur sur champs non renseignés
+		$error = ( $title == "" ) ? 1 : 0 ;
+
+		// création du forum si pas d'erreur
+		if ( !$error ) {
+			// initialisation des champs
+			$date   = date("Y-m-d H:i:s");
+			$grpwr  = ( $IDsel ) ? 255 : 254 ;
+			$valid  = ( $_SESSION["CnxAdm"] == 255 ) ? "O" : "N" ;
+
+			if ( $IDforum ) {
+				//mise à jour d'un forum
+				$Query  = "update forum_data ";
+				$Query .= "set _title = '$title', _texte = '$texte', _PJ = '$PJ', ";
+				$Query .= ( $update == "O" )  ? "_update = 'O', " : "_update = 'N', ";
+				$Query .= ( $erase == "O" )   ? "_erase = 'O', "  : "_erase = 'N', ";
+				$Query .= ( $private == "O" ) ? "_private = 'O' " : "_private = 'N' ";
+				$Query .= "where _IDforum = '$IDforum'";
+				}
+			else {
+				// création d'un forum
+				$update  = ( $update == "O" )  ? "O" : "N" ;
+				$erase   = ( $erase == "O" )   ? "O" : "N" ;
+				$private = ( $private == "O" ) ? "O" : "N" ;
+				$type    = ( $IDgroup )        ? "E" : "F" ;
+
+				$Query   = "insert into forum_data ";
+				$Query  .= "values('', '$IDroot', '$IDgroup', '".$_SESSION["CnxID"]."', '$grpwr', '255', '$date', '', '$title', '$texte', '$valid', '$PJ', '$update', '$erase', '$private', '-', '$type', 'N', 'N', 'N', 'N', 'N', '', '$mylang')";
+				}
+
+			if ( !mysql_query($Query, $mysql_link) ) {
+				$status = "erreur <img src=\"".$_SESSION["ROOTDIR"]."/images/bad.gif\" title=\"\" alt=\"\" />";
+				sql_error($mysql_link);
+				}
+			else {
+				$status  = ( $IDforum )
+					? $msg->read($FORUM_MODIFICATION) ." <img src=\"".$_SESSION["ROOTDIR"]."/images/ok.gif\" title=\"\" alt=\"\" /> "
+					: $msg->read($FORUM_INSERT) ." <img src=\"".$_SESSION["ROOTDIR"]."/images/ok.gif\" title=\"\" alt=\"\" /> " ;
+				$status .= ( $_SESSION["CnxAdm"] == 255 OR $IDforum )
+					? ""
+					: $msg->read($FORUM_DELAY) ;
+
+				if ( !$IDforum ) {
+					require_once "include/postit.php";
+
+					if ( $_SESSION["CnxAdm"] != 255 )
+						sendWarningMessage($msg->read($FORUM_NEEDVALIDATION), "<strong>$title</strong><br/>$texte");
+
+						$IDforum = mysql_insert_id();
+					}
+				}
+			}	// endif error
+		}	// endif submit
+	else {
+		// initialisation des champs de saisie
+		$txtdesc = $msg->read($FORUM_PEDAGO);
+
+		$title   = ( $_SESSION["CampusName"] != "" ) ? $_SESSION["CampusName"] : "" ;
+		$texte   = ( $_SESSION["CampusName"] != "" ) ? $txtdesc : "" ;
+
+		// recherche du forum pédagogique
+		if ( $IDsel ) {
+			$result = mysql_query("select _titre from campus_data where _IDmat = '$IDsel' AND _lang = '".$_SESSION["lang"]."' limit 1", $mysql_link);
+			$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+			$title  = $row[0];
+			$texte  = $txtdesc;
+
+			// recherche du forum sur son intitulé
+			$result  = mysql_query("select _IDforum from forum_data where _title = '$title'", $mysql_link);
+			$row     = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+			$IDforum = (int) $row[0];
+			}
+		}
+
+	// lecture du forum
+	$result = mysql_query("select _title, _texte, _PJ, _update, _erase, _private, _lang from forum_data where _IDforum = '$IDforum' limit 1", $mysql_link);
+	$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+	// iniatisation des champs de saisie
+	$title   = ( $row ) ? $row[0] : $title ;
+	$texte   = ( $row ) ? $row[1] : $texte ;
+	$PJ      = $row[2];
+	$update  = $row[3];
+	$erase   = $row[4];
+	$private = $row[5];
+	$mylang  = ( $row ) ? $row[6] : $mylang ; 
+?>
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($FORUM_NEWFORUM)); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+
+	<form id="formulaire" action="index.php" method="post">
+	<?php
+		print("
+			<p class=\"hidden\"><input type=\"hidden\" name=\"item\"     value=\"$item\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"cmde\"     value=\"$cmde\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"IDgroup\"  value=\"$IDgroup\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"IDforum\"  value=\"$IDforum\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"IDroot\"   value=\"$IDroot\" /></p>
+			");
+	?>
+
+		  <table class="width100">
+		    <tr>
+		      <td style="width:15%" class="align-right valign-top"><?php print($msg->read($FORUM_STATUS)); ?></td>
+		      <td style="width:85%" class="valign-top"><?php print("$status"); ?></td>
+		    </tr>
+
+		    <tr>
+		      <td class="align-right valign-top"><?php print($msg->read($FORUM_AUTHOR)); ?></td>
+		      <td class="valign-top"><?php print($_SESSION["CnxName"]); ?></td>
+		    </tr>
+		  </table>
+
+		<hr style="width:80%;" />
+
+		  <table class="width100">
+		    <tr>
+		      <td style="width:100%" class="valign-top align-center">
+				<?php print($msg->read($FORUM_FORUMPEDAGO)); ?> 
+				<label for="IDsel">
+			  	<select id="IDsel" name="IDsel" onchange="document.forms.formulaire.submit()">
+					<option value="0"><?php print($msg->read($FORUM_OTHER)); ?></option>
+					<?php
+						// on sélectionne les matières pédagogiques du campus virtuel
+						$Query  = "select _IDmat, _titre from campus_data ";
+						$Query .= "where _visible = 'O' AND _lang = '".$_SESSION["lang"]."' ";
+						$Query .= ( strlen($_SESSION["CampusName"]) ) ? "AND _titre = '".$_SESSION["CampusName"]."' " : "" ;
+						$Query .= "order by _titre";
+
+						$result = mysql_query($Query, $mysql_link);
+						$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+						while ( $row ) {
+						   // recherche des forums
+							$res = mysql_query("select _IDforum from forum_data where _title = '$row[1]'", $mysql_link);
+							$chk = ( $IDsel == $row[0] OR $_SESSION["CampusName"] == $row[1] ) ? "selected=\"selected\"" : "" ;
+
+							if ( !mysql_numrows($res) )
+								print("<option $chk value=\"$row[0]\">$row[1]</option>");
+
+							$row = mysql_fetch_row($result);
+							}
+					?>
+				</select> <img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/group.gif" title=""  alt="" />
+				</label>
+		      </td>
+		    </tr>
+		  </table>
+
+		<hr style="width:80%;" />
+
+	  <table class="width100">
+	   <tr>
+	     <td style="width:10%;">&nbsp;</td>
+	     <td style="width:80%;">
+
+		  <table class="width100">
+		  <?php
+			// intitulé non renseigné
+			if ( $error )
+			  	print("
+				    <tr>
+				      <td style=\"width:100%;\">
+				        <span style=\"color:#FF0000;\">". $msg->read($FORUM_ERRIDENT) ."</span>
+				      </td>
+				    </tr>
+				    	");
+			?>
+
+		    <tr style="background-color:#eeeeee;">
+		      <td style="width:100%;">
+		        <?php print($msg->read($FORUM_FORUMIDENT)); ?>
+		      </td>
+		    </tr>
+
+		    <tr>
+		      <td style="width:100%;">
+				<?php print("<label for=\"title\"><input type=\"text\" id=\"title\" name=\"title\" size=\"45\" value=\"$title\" /></label>"); ?>
+		      </td>
+		    </tr>
+
+		    <tr style="background-color:#eeeeee;">
+		      <td style="width:100%;">
+		        <?php print($msg->read($FORUM_DESCRIPTION)); ?>
+		      </td>
+		    </tr>
+
+		    <tr>
+		      <td style="width:100%;">
+				<?php print("<label for=\"texte\"><textarea id=\"texte\" name=\"texte\" rows=\"4\" cols=\"35\">$texte</textarea></label>"); ?>
+		      </td>
+		    </tr>
+
+		    <tr style="background-color:#eeeeee;">
+		      <td style="width:100%;">
+		        <?php print($msg->read($FORUM_LANG)); ?>
+		      </td>
+		    </tr>
+
+		<?php
+			$rbox  = "";
+			$list  = Array();
+
+			// ouverture du répertoire des langues
+			$myDir = @opendir("msg");
+
+			// lecture des répertoires
+			while ( $entry = @readdir($myDir) )
+				if ( is_dir("msg/$entry") AND strlen($entry) == 2 AND $entry != ".." )
+					array_push($list, $entry);
+
+			// fermeture du répertoire
+			@closedir($myDir);
+
+			for ($i = 0; $i < count($list); $i++) {
+				$check = ( $list[$i] == $mylang ) ? "checked=\"checked\"" : "" ;
+
+				$rbox .= "<label for=\"mylang_$i\"><input type=\"radio\" id=\"mylang_$i\" name=\"mylang\" value=\"$list[$i]\" $check /></label> ";
+				$rbox .= "<img src=\"".$_SESSION["ROOTDIR"]."/images/lang/ico-".$list[$i].".png\" title=\"".$list[$i]."\" alt=\"".$list[$i]."\" /> ";
+				}
+		?>
+
+		    <tr>
+		      <td style="width:100%;">
+				<?php print($rbox); ?>
+		      </td>
+		    </tr>
+
+		    <tr style="background-color:#eeeeee;">
+		      <td style="width:100%;">
+		        <?php print($msg->read($FORUM_PERM)); ?>
+		      </td>
+		    </tr>
+
+		    <tr>
+		      <td style="width:100%;">
+
+		         <table class="width100">
+		           <tr>
+		           	<td>
+		           		<label for="noPJ"><input type="checkbox" id="noPJ" name="noPJ" disabled="disabled" /><?php print($msg->read($FORUM_ATTACHMENT)); ?></label>
+					<label for="PJ">
+					<select id="PJ" name="PJ" style="font-size:9px;">
+					<?php
+						for ($i = 0; $i <= 10; $i++) {
+							$select = ( $PJ == $i ) ? "selected=\"selected\"" : "" ;
+
+							print("<option value=\"$i\" $select>$i</option>");
+							}
+					?>
+					</select>
+					</label>
+		           	</td>
+		           	<td>
+					<label for="update"><input type="checkbox"  id="update"  name="update"  <?php print(($update == "O") ? "checked=\checked\"" : ""); ?> value="O" /><?php print($msg->read($FORUM_UPDATE)); ?></label>
+		           	</td>
+		           	<td>
+					<label for="erase"><input type="checkbox"   id="erase"   name="erase"   <?php print(($erase == "O")  ? "checked=\checked\"" : ""); ?> value="O" /><?php print($msg->read($FORUM_DELETE)); ?></label>
+		           	</td>
+		           	<td>
+					<label for="private"><input type="checkbox" id="private" name="private" <?php print(($private == "O") ? "checked=\checked\"" : ""); ?> value="O" /><?php print($msg->read($FORUM_ISPRIVATE)); ?></label>
+		           	</td>
+		           </tr>
+		         </table>
+
+		      </td>
+		    </tr>
+
+		  </table>
+
+		  </td>
+	     <td style="width:10%;"></td>
+	   </tr>
+	  </table>
+
+	<hr style="width:80%;" />
+
+         <table class="width100">
+           <tr>
+              <td style="width:10%;" class="valign-middle align-center">
+              	<?php print("<input type=\"image\" src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/valid.gif\" name=\"valid\" alt=\"".$msg->read($FORUM_INPUTOK)."\" />"); ?>
+              </td>
+              <td class="valign-middle">
+              <?php
+              	$action = ( $IDforum ) ? $msg->read($FORUM_MODIFY) : $msg->read($FORUM_ADD) ;
+
+              	print("". $msg->read($FORUM_FORUMACTION, $action) ."");
+              ?>
+              </td>
+           </tr>
+           <tr>
+              <td class="valign-middle align-center">
+              	<?php print("<a href=\"index.php?item=$item&amp;IDgroup=$IDgroup&amp;IDroot=$IDroot\">"); ?>
+              	<?php print("<img src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/cancel.gif\" title=\"\" alt=\"".$msg->read($FORUM_INPUTCANCEL)."\" />"); ?></a>
+              </td>
+              <td class="valign-middle">
+			<?php print($msg->read($FORUM_BACKTOLIST)); ?>
+              </td>
+           </tr>
+         </table>
+
+	</form>
+
+</div>

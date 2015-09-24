@@ -1,0 +1,226 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2006-2007 by Dominique Laporte (C-E-D@wanadoo.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : resource_post.htm
+ *		projet   : la page d'ajout d'un commentaire sur une ressource
+ *
+ *		version  : 1.0
+ *		auteur   : laporte
+ *		creation : 5/10/06
+ *		modif    : 
+ */
+
+
+$IDgroup = ( @$_POST["IDgroup"] )				// identifiant du e-groupe
+	? (int) $_POST["IDgroup"]
+	: (int) @$_GET["IDgroup"] ;
+$IDitem  = ( @$_POST["IDitem"] )				// identifiant de la ressource
+	? (int) $_POST["IDitem"]
+	: (int) @$_GET["IDitem"];
+$IDres   = ( @$_POST["IDres"] )				// identifiant du type de ressource
+	? (int) $_POST["IDres"]
+	: (int) @$_GET["IDres"];
+$IDmat   = ( @$_POST["IDmat"] )				// identifiant de la matière/formation
+	? (int) $_POST["IDmat"]
+	: (int) @$_GET["IDmat"] ;
+$IDcat   = ( @$_POST["IDcat"] )				// identifiant de la catégorie
+	? (int) $_POST["IDcat"]
+	: (int) @$_GET["IDcat"] ;
+
+$texte   = addslashes(trim(@$_POST["texte"]));		// texte de l'item du flash
+
+$submit  = ( @$_POST["submit"] )				// bouton de validation
+	? $_POST["submit"]
+	: @$_GET["submit"] ;
+?>
+
+
+<script type="text/javascript" src="script/edit.js"></script>
+
+
+<?php
+	// l'utilisateur a cliqué sur un lien
+	switch ( $submit ) {
+		case "del" :
+			$Query  = "delete from resource_post ";
+			$Query .= "where _IDmsg = '".@$_GET["IDmsg"]."' ";
+			$Query .= ( $_SESSION["CnxAdm"] == 255 ) ? "" : "AND _ID = '".$_SESSION["CnxID"]."' " ;
+			$Query .= "limit 1";
+
+			mysql_query($Query, $mysql_link);
+			break;
+
+		case "valider" :
+			if ( $texte != "" ) {
+				$date   = date("Y-m-d H:i:s");
+
+				$Query  = "insert into resource_post ";
+				$Query .= "values('', '$IDitem', '".$_SESSION["CnxID"]."', '".$_SESSION["CnxIP"]."', '$date', '$texte')";
+
+				mysql_query($Query, $mysql_link);
+				}
+			break;
+
+		default :
+			break;
+		}
+?>
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($RESOURCE_FORMINPUT)); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+
+	<table class="width100">
+	<?php
+		require_once "include/smileys.php";
+		require_once "include/spip.php";
+
+		$Query  = "select _ID, _IP, _date, _texte, _IDmsg ";
+		$Query .= "from resource_post ";
+		$Query .= "where _IDitem = '$IDitem' ";
+		$Query .= "limit 1";
+
+		$result = mysql_query($Query, $mysql_link);
+		$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+		while ( $row ) {
+			$delete = ( $_SESSION["CnxAdm"] == 255 OR $row[0] == $_SESSION["CnxID"] )
+				? "<a href=\"".myurlencode("index.php?item=31&IDgroup=$IDgroup&IDres=$IDres&IDmat=$IDmat&IDcat=$IDcat&IDitem=$IDitem&IDmsg=$row[4]&cmde=post&submit=del")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/corb.gif\" title=\"". $msg->read($RESOURCE_DELMSG) ."\" alt=\"". $msg->read($RESOURCE_DELMSG) ."\" /></a>"
+				: "" ;
+
+			print("
+				<tr style=\"background-color:#eeeeee;\">
+				  <td>
+					".getUserName($row[0])." "._getHostName($row[1])." ".date2longfmt($row[2])." $delete
+				  </td>
+				</tr>
+				<tr>
+				  <td>". replace_smile(find_typo($row[3], $note)) ."</td>
+				</tr>
+				");
+
+			$row = remove_magic_quotes(mysql_fetch_row($result));
+			}
+	?>
+	</table>
+
+	<hr style="width:80%;" />
+
+	<form id="formulaire" action="index.php" method="post">	  
+	<?php
+		print("
+			<p class=\"hidden\"><input type=\"hidden\" name=\"item\"    value=\"$item\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"cmde\"    value=\"$cmde\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"IDgroup\" value=\"$IDgroup\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"IDitem\"  value=\"$IDitem\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"IDres\"   value=\"$IDres\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"IDmat\"   value=\"$IDmat\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"IDcat\"   value=\"$IDcat\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"submit\"  value=\"valider\" /></p>
+			");
+	?>
+
+	<table class="width100">
+	   <tr>
+	     <td style="width:10%;"></td>
+	     <td style="width:80%;">
+
+		  <table class="width100">
+		    <tr style="background-color:#eeeeee;">
+		      <td>
+				<?php print($msg->read($RESOURCE_TEXT)); ?>
+				<a href="#" onclick="popWin('spip_typo.php?lang=<?php print($_SESSION["lang"]); ?>', '450', '350'); return false;">
+				<img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/spip/aide.gif" title="<?php print($msg->read($RESOURCE_HELP)); ?>" alt="<?php print($msg->read($RESOURCE_HELP)); ?>" />
+				</a>
+			</td>
+		    </tr>
+
+		    <tr>
+		      <td>
+				<?php
+				$disabled = ( getAccess() == 2 ) ? "" : "disabled=\"disabled\"" ;
+
+				print("<label for=\"texte\"><textarea id=\"texte\" name=\"texte\" rows=\"5\" cols=\"50\" $disabled>$texte</textarea></label>");
+				?>
+		      </td>
+		    </tr>
+
+		    <tr>
+		      <td>
+				<?php
+				// affichage des smileys d'édition
+				$result = mysql_query("select _code, _ident from smileys where _type = 'T'", $mysql_link);
+				$smile  = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+				while ( $smile ) {
+					print("
+						<img src=\"".$_SESSION["ROOTDIR"]."/images/smiley/forum/$smile[1].gif\" title=\" code: $smile[0] \" alt=\" code: $smile[0] \" 
+						onclick=\"Javacript:ajoutsmile('$smile[0]')\" style=\"cursor: hand;\" />
+						");
+				
+					$smile = ( $result ) ? mysql_fetch_row($result) : 0 ;
+					}
+				?>
+	              </td>
+      	     </tr>
+		  </table>
+
+	     </td>
+	     <td style="width:10%;"></td>
+	   </tr>
+	  </table>
+
+	<hr style="width:80%;" />
+
+         <table class="width100">
+		<?php
+			if ( getAccess() == 2 )
+				print("
+			           <tr>
+			              <td style=\"width:10%;\" class=\"valign-middle align-center\">
+			              	<input type=\"image\" src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/valid.gif\" name=\"valid\" alt=\"".$msg->read($RESOURCE_INPUTOK)."\" />
+			              </td>
+			              <td class= \"valign-middle\">
+			              	".$msg->read($RESOURCE_ADDANNOUNCE)."
+			              </td>
+			           </tr>");
+		?>
+
+           <tr>
+              <td  style="width:10%;" class="valign-middle align-center">
+			<?php print("<a href=\"".myurlencode("index.php?item=$item&IDgroup=$IDgroup&IDres=$IDres&IDmat=$IDmat&IDcat=$IDcat")."\">"); ?>
+              	<?php print("<img src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/cancel.gif\" title=\"\" alt=\"".$msg->read($RESOURCE_INPUTCANCEL)."\" />"); ?></a>
+              </td>
+              <td class="valign-middle">
+			<?php print($msg->read($RESOURCE_GOBACK)); ?>
+              </td>
+           </tr>
+         </table>
+
+	</form>
+
+</div>

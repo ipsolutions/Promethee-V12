@@ -1,0 +1,327 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2003-2008 by Dominique Laporte(C-E-D@wanadoo.fr)
+   Copyright (c) 2006 by Hugues Lecocq(hugues.lecocq@laposte.net)
+   Copyright (c) 2006 by Nordine Zetoutou (nordine.zetoutou@educagri.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : postit_visu.htm
+ *		projet   : la page de visualisation et de réponse aux messages des post-it
+ *
+ *		version  : 1.0
+ *		auteur   : laporte
+ *		creation : 19/10/03
+ *		modif    : 15/06/06 - par hugues lecocq
+ *                     migration PHP5 
+ *                     17/07/06 - Nordine Zetoutou
+ * 	                 migration des balises HTML en XHTML 1.0 strict
+ */
+
+
+$IDroot  = ( @$_POST["IDroot"] ) 		// ID du répertoire racine
+	? (int) $_POST["IDroot"]
+	: (int) @$_GET["IDroot"] ;
+$sort= ( @$_POST["sort"] )			//  mode de tri d'affichage	
+	? $_POST["sort"]
+	: @$_GET["sort"] ; 
+$IDpost = ( @$_POST["IDpost"] )		// identifiant des messages instantannés
+	? $_POST["IDpost"]
+	: @$_GET["IDpost"] ;
+$note = ( @$_POST["note"] )			// 
+	? $_POST["note"]
+	: @$_GET["note"] ;
+
+$submit = ( @$_POST["submit"] )		// bouton de validation
+	? $_POST["submit"]
+	: @$_GET["submit"] ;
+?>
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($POSTIT_SHOWPOSTIT)); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+
+	<p style="margin-top:0px; margin-bottom:10px; text-align:justify;">
+	<?php print($msg->read($POSTIT_CLICK)); ?>
+	</p>
+
+	<?php
+		require_once "include/smileys.php";
+		require_once "include/spip.php";
+		require_once "include/calendar_tools.php";
+
+		// lecture des droits
+		$Query  = "select _IDgrpwr, _IDgrprd from postit ";
+		$Query .= "where _IDcentre = '".$_SESSION["CnxCentre"]."'";
+
+		$result = mysql_query($Query, $mysql_link);
+		$auth   = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+		// vérification des autorisations
+		verifySessionAccess(0, $auth[1]);
+
+		//-- lecture du nbr de messages
+		$Query  = "select _titre, _texte, _date, _IDexp, _IDpost, _IP, _sign, _IDdst, _ack, _vu, _priority from postit_items ";
+		switch ( $sort ) {
+			case 2 : // visualisation des messages reçus
+				$Query .= "where (_IDdst = '".$_SESSION["CnxID"]."' AND _deldst = 'N') ";
+				break;
+			case 3 : // visualisation des messages expédiés
+				$Query .= "where (_IDexp = '".$_SESSION["CnxID"]."' AND _delexp = 'N') ";
+				break;
+			default : // visualisation de tous les messages
+				$Query .= "where ((_IDexp = '".$_SESSION["CnxID"]."' AND _delexp = 'N') OR (_IDdst = '".$_SESSION["CnxID"]."' AND _deldst = 'N')) ";
+				break;
+			}
+
+		$result = mysql_query($Query, $mysql_link);
+		$nbelem = ( $result ) ? mysql_affected_rows($mysql_link) : 0 ;
+
+		//-- lecture du message
+		switch ( $submit ) {
+			case "next" :
+				$Query .= "AND _IDpost > '$IDpost' order by _IDpost asc";
+				break;
+							
+			case "prev" :
+				$Query .= "AND _IDpost < '$IDpost' order by _IDpost desc";
+				break;
+							
+			default :
+				$Query .= "AND _IDpost <= '$IDpost' order by _IDpost desc";
+				break;
+			}
+
+		$result  = mysql_query($Query, $mysql_link);
+		$row     = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+		$pos     = ( $result ) ? mysql_affected_rows($mysql_link) : 0 ;
+
+		// lecture de l'expéditeur ou du destinataire du message
+		$id      = ( $row[3] == $_SESSION["CnxID"] ) ? $row[7] : $row[3] ;
+		switch ( $id ) {
+			case '0' :
+				// message système automatique
+				$who = $msg->read($POSTIT_MSGSYS);
+				break;
+			default :
+				// les listes de diffusion
+				if ( $id < 0 ) {
+					$list  = ( -$id < 1000 )
+						? -$id				// lidies automatiques (groupes)
+						: ( -$id < 10000
+							? -($id + 1000)		// lidies par classes
+							: -($id + 10000) );	// lidies persos
+
+					$query = ( -$id < 1000 )
+						? "select _ident from user_group where _IDgrp = '$list' AND _lang = '".$_SESSION["lang"]."' limit 1"
+						: ( -$id < 10000
+							? "select _ident from campus_classe where _IDclass = '$list' limit 1"
+							: "select _nom from postit_lidi where _IDlidi = '$list' limit 1" );
+
+					$res   = mysql_query($query, $mysql_link);
+					$list  = ( $res ) ? remove_magic_quotes(mysql_fetch_row($res)) : 0 ;
+
+					$who   = $msg->read($POSTIT_LIDI, $list[0]);
+					}
+				// les utilisateurs
+				else
+					$who = getUserName($id);
+				break;
+			}
+
+		// lecture de la station émettrice
+		$by      = " " . _getHostName($row[5]);
+
+		// acquittement de lecture
+		// par le destinataire
+		if ( $row[2] == $row[8] AND $row[7] == $_SESSION["CnxID"] )
+			mysql_query("update postit_items set _ack = '".date("Y-m-d H:i:s")."' where _IDpost= '$row[4]' limit 1", $mysql_link);
+	?>
+
+            <table class="width100">
+              <tr>
+		<?php
+			// on ne se répond pas à soi-même
+			// test du droit d'écriture
+			if ( $row[3] != $_SESSION["CnxID"] AND ($auth[0] & pow(2, $_SESSION["CnxGrp"] - 1)) != 0 ) {
+				$citer = "
+					<a href=\"".myurlencode("index.php?item=$item&IDpost=$row[4]&IDdst=$row[3]&cmde=post&submit=quote")."\">
+					<img src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/icon_quote.gif\" title=\"\" alt=\"\" />
+					</a>";
+
+				print("
+		                <td>
+					[
+					<img src=\"".$_SESSION["ROOTDIR"]."/images/postitreply.gif\" title=\"\" alt=\"\" />
+					<a href=\"".myurlencode("index.php?item=$item&IDpost=$row[4]&IDdst=$row[3]&cmde=post&submit=reply")."\">
+					".$msg->read($POSTIT_REPLY)."
+					</a>
+					|
+					<img src=\"".$_SESSION["ROOTDIR"]."/images/postitforward.gif\" title=\"\" alt=\"\" />
+					<a href=\"".myurlencode("index.php?item=$item&IDpost=$row[4]&cmde=post&submit=forward")."\">
+					".$msg->read($POSTIT_FORWARD)."
+					</a>
+					]
+		                </td>
+					");
+				}
+			else
+				$citer = "";
+		?>
+                <td class="align-right">
+		<?php
+                	$test = ( $submit == "next" ) ? (bool) ( $pos > 1 ) : (bool) ( $nbelem > 1 AND $pos < $nbelem ) ;
+
+                	$next = ( $test )
+                		? "<a href=\"".myurlencode("index.php?item=$item&IDpost=$row[4]&IDroot=$IDroot&sort=$sort&cmde=visu&submit=next")."\">".$msg->read($POSTIT_NEXT)."</a>"
+                		: $msg->read($POSTIT_NEXT) ;
+
+                	$test = ( $submit == "next" ) ? (bool) ( $nbelem > 1 AND $pos < $nbelem ) : (bool) ( $pos > 1 ) ;
+
+                	$prev = ( $test )
+                		? "<a href=\"".myurlencode("index.php?item=$item&IDpost=$row[4]&IDroot=$IDroot&sort=$sort&cmde=visu&submit=prev")."\">".$msg->read($POSTIT_PREV)."</a>"
+                		: $msg->read($POSTIT_PREV) ;
+
+                  print("[<img src=\"".$_SESSION["ROOTDIR"]."/images/postitprev.gif\" title=\"\" alt=\"\" /> $prev | $next <img src=\"".$_SESSION["ROOTDIR"]."/images/postitnext.gif\" title=\"\" alt=\"\" />]");
+		?>
+                </td>
+              </tr>
+            </table>
+
+            <table class="width100">
+              <tr  style="background-color:#c0c0c0;">
+                <td class="align-right" style="width:20%;">
+                  <?php
+				print($msg->read($POSTIT_SUBJECT)."<br/>");
+
+				$id = ( $row[3] == $_SESSION["CnxID"] ) ? $msg->read($POSTIT_DEST) : $msg->read($POSTIT_EXP) ;
+                  	print("$id<br/>");
+
+				print($msg->read($POSTIT_PRIORITY));
+                  ?>
+                </td>
+                <td class="align-left" style="width:80%;">
+                  <?php 
+				print("$row[0]<br/>");
+				print("$who<br/>"); 
+
+				$idx  = (int) $row[10]; 
+				$list = explode(",", $msg->read($POSTIT_PRIORITYLEVEL));
+				print("$list[$idx]"); 
+			?>
+                </td>
+              </tr>
+
+		  <tr>
+		    <td style="border: 1px solid #c0c0c0;" class="valign-top align-center">
+		    	<?php
+				$img = ( $row[2] == $row[9] ) ? $msg->read($POSTIT_INVISIBLE) : $msg->read($POSTIT_VISIBLE) ;
+				$vu  = ( $row[2] == $row[9] ) ? "" : "<br/><span class=\"x-small\">".date2longfmt($row[9])."</span>" ;
+				print("<img src=\"".$_SESSION["ROOTDIR"]."/images/$img.gif\" title=\"\" alt=\"\" />$vu");
+		    	?>
+		    </td>
+		    <td style="border: 1px solid #c0c0c0;" class="valign-top">
+		    	<?php 
+				print("
+					<table style=\"background-color:#eeeeee; width: 100%\">
+					  <tr>
+					    <td style=\"width:1%\"><img src=\"".$_SESSION["ROOTDIR"]."/images/horloge.png\" title=\"\" alt=\"\" /></td>
+					    <td class=\"x-small\">".$msg->read($POSTIT_POSTED)." ".date2longfmt($row[2])."$by</td>
+					    <td class=\"align-right\">$citer</td>
+					  </tr>
+					</table>
+
+					<hr style=\"margin:0px;\" />
+					");
+
+		    		// le message
+		    		print(replace_smile(find_typo($row[1], $note))); 
+
+				// notes de bas de page
+				if ( strlen($note) )
+					print("
+						<hr style=\"width:30%; margin-left:0px;\" />
+						<p style=\"margin:0px;\" class=\"x-small\">$note</p>
+						");
+
+				// signature du message
+				if ( $row[6] == "O" ) {
+					$res  = mysql_query("select _signature from user_id where _ID = '$row[3]' limit 1", $mysql_link);
+					$sign = ( $res ) ? remove_magic_quotes(mysql_fetch_row($res)) : 0 ;
+						
+					if ( strlen($sign[0]) )
+						print("<p style=\"margin: 0px;\"><img src=\"".$_SESSION["ROOTDIR"]."/images/hr.png\" title=\"--\" alt=\"--\" /></p>" . replace_smile($sign[0]));
+					}
+		    	?>
+		    </td>
+		  </tr>
+
+		<?php
+			// lecture des PJ
+			$res = mysql_query("select _IDpj, _ext, _size, _title from postit_pj where _IDpost = '$row[4]' order by _IDpost", $mysql_link);
+			$doc = ( $res ) ? remove_magic_quotes(mysql_fetch_row($res)) : 0 ;
+
+			if ( mysql_numrows($res) ) {
+				print("
+					  <tr>
+					    <td style=\"border: 1px solid #c0c0c0;\" class=\"valign-top align-center\">
+					    	<img src=\"".$_SESSION["ROOTDIR"]."/images/spip/pj.gif\" title=\"\" alt=\"\" />
+					    </td>
+
+					    <td style=\"border: 1px solid #c0c0c0;\" class=\"valign-top\">");
+
+				while ( $doc ) {
+					$img    = ( is_file("images/mime/$doc[1].gif") )
+						? "images/mime/$doc[1].gif"
+						: "images/mime/-.gif" ;
+
+					// description de la PJ
+					$desc   = $msg->read($POSTIT_BYTE, number_format($doc[2], 0, ",", " ")) ."<br/>";
+					$desc  .= "$doc[3]";
+
+		             	// lien sur la PJ
+					$path   = "$DOWNLOAD/post-it/$doc[0].$doc[1]";
+					$target = "onclick=\"window.open(this.href, '_blank'); return false;\"";
+					$lien   = myurlencode("index.php?file=$path");
+
+					print("
+				    		<a href=\"$lien\" class=\"overlib\" $target><img src=\"$img\" title=\"$doc[1]\" alt=\"$doc[1]\" /><span>$desc</span></a>
+				    		". $msg->read($POSTIT_DOC) ."<br/>");
+
+					$doc = remove_magic_quotes(mysql_fetch_row($res));
+					}
+
+				print("
+					    </td>
+					  </tr>");
+				}
+		?>
+		</table>
+
+	    	<?php
+	    		$retcode = $sort - 1;
+	    		print("[<a href=\"".myurlencode("index.php?item=$item&IDroot=$IDroot&sort=$retcode")."\">". $msg->read($POSTIT_GOBACK) ."</a>]");
+	    	?>
+
+</div>

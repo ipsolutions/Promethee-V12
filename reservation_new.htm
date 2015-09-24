@@ -1,0 +1,317 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2002-2007 by Dominique Laporte (C-E-D@wanadoo.fr)
+   Copyright (c) 2006 by Nordine Zetoutou (nordine.zetoutou@educagri.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : reservation_new.htm
+ *		projet   : la page de saisie des ressources des réservations
+ *
+ *		version  : 1.0
+ *		auteur   : laporte
+ *		creation : 25/09/04
+ *		modif    : 17/07/06 - Nordine Zetoutou
+ * 	                 migration des balises HTML en XHTML 1.0 strict
+ */
+
+
+$IDcentre = ( @$_POST["IDcentre"] )		// Identifiant du centre
+	? (int) $_POST["IDcentre"]
+	: (int) @$_GET["IDcentre"] ;
+$IDres    = ( @$_POST["IDres"] )		// ID de la réservation
+	? (int) $_POST["IDres"]
+	: (int) @$_GET["IDres"] ;
+$IDdata   = ( @$_POST["IDdata"] )		// ID de la ressource
+	? (int) $_POST["IDdata"]
+	: (int) @$_GET["IDdata"] ;
+$weekly   = ( @$_POST["weekly"] )		// affichage hebdo / mensuel
+	? (int) $_POST["weekly"]
+	: (int) @$_GET["weekly"] ;
+$from     = ( @$_POST["from"] )		// page appelante
+	? $_POST["from"]
+	: @$_GET["from"] ;
+$year     = ( @$_POST["year"] )
+	? (int) $_POST["year"]
+	: (int) @$_GET["year"] ;
+$month    = ( @$_POST["month"] )
+	? (int) $_POST["month"]
+	: (int) @$_GET["month"] ;
+$day      = ( @$_POST["day"] )
+	? (int) $_POST["day"]
+	: (int) @$_GET["day"] ;
+
+$title    = addslashes(trim(@$_POST["title"]));
+$texte    = addslashes(trim(@$_POST["texte"]));
+$ident    = addslashes(trim(@$_POST["ident"]));
+$cb       = @$_POST["cb"];
+
+$submit   = @$_POST["submit"];		// bouton de validation
+?>
+
+
+<?php
+	// initialisation
+	$error  = "";
+	$status = ( $IDdata )
+		? $msg->read($RESERVATION_MODIFYRESOURCE)
+		: $msg->read($RESERVATION_NEWRESOURCE) ;
+
+	// lecture des réservations
+	$Query  = "select _IDmod, _IDgrpwr from reservation ";
+	$Query .= "where _IDcentre = '$IDcentre' AND _IDres = '$IDres' ";
+	$Query .= "limit 1";
+
+	$result = mysql_query($Query, $mysql_link);
+	$row    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+	// vérification des autorisations
+	verifySessionAccess($row[0], $row[1]);
+
+	// l'utilisateur a cliqué sur un lien
+	switch ( $submit ) {
+		case "Valider" :
+			// test d'erreur sur champs non renseignés
+			$error = ( !strlen($title) )
+				? "<span   style=\"color:#FF0000;\" >". $msg->read($RESERVATION_ERRIDENT) ."</span>"
+				: "" ;
+
+			// on transfére le fichier si pas d'erreur
+   			if ( $error == "" ) {
+				$status = $msg->read($RESERVATION_INSERT) ." ";
+
+				// les centres affectés
+				$centre = " ";
+				for ($i = 0; $i < count($cb); $i++)
+					$centre .= ( @$cb[$i] )  ? "$cb[$i] " : "" ;
+
+				// et on insére une nouvelle ressource dans la base de données
+				$Query  = "insert into reservation_data ";
+				$Query .= "values('', '$centre', '$IDres', '$title', '$texte', '$ident', 'O')";
+
+				if ( !mysql_query($Query, $mysql_link) ) {
+					$status .= "<img src=\"".$_SESSION["ROOTDIR"]."/images/bad.gif\" title=\"\" alt=\"\" />";
+					sql_error($mysql_link);
+					}
+				else
+					$status .= "<img src=\"".$_SESSION["ROOTDIR"]."/images/ok.gif\" title=\"\" alt=\"\" />";
+				}
+			break;
+
+		case "Update" :
+			$status = $msg->read($RESERVATION_MODIFY) ." ";
+
+			// les centres affectés
+			$centre = " ";
+			for ($i = 0; $i < count($cb); $i++)
+				$centre .= ( @$cb[$i] )  ? "$cb[$i] " : "" ;
+
+			$Query  = "update reservation_data ";
+			$Query .= "set _IDcentre = '$centre', _titre = '$title', _texte = '$texte', _ident ='$ident' ";
+			$Query .= "where _IDdata = '$IDdata' ";
+
+			if ( ! mysql_query($Query, $mysql_link) ) {
+				mysql_error($mysql_link);
+				$status .= "<img src=\"".$_SESSION["ROOTDIR"]."/images/bad.gif\" title=\"\" alt=\"\" />";
+				}
+			else 
+				$status .= "<img src=\"".$_SESSION["ROOTDIR"]."/images/ok.gif\" title=\"\" alt=\"\" />";
+			break;
+
+		default :
+			break;
+		}
+
+	$Query  = "select _titre, _texte, _ident, _IDcentre from reservation_data ";
+	$Query .= "where _IDdata = '$IDdata' ";
+	$Query .= "limit 1";
+
+	$result = mysql_query($Query, $mysql_link);
+	$row    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+	// initialisation des champs de saisie
+	$title  = @$row[0];
+	$texte  = @$row[1];
+	$ident  = @$row[2];
+	$centre = @$row[3];
+
+	// lecture de la base de données des réservations
+	$Query  = "select _titre from reservation ";
+	$Query .= "where _IDres = '$IDres' AND _lang = '".$_SESSION["lang"]."' ";
+	$Query .= "limit 1";
+
+	$result = mysql_query($Query, $mysql_link);
+	$matos  = ( $result ) ? mysql_fetch_row($result) : 0 ;
+?>		
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<strong><?php print($msg->read($RESERVATION_NEWRESOURCE)); ?></strong><br/>
+		<?php print($msg->read($RESERVATION_FORM)); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+
+	<form id="formulaire" action="index.php" method="post" enctype="multipart/form-data">
+	<?php
+		print("
+			<p class=\"hidden\"><input type=\"hidden\" name=\"item\"     value=\"$item\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"cmde\"     value=\"$cmde\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"IDcentre\" value=\"$IDcentre\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"IDres\"    value=\"$IDres\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"IDdata\"   value=\"$IDdata\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"from\"     value=\"$from\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"weekly\"   value=\"$weekly\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"year\"     value=\"$year\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"month\"    value=\"$month\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"day\"      value=\"$day\" /></p>
+			");
+
+		if ( $IDdata )
+			print("
+				<p class=\"hidden\"><input type=\"hidden\" name=\"IDdata\"  value=\"$IDdata\" /></p>
+				<p class=\"hidden\"><input type=\"hidden\" name=\"submit\" value=\"Update\" /></p>
+				");
+		else
+			print("
+				<p class=\"hidden\"><input type=\"hidden\" name=\"submit\"  value=\"Valider\" /></p>
+				");
+	?>
+
+		<table class="width100">
+		    <tr>
+		      <td style="width:15%;" class="align-right"><?php print($msg->read($RESERVATION_CATEGORY)); ?></td>
+		      <td style="width:35%;" class="align-left"><?php print("$matos[0]"); ?></td>
+		      <td style="width:50%;" class="align-right"><?php print($msg->read($RESERVATION_STATUS, $status)); ?></td>
+		    </tr>
+
+		    <tr>
+		      <td class="align-right"><?php print($msg->read($RESERVATION_AUTHOR)); ?></td>
+		      <td colspan="2"><?php print($_SESSION["CnxName"]); ?></td>
+		    </tr>
+		</table>
+
+		<hr style="width:80%;" />
+
+	  <table class="width100">
+	   <tr>
+	     <td style="width:10%;"></td>
+	     <td style="width:80%;">
+
+		  <table class="width100">
+		    <tr style="background-color:#eeeeee;">
+		      <td style="width:100%;">
+		        <?php print($msg->read($RESERVATION_TITLE, $error)); ?>
+		      </td>
+		    </tr>
+	    
+		    <tr>
+		      <td style="width:100%;">
+		        <label for="title"><?php print("<input type=\"text\" id=\"title\" name=\"title\" size=\"45\" value=\"$title\" />"); ?></label>
+		      </td>
+		    </tr>
+	    
+		    <tr style="background-color:#eeeeee;">
+		      <td style="width:100%;">
+		        <?php print($msg->read($RESERVATION_DESCRIPTION)); ?>
+		      </td>
+		    </tr>
+	    
+		    <tr>
+		      <td style="width:100%;">
+		        <label for="texte"><?php print("<textarea id=\"texte\" name=\"texte\" rows=\"5\" cols=\"35\">$texte</textarea>"); ?></label>
+		      </td>
+		    </tr>
+
+  		    <tr style="background-color:#eeeeee;">
+		      <td style="width:100%;">
+		        <?php print($msg->read($RESERVATION_LOCATE)); ?>
+		      </td>
+		    </tr>
+
+		    <tr>
+		      <td style="width:100%;">
+		        <label for="ident"><?php print("<input type=\"text\" id=\"ident\"  name=\"ident\" size=\"45\" value=\"$ident\" />"); ?></label>
+		      </td>
+		    </tr>
+
+  		    <tr style="background-color:#eeeeee;">
+		      <td style="width:100%;">
+		        <?php print($msg->read($RESERVATION_SHARING)); ?>
+		      </td>
+		    </tr>
+
+		    <tr>
+		      <td style="width:100%;">
+			<?php
+				// lecture des centres constitutifs
+				$query  = "select _IDcentre, _ident from config_centre ";
+				$query .= "where _visible = 'O' AND _lang = '".$_SESSION["lang"]."' ";
+				$query .= "order by _IDcentre";
+
+				$result = mysql_query($query, $mysql_link);
+				$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+				while ( $row ) {
+					$check = ( in_array($row[0], explode(" ", $centre)) ) ? "checked=\"checked\"" : "" ;
+
+					print("<label for=\"cb_$row[0]\"><input type=\"checkbox\" id=\"cb_$row[0]\" name=\"cb[]\" value=\"$row[0]\" $check /></label> $row[1]<br/>");
+
+					$row = remove_magic_quotes(mysql_fetch_row($result));
+					}
+			?>
+		      </td>
+		    </tr>
+		  </table>
+
+	     </td>
+	     <td style="width:10%;"></td>
+	   </tr>
+	  </table>
+
+	<hr style="width:80%;" />
+
+         <table class="width100">
+           <tr>
+              <td style="width:10%;" class="valign-middle align-center">
+              	<?php print("<input type=\"image\" src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/valid.gif\" name=\"valid\" alt=\"".$msg->read($RESERVATION_INPUTOK)."\" />"); ?>
+              </td>
+              <td class="valign-middle">
+			<?php
+              		$action = ( $IDdata ) ? $msg->read($RESERVATION_UPDATEACTION) : $msg->read($RESERVATION_ADDACTION) ;
+				print($msg->read($RESERVATION_VALIDATE, $action));
+			?>
+              </td>
+           </tr>
+           <tr>
+              <td class="valign-middle align-center">
+              	<?php print("<a href=\"".myurlencode("index.php?item=$item&cmde=$from&IDres=$IDres&IDcentre=$IDcentre&IDdata=$IDdata&year=$year&month=$month&day=$day&weekly=$weekly")."\">"); ?>
+              	<?php print("<img src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/cancel.gif\" title=\"\" alt=\"".$msg->read($RESERVATION_INPUTCANCEL)."\" />"); ?></a>
+              </td>
+              <td class="valign-middle">
+              	<?php print($msg->read($RESERVATION_BACK)); ?>
+              </td>
+           </tr>
+         </table>
+
+	</form>
+
+</div>

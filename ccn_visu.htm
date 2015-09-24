@@ -1,0 +1,250 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2009 by Dominique Laporte(C-E-D@wanadoo.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : ccn_visu.htm
+ *		projet   : la page de visualisation et de réponse aux messages des CCN
+ *
+ *		version  : 1.0
+ *		auteur   : laporte
+ *		creation : 1/02/09
+ *		modif    : 
+ */
+
+
+$IDcentre = ( @$_POST["IDcentre"] ) 	// ID du centre
+	? (int) $_POST["IDcentre"]
+	: (int) @$_GET["IDcentre"] ;
+$IDdest   = ( @$_POST["IDdest"] ) 		// ID du destinataire
+	? (int) $_POST["IDdest"]
+	: (int) @$_GET["IDdest"] ;
+$IDexp    = ( @$_POST["IDexp"] ) 		// ID de l'expéditeur
+	? (int) $_POST["IDexp"]
+	: (int) @$_GET["IDexp"] ;
+$IDmsg  = ( @$_POST["IDmsg"] )		// identifiant du messages
+	? (int) $_POST["IDmsg"]
+	: (int) @$_GET["IDmsg"] ;
+
+$skpage = ( @$_POST["skpage"] )		// n° de la page affichée
+	? (int) $_POST["skpage"]
+	: (int) @$_GET["skpage"] ;
+$skshow = ( @$_POST["skshow"] )		// n° du flash info
+	? (int) $_POST["skshow"]
+	: (int) @$_GET["skshow"] ;
+
+$submit = ( @$_POST["submit"] )		// bouton de validation
+	? $_POST["submit"]
+	: @$_GET["submit"] ;
+?>
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($CCN_TITLE)); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+
+	<?php
+		require_once "include/smileys.php";
+		require_once "include/spip.php";
+
+		// lecture des droits
+		$Query  = "select _IDgrpwr, _IDgrprd from postit ";
+		$Query .= "where _IDcentre = '".$_SESSION["CnxCentre"]."'";
+
+		$result = mysql_query($Query, $mysql_link);
+		$auth   = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+		// vérification des autorisations
+		verifySessionAccess(0, $auth[1]);
+
+		// on filtre les données
+		switch ( getAccess() ) {
+			case '1' :	// les élèves
+				$IDdst = $_SESSION["CnxID"];
+				break;
+
+			case '2' :	// le personnel
+				break;
+
+			default :	// les autres
+				logSessionAccess();
+				break;
+			} // end switch
+
+		// initialisation
+		$href   = "IDcentre=$IDcentre&IDdest=$IDdest&IDexp=$IDexp&skpage=$skpage&skshow=$skshow";
+
+		//-- lecture 1er message
+		$Query  = "select _IDmsg, _IDdest, _ID from ccn_items ";
+		$Query .= "where _IDdest = '$IDdest' AND _IDparent = '0' ";
+
+		$result = mysql_query($Query, $mysql_link);
+		$nbelem = ( $result ) ? mysql_affected_rows($mysql_link) : 0 ;
+
+		switch ( $submit ) {
+			case "next" :
+				$Query .= "AND _IDmsg > '$IDmsg' order by _IDmsg asc";
+				break;
+							
+			case "prev" :
+				$Query .= "AND _IDmsg < '$IDmsg' order by _IDmsg desc";
+				break;
+							
+			default :
+				$Query .= "AND _IDmsg <= '$IDmsg' order by _IDmsg desc";
+				break;
+			}
+
+		$result  = mysql_query($Query, $mysql_link);
+		$row     = ( $result ) ? mysql_fetch_row($result) : 0 ;
+		$pos     = ( $result ) ? mysql_affected_rows($mysql_link) : 0 ;
+
+	?>
+
+            <table class="width100">
+              <tr>
+			<?php
+			// test du droit d'écriture
+			if ( $auth[0] & pow(2, $_SESSION["CnxGrp"] - 1) ) {
+				$iddst = ( $row[1] == $_SESSION["CnxID"] ) ? $row[2] : $row[1] ;
+
+				print("
+		                <td>
+					[
+					<img src=\"".$_SESSION["ROOTDIR"]."/images/postitreply.gif\" title=\"\" alt=\"\" />
+					<a href=\"".myurlencode("index.php?item=$item&cmde=post&IDdst=$iddst&$href")."\">
+					".$msg->read($CCN_NEWMSG)."
+					</a>
+					|
+					<img src=\"".$_SESSION["ROOTDIR"]."/images/postitforward.gif\" title=\"\" alt=\"\" />
+					<a href=\"".myurlencode("index.php?item=$item&cmde=post&IDmsg=$row[0]&IDdst=$iddst&$href&submit=reply")."\">
+					".$msg->read($CCN_REPLYTO)."
+					</a>
+					]
+		                </td>
+					");
+				}
+			?>
+                <td class="align-right">
+			<?php
+                	$test = ( $submit == "next" ) ? (bool) ( $pos > 1 ) : (bool) ( $nbelem > 1 AND $pos < $nbelem ) ;
+
+                	$next = ( $test )
+                		? "<a href=\"".myurlencode("index.php?item=$item&cmde=visu&IDmsg=$row[0]&$href&submit=next")."\">".$msg->read($CCN_NEXT)."</a>"
+                		: $msg->read($CCN_NEXT) ;
+
+                	$test = ( $submit == "next" ) ? (bool) ( $nbelem > 1 AND $pos < $nbelem ) : (bool) ( $pos > 1 ) ;
+
+                	$prev = ( $test )
+                		? "<a href=\"".myurlencode("index.php?item=$item&cmde=visu&IDmsg=$row[0]&$href&submit=prev")."\">".$msg->read($CCN_PREV)."</a>"
+                		: $msg->read($CCN_PREV) ;
+
+                  print("[<img src=\"".$_SESSION["ROOTDIR"]."/images/postitprev.gif\" title=\"\" alt=\"\" /> $prev | $next <img src=\"".$_SESSION["ROOTDIR"]."/images/postitnext.gif\" title=\"\" alt=\"\" />]");
+			?>
+                </td>
+              </tr>
+            </table>
+
+	<?php
+		//-- lecture des messages
+		$Query  = "select _IDmsg, _title, _text, _ID, _date, _IP, _ack, _priority, _IDdest from ccn_items ";
+		$Query .= "where _IDmsg = '$IDmsg' OR _IDparent = '$IDmsg' ";
+		$Query .= "order by _IDmsg";
+
+		$result = mysql_query($Query, $mysql_link);
+		$row     = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+		while ( $row ) {
+			print("
+		            <table class=\"width100\">
+		              <tr style=\"background-color:#c0c0c0;\">
+		                <td class=\"align-right\" style=\"width:20%;\">");
+
+					print($msg->read($CCN_SUBJECT)."<br/>");
+					print($msg->read($CCN_DEST)."<br/>");
+					print($msg->read($CCN_PRIORITY));
+
+			print("
+		                </td>
+		                <td class=\"align-left\" style=\"width:80%;\">");
+
+					$idx  = (int) $row[7]; 
+					$list = explode(",", $msg->read($CCN_PRIORITYLEVEL));
+
+					print("$row[1]<br/>");
+					print(getUserName($row[8])."<br/>");
+					print("$list[$idx]"); 
+
+			print("
+		                </td>
+		              </tr>
+
+				  <tr>
+				    <td style=\"border: 1px solid #c0c0c0;\" class=\"valign-top align-center\">");
+
+					$img = ( $row[6] == "0000-00-00 00:00:00" ) ? "invisible" : "visible" ;
+					$vu  = ( $row[6] == "0000-00-00 00:00:00" ) ? "" : "<span class=\"x-small\">".date2longfmt($row[6])."</span>" ;
+
+					print("<img src=\"".$_SESSION["ROOTDIR"]."/images/$img.gif\" title=\"\" alt=\"\" /><br/>$vu");
+
+			print("
+				    </td>
+				    <td style=\"border: 1px solid #c0c0c0;\" class=\"valign-top\">
+
+					<table style=\"background-color:#eeeeee; width: 100%\">
+					  <tr>
+					    <td style=\"width:1%\"><img src=\"".$_SESSION["ROOTDIR"]."/images/horloge.png\" title=\"\" alt=\"\" /></td>
+					    <td class=\"x-small\">".$msg->read($CCN_POSTBY, Array(getUserName($row[3]), date2longfmt($row[4]), _getHostName($row[5])))."</td>
+					  </tr>
+					</table>
+
+					<hr style=\"margin:0px;\" />");
+
+			    		// le message
+			    		print(replace_smile(find_typo($row[2], $note))); 
+
+					// notes de bas de page
+					if ( strlen($note) )
+						print("
+							<hr style=\"width:30%; margin-left:0px;\" />
+							<p style=\"margin:0px;\" class=\"x-small\">$note</p>
+							");
+
+			print("
+				    </td>
+				  </tr>
+				</table>");
+
+			// acquittement de lecture
+			// par le destinataire
+			if ( $row[6] == "0000-00-00 00:00:00" AND $row[8] == $_SESSION["CnxID"] )
+				mysql_query("update ccn_items set _ack = '".date("Y-m-d H:i:s")."' where _IDmsg = '$row[4]' limit 1", $mysql_link);
+
+			$row = remove_magic_quotes(mysql_fetch_row($result));
+			}
+
+		print("[<a href=\"".myurlencode("index.php?item=$item&IDcentre=$IDcentre&skpage=$skpage&skshow=$skshow")."\">". $msg->read($CCN_GOBACK) ."</a>]");
+	?>
+
+</div>

@@ -1,0 +1,245 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2006-2007 by Dominique Laporte(C-E-D@wanadoo.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : liaison_post.htm
+ *		projet   : la page de saisie du cahier de liaison
+ *
+ *		version  : 1.0
+ *		auteur   : laporte
+ *		creation : 18/11/06
+ *		modif    : 
+ */
+
+
+$IDcentre = ( @$_POST["IDcentre"] )			// Identifiant du centre
+	? (int) $_POST["IDcentre"]
+	: (int) @$_GET["IDcentre"] ;
+
+$name     = ( @$_POST["name"] )			// nom alpha
+	? $_POST["name"]
+	: @$_GET["name"] ;
+$IDeleve  = ( @$_POST["IDeleve"] )			// Identifiant de l'élève
+	? (int) $_POST["IDeleve"]
+	: (int) @$_GET["IDeleve"] ;
+$IDclass  = ( @$_POST["IDclass"] )			// Identifiant de la classe
+	? (int) $_POST["IDclass"]
+	: (int) @$_GET["IDclass"] ;
+$myclass  = ( @$_POST["myclass"] )			// Identifiant de la classee l'élève
+	? (int) $_POST["myclass"]
+	: (int) @$_GET["myclass"] ;
+$period   = ( @$_POST["period"] )			// trimestre
+	? (int) $_POST["period"]
+	: (int) @$_GET["period"] ;
+$parent   = ( @$_POST["parent"] )			// Identfiant compte rendu (réponse)
+	? (int) $_POST["parent"]
+	: (int) @$_GET["parent"] ;
+
+$IDdata   = (int) @$_POST["IDdata"];		// 
+$IDitem   = (int) @$_POST["IDitem"];		// Identfiant compte rendu
+$text1    = addslashes(@$_POST["text1"]);		// saisie texte 1
+$text2    = addslashes(@$_POST["text2"]);		// saisie texte 2
+$text3    = addslashes(@$_POST["text3"]);		// saisie texte 3
+
+$pglink   = "IDcentre=$IDcentre&amp;name=$name&amp;IDclass=$IDclass&amp;period=$period";
+
+$submit   = @$_POST["valid_x"];	 		// bouton de validation
+?>
+
+
+<script type="text/javascript" src="script/edit.js"></script>
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($LIAISON_FORMFEED)); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+
+<?php
+	require_once "include/calendar_tools.php";
+
+	// lecture du droit d'écriture
+	$Query  = "select _IDgrpwr, _IDmod from liaison ";
+	$Query .= "where _IDcentre = '$IDcentre' AND _IDclass = '$myclass' ";
+	$Query .= "limit 1";
+
+	$result = mysql_query($Query, $mysql_link);
+	$auth   = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+	// vérification des autorisations
+	verifySessionAccess($auth[1], $auth[0]);
+
+	$Query  = "select _IDdata from liaison_data ";
+	$Query .= "where _IDeleve = '$IDeleve' ";
+	$Query .= "AND _period = '$period' AND _IDclass = '$myclass' "; 
+	$Query .= "limit 1";
+
+	$result = mysql_query($Query, $mysql_link);
+	$row    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+	$IDdata = (int) $row[0];
+
+	// l'utilisateur a validé son message
+	if ( strlen($submit) ) {
+		// test de la saisie
+		if ( $text1 OR $text2 OR $text3 ) {
+			$date  = date("Y-m-d H:i:s");
+			$texte = "";
+
+			if ( !$IDdata ) {
+				$Query  = "insert into liaison_data ";
+				$Query .= "values('', '$IDeleve', '$period', '$myclass')";
+
+				if ( mysql_query($Query, $mysql_link) )
+					$IDdata = mysql_insert_id();
+				}
+
+			if ( $IDitem ) {
+				$Query  = "update liaison_items ";
+				$Query .= "set _date = '$date', _text1 = '$text1', _text2 = '$text2',  _text3 = '$text3' ";
+				$Query .= "where _IDitem = '$IDitem' ";
+				$Query .= "limit 1";
+				}
+			else {
+				$Query  = "insert into liaison_items ";
+				$Query .= "values('', '$IDdata', '$parent', '".$_SESSION["CnxID"]."', '0', '".$_SESSION["CnxIP"]."', '$date', '$text1', '$text2', '$text3', 'O')";
+				}
+
+			if ( !mysql_query($Query, $mysql_link) )
+				sql_error($mysql_link);
+			else
+				$texte = $msg->read($LIAISON_THANX);
+
+			print("
+				<div class=\"center\">
+      				$texte<br/>
+				      [<a href=\"index.php?item=$item&amp;$pglink\">". $msg->read($LIAISON_GOBACK) ."</a>]
+				</div>
+				");
+			}
+		}
+
+	// saisie du formulaire si
+	// - l'utilisateur n'a pas validé
+	if ( !strlen($submit) ) {
+
+	    	print("
+		<form action=\"index.php\" name=\"formulaire\" method=\"post\">
+			<p class=\"hidden\"><input type=\"hidden\" name=\"item\"     value=\"$item\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"cmde\"     value=\"$cmde\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"IDcentre\" value=\"$IDcentre\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"IDdata\"   value=\"$IDdata\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"IDeleve\"  value=\"$IDeleve\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"IDclass\"  value=\"$IDclass\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"myclass\"  value=\"$myclass\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"period\"   value=\"$period\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"name\"     value=\"$name\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"parent\"   value=\"$parent\" /></p>
+			");
+
+		$Query   = "select user_id._name, user_id._fname, campus_classe._ident, user_id._IDclass from user_id, campus_classe ";
+		$Query  .= "where user_id._ID = '$IDeleve' AND user_id._IDgrp = '1' ";
+		$Query  .= "AND user_id._IDclass = campus_classe._IDclass"; 
+
+		$result  = mysql_query($Query, $mysql_link);
+		$row     = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+		$myclass = $row[3];
+
+		print("    
+		  <table class=\"width100\">
+		    <tr>
+		      <td colspan=\"2\">
+				". $msg->read($LIAISON_STUDENT) ." $row[0] $row[1]<br/>
+				". $msg->read($LIAISON_MYQUATER, Array($row[2], strval($period))) ."
+		      </td>
+		    </tr>
+
+		    <tr>
+		      <td colspan=\"2\">
+				<hr style=\"width:80%;\" />
+		      </td>
+		    </tr>
+		    	");
+
+		$Query  = "select _text1, _text2, _text3, _IDitem from liaison_items, liaison_data ";
+		$Query .= "where liaison_items._IDdata = liaison_data._IDdata ";
+		$Query .= "AND liaison_items._IDdata = '$IDdata' ";
+		$Query .= "AND liaison_items._ID = '".$_SESSION["CnxID"]."' ";
+		$Query .= "limit 1"; 
+
+		$result = mysql_query($Query, $mysql_link);
+		$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+		$IDitem = $row[3];
+
+		print("
+		    <tr>
+		      <td style=\"width:25%\" class=\"valign-top align-right\">
+		        ". $msg->read($LIAISON_BEHAVIOR) ." <a href=\"#\" onclick=\"popWin('".$_SESSION["ROOTDIR"]."/spip_typo.php?lang=".$_SESSION["lang"]."', '450', '350'); return false;\">
+		        <img src=\"".$_SESSION["ROOTDIR"]."/images/spip/aide.gif\" title=\"". $msg->read($LIAISON_HELP) ."\" alt=\"". $msg->read($LIAISON_HELP) ."\" /></a> :
+		      </td>
+		      <td style=\"width:75%;\"><label for=\"text1\"><textarea id=\"text1\" name=\"text1\" rows=\"6\" cols=\"39\">$row[0]</textarea></label></td>
+		    </tr>
+
+		    <tr>
+		      <td class=\"align-right valign-top\">
+		        ". $msg->read($LIAISON_PRESENCE) ." <a href=\"#\" onclick=\"popWin('".$_SESSION["ROOTDIR"]."/spip_typo.php?lang=".$_SESSION["lang"]."', '450', '350'); return false;\">
+		        <img src=\"".$_SESSION["ROOTDIR"]."/images/spip/aide.gif\" title=\"". $msg->read($LIAISON_HELP) ."\" alt=\"". $msg->read($LIAISON_HELP) ."\" /></a> :
+		      </td>
+		      <td><label for=\"text2\"><textarea id=\"text2\" name=\"text2\" rows=\"6\" cols=\"39\">$row[1]</textarea></label></td>
+		    </tr>
+
+		    <tr>
+		      <td class=\"align-right valign-top\">
+		        ". $msg->read($LIAISON_INVEST) ." <a href=\"#\" onclick=\"popWin('".$_SESSION["ROOTDIR"]."/spip_typo.php?lang=".$_SESSION["lang"]."', '450', '350'); return false;\">
+		        <img src=\"".$_SESSION["ROOTDIR"]."/images/spip/aide.gif\" title=\"". $msg->read($LIAISON_HELP) ."\" alt=\"". $msg->read($LIAISON_HELP) ."\" /></a> :
+		      </td>
+		      <td><label for=\"text3\"><textarea id=\"text3\" name=\"text3\" rows=\"6\" cols=\"39\">$row[2]</textarea></label></td>
+		    </tr>
+		    	");
+
+	    	print("
+	         <table class=\"width100\">
+	           <tr>
+	              <td style=\"width:100%;\" colspan=\"2\"><hr style=\"width:80%;\" /></td>
+	           </tr>
+	           <tr>
+	              <td style=\"width:10%;\" class=\"valign-middle align-center\">
+	              	<input type=\"image\" src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/valid.gif\" name=\"valid\" alt=\"".$msg->read($LIAISON_INPUTOK)."\" />
+	              </td>
+	              <td class= \"valign-middle\">". $msg->read($LIAISON_TOSENT) ."</td>
+	           </tr>
+	           <tr>
+	              <td class=\"valign-middle align-center\">
+	              	<a href=\"index.php?item=$item&amp;$pglink\"><img src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/cancel.gif\" title=\"\" alt=\"".$msg->read($LIAISON_INPUTCANCEL)."\" /></a>
+	              </td>
+	              <td class= \"valign-middle\">". $msg->read($LIAISON_QUIT) ."</td>
+	           </tr>
+	         </table>
+
+			<p class=\"hidden\"><input type=\"hidden\" name=\"IDitem\"  value=\"$IDitem\" /></p>
+		</form>
+			");
+		}
+?>
+
+</div>

@@ -1,0 +1,519 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2009 by Dominique Laporte(C-E-D@wanadoo.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : notes_show.htm
+ *		projet   : la page de visualisation des bulletins élève
+ *
+ *		version  : 1.0
+ *		auteur   : laporte
+ *		creation : 19/12/09
+ *		modif    : 
+ */
+
+
+$IDcentre = ( @$_POST["IDcentre"] )			// Identifiant du centre
+	? (int) $_POST["IDcentre"]
+	: (int) (@$_GET["IDcentre"] ? $_GET["IDcentre"] : $_SESSION["CnxCentre"]) ;
+
+$IDclass  = ( @$_POST["IDclass"] )			// Identifiant de la classe
+	? (int) $_POST["IDclass"]
+	: (int) @$_GET["IDclass"] ;
+$IDeleve  = ( @$_POST["IDeleve"] )			// Identifiant de l'élève
+	? (int) $_POST["IDeleve"]
+	: (int) @$_GET["IDeleve"] ;
+$year     = ( @$_POST["year"] )			// année
+	? (int) $_POST["year"]
+	: (int) (@$_GET["year"] ? $_GET["year"] : date("Y")) ;
+$period   = ( @$_POST["period"] )			// trimestre
+	? (int) $_POST["period"]
+	: (int) (@$_GET["period"] ? $_GET["period"] : 1) ;
+$text     = @$_POST["text"];				// appréciation
+
+$setlock  = @$_POST["unlocked_x"];			// verrouillage du trimestre
+$unlock   = @$_POST["locked_x"];			// déverrouillage du trimestre
+$submit   = @$_POST["valid_x"];			// bouton validation
+?>
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($NOTES_TITLE)); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+
+	<?php
+		require_once "include/notes.php";
+		require_once "include/postit.php";
+		require_once "include/student.php";
+
+		// lecture des droits
+		$Query  = "select _IDgrpwr, _IDgrprd, _period, _IDmod, _decimal, _separator, _email, _display from notes ";
+		$Query .= "where _IDcentre = '".$_SESSION["CnxCentre"]."' ";
+		$Query .= "limit 1";
+
+		$result = mysql_query($Query, $mysql_link);
+		$auth   = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+		// vérification des autorisations
+		verifySessionAccess(0, $auth[1]);
+
+		// l'utilisateur a validé la saisie
+		if ( $submit) {
+			$mydate = date("Y-m-d H:i:s");
+
+			$Query  = "insert into notes_text ";
+			$Query .= "values('$IDeleve', '".$_SESSION["CnxID"]."', '".$_SESSION["CnxIP"]."', '$mydate', '$IDclass', '0', '$year', '$period', '$text', 'O')";
+
+			if ( !mysql_query($Query, $mysql_link) ) {
+				// modification du bulletin
+				$Query  = "UPDATE notes_text ";
+				$Query .= "SET _text = '$text', _lock = 'O', _ID = '".$_SESSION["CnxID"]."', _IP = '".$_SESSION["CnxIP"]."', _date = '$mydate' ";
+				$Query .= "where _IDeleve = '$IDeleve' AND _IDclass = '$IDclass' AND _IDmat = '0' AND _year = '$year' AND _period = '$period' ";
+				$Query .= "limit 1";
+
+				mysql_query($Query, $mysql_link);
+				}
+			}
+
+		// l'utilisateur a verrouillé la saisie
+		if ( $setlock OR $unlock ) {
+			$value  = ( $setlock ) ? "O" : "N" ;
+			$mydate = date("Y-m-d H:i:s");
+
+			// modification du bulletin
+			$Query  = "UPDATE notes_text ";
+			$Query .= "SET _lock = '$value', _ID = '".$_SESSION["CnxID"]."', _IP = '".$_SESSION["CnxIP"]."', _date = '$mydate' ";
+			$Query .= "where _IDeleve = '$IDeleve' AND _IDclass = '$IDclass' AND _IDmat = '0' AND _year = '$year' AND _period = '$period' ";
+			$Query .= "limit 1";
+
+			mysql_query($Query, $mysql_link);
+			}
+	?>
+
+	<form id="formulaire" action="index.php" method="post">
+	<?php
+		print("
+			<p class=\"hidden\"><input type=\"hidden\" name=\"item\"   value=\"$item\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"cmde\"   value=\"$cmde\" /></p>
+			");
+	?>
+
+		<table width="100%" cellspacing="4" cellpadding="0">
+		  <tr>
+			<td style="width:50%;" class="align-right">
+				<?php print($msg->read($NOTES_CHOOSECENTER)); ?>
+			</td>
+			<td style="width:50%;">
+				<label for="IDcentre">
+			  	<select id="IDcentre" name="IDcentre" onchange="document.forms.formulaire.submit()">
+				<?php
+					// lecture des centres constitutifs
+					$query  = "select _IDcentre, _ident from config_centre ";
+					$query .= "where _visible = 'O' AND _lang = '".$_SESSION["lang"]."' ";
+					$query .= "order by _IDcentre";
+
+					$result = mysql_query($query, $mysql_link);
+					$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+					while ( $row ) {			
+						printf("<option value=\"$row[0]\" %s>$row[1]</option>", ($IDcentre == $row[0]) ? "selected=\"selected\"" : "");
+
+						$row = remove_magic_quotes(mysql_fetch_row($result));
+						}
+				?>
+				</select> <img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/home.gif" title="" alt="" />
+				</label>
+			</td>
+		  </tr>
+		</table>
+
+	<hr/>
+
+	<?php
+		// lecture du bulletin élèves
+		$Query  = "select _lock from notes_text ";
+		$Query .= "where _IDeleve = '$IDeleve' AND _IDclass = '$IDclass' AND _IDmat = '0' AND _year = '$year' AND _period = '$period' ";
+		$Query .= "limit 1";
+
+		$result = mysql_query($Query, $mysql_link);
+		$row    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+		$lock   = ( $row[0] == "O" ) ? "readonly=\"readonly\"" : "" ;
+
+		// lecture du bulletin classe
+		$list   = explode (",", $msg->read($NOTES_PERIODLIST));
+		$quater = substr(@$list[$auth[2]], 0, 1);
+		$print  = 
+			"<a href=\"".myurlencode($_SESSION["ROOTDIR"]."/notes_pdf.php?sid=".$_SESSION["sessID"]."&IDcentre=$IDcentre&IDclass=$IDclass&IDeleve=$IDeleve&year=$year&period=$period")."\" onclick=\"window.open(this.href, '_blank'); return false;\">
+			<img src=\"".$_SESSION["ROOTDIR"]."/images/print.gif\" title=\"". $msg->read($NOTES_PRINT) ."\" alt=\"". $msg->read($NOTES_PRINT) ."\" />
+			</a>";
+
+		$mymsg  = ( $lock == "" ) ? $NOTES_LOCK : $NOTES_UNLOCK ;
+		$mylock = ( $lock == "" ) ? "unlocked" : "locked" ;
+		$islock = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $auth[3] )
+			? "<input type=\"image\" src=\"".$_SESSION["ROOTDIR"]."/images/$mylock.gif\" name=\"$mylock\" title=\"".$msg->read($mymsg)."\" alt=\"".$msg->read($mymsg)."\" />"
+			: "<img src=\"".$_SESSION["ROOTDIR"]."/images/$mylock.gif\" title=\"".$msg->read($mymsg)."\" alt=\"".$msg->read($mymsg)."\" />" ;
+
+		print("
+			<table  width=\"100%\" cellspacing=\"1\" cellpadding=\"2\">
+			  <tr>
+	                <td>
+				$islock ". @$list[$auth[2]] ."
+			  	<label for=\"period\">
+			  	<select id=\"period\" name=\"period\" onchange=\"document.forms.formulaire.submit()\">");
+
+				// trimestres, semestres ou années
+				switch ( $auth[2] ) {
+					case 0 : $j = 3; break;
+					case 1 : $j = 2; break;
+					default: $j = 1; break;
+					}
+
+				for ($i = 1; $i <= $j; $i++)
+					printf("<option value=\"$i\" %s>$quater$i</option>", ($i == $period) ? "selected=\"selected\"" : "");
+
+		print("
+			  	</select>
+			  	</label>
+				-
+			  	<label for=\"year\">
+			  	<select id=\"year\" name=\"year\" onchange=\"document.forms.formulaire.submit()\">");
+
+				// affichage des années
+				$Query  = "select distinctrow notes_data._year from notes_data, campus_classe ";
+				$Query .= "where campus_classe._IDcentre = '$IDcentre' ";
+				$Query .= "AND campus_classe._visible = 'O' ";
+				$Query .= "AND campus_classe._IDclass = notes_data._IDclass ";
+				$Query .= ( $IDclass ) ? "AND campus_classe._IDclass = '$IDclass' " : "" ;
+				$Query .= "order by _year";
+
+				$result = mysql_query($Query, $mysql_link);
+				$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+				if ( mysql_numrows($result) == 0 )
+					print("<option value=\"$year\">$year</option>");
+
+				while ( $row ) {			
+					printf("<option value=\"$row[0]\" %s>$row[0]</option>", ($year == $row[0]) ? "selected=\"selected\"" : "");
+
+					$row = remove_magic_quotes(mysql_fetch_row($result));
+					}	// endwhile années
+
+		print("
+			  	</select>
+			  	</label>
+				|
+			  	<label for=\"IDclass\">
+			  	<select id=\"IDclass\" name=\"IDclass\" onchange=\"document.forms.formulaire.submit()\">");
+
+				// affichage des classes
+				$Query  = "select _IDclass, _ident from campus_classe ";
+				$Query .= "where _IDcentre = '$IDcentre' ";
+				$Query .= "AND _visible = 'O' ";
+				$Query .= "order by _IDclass";
+
+				$result = mysql_query($Query, $mysql_link);
+				$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+				while ( $row ) {			
+					printf("<option value=\"$row[0]\" %s>$row[1]</option>", ($IDclass == $row[0]) ? "selected=\"selected\"" : "");
+
+					$row = remove_magic_quotes(mysql_fetch_row($result));
+					}	// endwhile classe
+
+		print("
+			  	</select>
+			  	</label>
+				-
+			  	<label for=\"IDeleve\">
+			  	<select id=\"IDeleve\" name=\"IDeleve\" onchange=\"document.forms.formulaire.submit()\">");
+
+				// affichage des élèves
+				$query  = "select _ID, _name, _fname ";
+				$query .= "from user_id ";
+				$query .= "where _visible = 'O' ";
+				$query .= "AND _IDclass = '$IDclass' AND _IDgrp = '1' ";
+				$query .= "order by _name, _fname";
+
+				$result = mysql_query($query, $mysql_link);
+				$row    = remove_magic_quotes(mysql_fetch_row($result));
+
+				while ( $row ) {			
+					printf("<option value=\"$row[0]\" %s>$row[1] $row[2]</option>", ($IDeleve == $row[0]) ? "selected=\"selected\"" : "");
+
+					$row = remove_magic_quotes(mysql_fetch_row($result));
+					}	// endwhile élèves
+
+		print("
+			  	</select>
+			  	</label> $print
+	                </td>
+	              </tr>
+			</table>");
+
+		$nbtrim  = 1;
+		$width   = 65 - ($nbtrim * 5);
+		$width  -= ( $auth[7][1] ) ? 5 : 0 ;
+		$width  -= ( $auth[7][2] ) ? 5 : 0 ;
+
+		print("
+			<table width=\"100%\" cellspacing=\"1\" cellpadding=\"2\">
+			  <tr class=\"align-center\" style=\"background-color:#C0C0C0;\">
+	                <td style=\"width:35%;\" colspan=\"2\">". $msg->read($NOTES_MATTER) ."</td>
+	                <td style=\"width:5%;white-space:nowrap;\">". $msg->read($NOTES_STUDENTMEAN, "$quater$period") ."</td>");
+
+		if ( $auth[7][1] )
+			print("<td style=\"width:5%;\">". $msg->read($NOTES_CLASSMEAN) ."</td>");
+
+		if ( $auth[7][2] )
+			print("<td style=\"width:5%;\">". $msg->read($NOTES_YEARMEAN) ."</td>");
+
+		print("
+	                <td style=\"width:$width%;\">". $msg->read($NOTES_COMMENTARY) ."</td>
+			  </tr>
+			");
+
+		// affichage des matières
+		$Query  = "select distinctrow campus_data._IDmat, campus_data._titre, notes_data._IDdata ";
+		$Query .= "from campus_data, notes_data ";
+		$Query .= "where campus_data._lang = '".$_SESSION["lang"]."' ";
+		$Query .= "AND notes_data._year = '$year' AND notes_data._IDclass = '$IDclass' AND notes_data._period = '$period' ";
+		$Query .= "AND notes_data._IDmat = campus_data._IDmat ";
+		$Query .= "order by campus_data._titre asc";
+
+		$result = mysql_query($Query, $mysql_link);
+		$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+		// pour statisqtiques
+		$rnum   = $rtot = Array('0', '0', '0', '0', '0');
+
+		$j = 0;
+		while ( $row ) {
+			$bgcolor = ( $j++ % 2 ) ? "item" : "menu" ;
+
+			// recherche enseignant de la matière
+			$Query  = "select _ID from notes_items ";
+			$Query .= "where _IDdata = '$row[2]' ";
+			$Query .= "order by _IDitems ";
+			$Query .= "limit 1";
+
+			$return = mysql_query($Query, $mysql_link);
+			$myrow  = ( $return ) ? mysql_fetch_row($return) : 0 ;
+
+			$idprof = $myrow[0];
+
+			switch ( $auth[6] ) {
+				case "P" :
+					if ( canPost($_SESSION["CnxID"]) AND canRead($idprof) )
+						$href = ( $_SESSION["CnxID"] != $idprof AND $_SESSION["CnxSex"] != "A" )
+							? myurlencode("index.php?item=4&IDpost=".$_SESSION["CnxID"]."&IDdst=$idprof&cmde=post")
+							: "#" ;
+					break;
+
+				case "E" :
+					// envoie d'un email
+					$href = ( getUserEmail($idprof) != "" )
+						? "mailto:".getUserEmail($idprof)
+						: "#" ;
+					break;
+
+				default :
+					$href = "#";
+					break;
+				}
+
+			// recherche professeur principal
+			$Query  = "select _IDpp from campus_classe ";
+			$Query .= "where _IDclass = '$IDclass' ";
+			$Query .= "limit 1";
+
+			$return = mysql_query($Query, $mysql_link);
+			$myrow  = ( $return ) ? mysql_fetch_row($return) : 0 ;
+
+			$icon   = "<img src=\"".$_SESSION["ROOTDIR"]."/images/files.gif\" title=\"*\" alt=\"*\" />";
+			$tutor  = ( $myrow[0] == $idprof )
+				? "<img src=\"".$_SESSION["ROOTDIR"]."/images/stats/mod.gif\" title=\"". $msg->read($NOTES_MAINTEACHER) ."\" alt=\"". $msg->read($NOTES_MAINTEACHER) ."\" />"
+				: "" ;
+			$link   = "$row[1]<br/><a href=\"$href\">".getUserName($idprof, false)."</a> $tutor";
+
+			//---- calcul de la note
+			$note   = computeMark($IDclass, $row[0], $IDeleve, $year, $period);
+			$fmt1   = ( $note != "" ) ? number_format($note, $auth[4], $auth[5], ".") : "" ;
+
+			// statistiques
+			if ( $note != "" ) {
+				$rnum[0] += 1;
+				$rtot[0] += (float) $note;
+				}
+
+			//---- moyenne classe
+			$note   = computeClass($IDclass, $row[0], $year, $period);
+			$fmt2   = ( $note != "" ) ? number_format($note, $auth[4], $auth[5], ".") : "" ;
+
+			// statistiques
+			if ( $note != "" ) {
+				$rnum[1] += 1;
+				$rtot[1] += (float) $note;
+				}
+
+			//---- moyenne année
+			$_tot = $_num = 0;
+			for ($i = 0; $i < 4; $i++) {
+				$note = computeMark($IDclass, $row[0], $IDeleve, $year, $i);
+
+				if ( $note != "" ) {
+					$_num += 1;
+					$_tot += (float) $note;
+					}
+				}
+
+			$fmt3   = ( $_num ) ? number_format($_tot / $_num, $auth[4], $auth[5], ".") : "" ;
+
+			// statistiques
+			if ( $fmt3 != "" ) {
+				$rnum[4] += 1;
+				$rtot[4] += (float) ($_tot / $_num);
+				}
+
+			//---- appréciation
+			$Query  = "select _text from notes_text ";
+			$Query .= "where _IDeleve = '$IDeleve' AND _IDclass = '$IDclass' AND _IDmat = '$row[0]' AND _year = '$year' AND _period = '$period' ";
+			$Query .= "limit 1";
+
+			$return = mysql_query($Query, $mysql_link);
+			$myrow  = ( $return ) ? remove_magic_quotes(mysql_fetch_row($return)) : 0 ;
+
+ 			print("
+				<tr class=\"$bgcolor\">
+  		                <td style=\"width:1%;\">$icon</td>
+		                <td style=\"width:29%;\">$link</td>
+		                <td class=\"align-center\">$fmt1</td>");
+
+			if ( $auth[7][1] )
+				print("<td class=\"align-center\">$fmt2</td>");
+
+			if ( $auth[7][2] )
+				print("<td class=\"align-center\">$fmt3</td>");
+
+ 			print("
+		                <td>$myrow[0]</td>
+				</tr>");
+
+ 			$row = remove_magic_quotes(mysql_fetch_row($result));
+ 			}
+	?>
+
+	           <tr>
+	              <td colspan="2"><?php print($msg->read($NOTES_GLOBALMEAN)); ?></td>
+
+			<?php
+				// moyenne générale
+				$fmt = ( $rnum[0] )
+					? number_format($rtot[0] / $rnum[0], $auth[4], $auth[5], ".")
+					: "" ;
+
+				print("<td class=\"align-center\">$fmt</td>");
+
+				// moyenne classe
+				$fmt = ( $rnum[1] )
+					? number_format($rtot[1] / $rnum[1], $auth[4], $auth[5], ".")
+					: "" ;
+
+				if ( $auth[7][1] )
+					print("<td class=\"align-center\">$fmt</td>");
+
+				// moyenne année
+				$fmt = ( $rnum[4] )
+					? number_format($rtot[4] / $rnum[4], $auth[4], $auth[5], ".")
+					: "" ;
+
+				if ( $auth[7][2] )
+					print("<td class=\"align-center\">$fmt</td>");
+			?>
+
+	              <td></td>
+	           </tr>
+		</table>
+
+		<hr />
+
+		<table width="100%" cellspacing="0" cellpadding="2">
+	           <tr>
+	              <td style="width:25%;"><?php print($msg->read($NOTES_SCHOLARSHIP)); ?></td>
+	              <td style="width:10%;"><?php print(@$list[$auth[2]]); ?></td>
+	              <td style="width:10%; white-space:nowrap;"><?php print(stripHTMLtags($msg->read($NOTES_YEAR))); ?></td>
+	              <td style="width:5%;"></td>
+	              <td><?php print($msg->read($NOTES_CLASSCOUNCIL)); ?></td>
+	           </tr>
+
+	           <tr>
+	              <td class="align-right">
+				<?php print($msg->read($NOTES_LATENESS)); ?><br/>
+				<?php print($msg->read($NOTES_ABSENCE)); ?>
+			  </td>
+	              <td class="align-center">
+				<?php print(getStudentOffence($IDeleve, $IDclass, 2)); ?><br/>
+				<?php print(getStudentOffence($IDeleve, $IDclass)); ?>
+			  </td>
+	              <td class="align-center">
+				<?php print(getStudentOffence($IDeleve, $IDclass, 2)); ?><br/>
+				<?php print(getStudentOffence($IDeleve, $IDclass)); ?>
+			  </td>
+	              <td></td>
+	              <td>
+				<label for="text">
+				<?php print("<textarea id=\"text\" name=\"text\" rows=\"6\" cols=\"40\" $lock>$text</textarea>"); ?>
+				</label>
+	              </td>
+	           </tr>
+		</table>
+
+		<hr style="width:80%;" />
+
+		<table width="100%" cellspacing="0" cellpadding="2">
+		<?php
+			if ( $lock == "" )
+				print("
+			           <tr>
+			              <td style=\"width:10%;\" class=\"valign-middle align-center\">
+			              	<input type=\"image\" src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/valid.gif\" name=\"valid\" alt=\"".$msg->read($NOTES_INPUTOK)."\" />
+			              </td>
+			              <td class= \"valign-middle\">
+			              	".$msg->read($NOTES_MODIFY)."
+			              </td>
+			           </tr>");
+		?>
+	           <tr>
+	              <td style="width:10%;" class="valign-middle align-center">
+	              	<?php print("<a href=\"".myurlencode("index.php?item=$item&IDcentre=$IDcentre&IDclass=$IDclass&year=$year&period=$period")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/cancel.gif\" title=\"\" alt=\"".$msg->read($NOTES_INPUTCANCEL)."\" />"); ?></a>
+	              </td>
+	              <td class="valign-middle">
+	              	<?php print($msg->read($NOTES_BACK)); ?>
+	              </td>
+	           </tr>
+		</table>
+
+	</form>
+
+</div>

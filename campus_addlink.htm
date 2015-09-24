@@ -1,0 +1,335 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2004-2007 by Dominique Laporte (C-E-D@wanadoo.fr)
+   Copyright (c) 2006 by Didier Roy (miraceti@free.fr)
+   Copyright (c) 2006 by Nordine Zetoutou (nordine.zetoutou@educagri.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : campus_addlink.htm
+ *		projet   : la page d'ajout d'URL des campus
+ *
+ *		version  : 1.1
+ *		auteur   : laporte
+ *		creation : 17/03/04
+ *		modif    : 08/06/06 - par Didier Roy
+ *		           migration PHP5 
+ *		modif    : 17/07/06 - Nordine Zetoutou
+ * 	                 migration des balises HTML en XHTML 1.0 strict
+ */
+
+
+$IDlink   = ( @$_POST["IDlink"] )				// ID du lien
+	? (int) $_POST["IDlink"]
+	: (int) @$_GET["IDlink"] ;
+$IDmat    = ( strlen(@$_POST["IDmat"]) )			// ID de la matière
+	? (int) $_POST["IDmat"]
+	: (int) @$_GET["IDmat"] ;
+$IDparent = ( @$_POST["IDparent"] )				// ID du répertoire parent
+	? (int) $_POST["IDparent"]
+	: (int) @$_GET["IDparent"] ;
+$title    = addslashes(trim(@$_POST["title"]));		// titre du site
+$texte    = addslashes(trim(@$_POST["texte"]));		// description du lien
+$url      = @$_POST["url"];					// URL
+$mylang   = @$_POST["mylang"];				// langue du site
+$license  = (int) @$_POST["license"];			// type de la licence
+
+$submit   = ( @$_POST["submit"] )				// bouton de validation
+	? $_POST["submit"]
+	: @$_GET["submit"] ;
+?>
+
+
+<?php
+	// initialisation
+	$error  = 0;
+	$status = ( $IDlink )
+		? $msg->read($CAMPUS_UPDATELINK)
+		: $msg->read($CAMPUS_NEWLINK) ;
+
+	// l'utilisateur a cliqué sur un lien
+	switch ( $submit ) {
+		case "valider" :
+			// test d'erreur sur champs non renseignés
+			$error = ( !strlen($title) OR !strlen($url) ) ? 1 : 0 ;
+
+			if ( $url != "" AND strpos($url, "http://") == false AND strpos($url, "https://") == false )
+				$url = "http://" . $url;
+ 
+			if ( !$error ) {
+				$status = $msg->read($CAMPUS_INSERT) ." ";
+
+				$Query  = "insert into campus_link ";
+				$Query .= "values('', '$IDmat', '$IDparent', '".$_SESSION["CnxID"]."', '$title', '$url', '$texte', '$mylang', '$license', '".$_SESSION["lang"]."')";			
+
+				if ( !mysql_query($Query, $mysql_link) ) {
+					mysql_error($mysql_link);
+					$status .= "<img src=\"".$_SESSION["ROOTDIR"]."/images/bad.gif\" title=\"\" alt=\"\" />";
+					}
+				else
+					$status .= "<img src=\"".$_SESSION["ROOTDIR"]."/images/ok.gif\" title=\"\" alt=\"\" />";
+				}
+			break;
+
+		case "update" :
+			$status = $msg->read($CAMPUS_MODIFICATION) ." ";
+
+			$Query  = "update campus_link ";
+			$Query .= "set _titre = '$title', _texte = '$texte', _url = '$url', _flag = '$mylang', _IDlicense = '$license' ";
+			$Query .= "where _IDlink = '$IDlink' ";
+			$Query .= "limit 1";
+
+			if ( ! mysql_query($Query, $mysql_link) ) {
+				mysql_error($mysql_link);
+				$status .= "<img src=\"".$_SESSION["ROOTDIR"]."/images/bad.gif\" title=\"\" alt=\"\" />";
+				}
+			else 
+				$status .= "<img src=\"".$_SESSION["ROOTDIR"]."/images/ok.gif\" title=\"\" alt=\"\" />";
+			break;
+
+		default :
+			break;
+		}
+
+	$Query   = "select _titre, _texte, _url, _flag, _IDlicense ";
+	$Query  .= "from campus_link ";
+	$Query  .= "where _IDlink = '$IDlink' ";
+	$Query  .= "limit 1";
+
+	$result  = mysql_query($Query, $mysql_link);
+	$row     = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+	if ( $row ) {
+		// initialisation des champs de saisie
+		$title   = $row[0];
+		$texte   = $row[1];
+		$url     = $row[2];
+		$mylang  = $row[3];
+		$license = $row[4];
+		}
+	else
+		if ( !$error ) {
+			// réinitialisation des champs de saisie
+			$title   = "";
+			$texte   = "";
+			$url     = "";
+			$mylang  = $_SESSION["lang"].".png";
+			$license = 0;
+			}
+?>				
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($CAMPUS_FORMLINK, $_SESSION["CampusName"])); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+
+	<form id="formulaire" action="index.php" method="post">
+	<?php
+		print("
+			<p class=\"hidden\"><input type=\"hidden\" name=\"item\"       value=\"$item\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"IDparent\"   value=\"$IDparent\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"IDmat\"      value=\"$IDmat\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"cmde\"       value=\"addlink\" /></p>
+			");
+
+		if ( $IDlink )
+			print("
+				<p class=\"hidden\"><input type=\"hidden\" name=\"IDlink\" value=\"$IDlink\" /></p>
+				<p class=\"hidden\"><input type=\"hidden\" name=\"submit\" value=\"update\" /></p>
+				");
+		else
+			print("
+				<p class=\"hidden\"><input type=\"hidden\" name=\"submit\" value=\"valider\" /></p>
+				");
+	?>
+
+		<table class="width100">
+		    <tr>
+		      <td style="width:15%;" class="align-right"><?php print($msg->read($CAMPUS_STATUS)); ?></td>
+		      <td style="width:85%;" colspan="2"><?php print("$status"); ?></td>
+		    </tr>
+
+		    <tr>
+		      <td class="align-right"><?php print($msg->read($CAMPUS_AUTHOR)); ?></td>
+		      <td colspan="2"><?php print($_SESSION["CnxName"]); ?></td>
+		    </tr>
+		</table>
+
+		<hr style="width:80%; text-align:center;" />
+
+	  <table class="width100">
+	   <tr>
+	     <td style="width:10%;">&nbsp;</td>
+	     <td style="width:80%;">
+
+		  <table class="width100">
+		  <?php
+		  // intitulé non renseigné
+		  if ( $error AND !strlen($title) )
+		  	print("
+			    <tr>
+				<td style=\"width:100%;\" colspan=\"2\">
+				<span style=\"color:#FF0000;\">". $msg->read($CAMPUS_ERRIDENT) ."</span>
+				</td>
+			    </tr>
+				");
+		  ?>
+	    
+		    <tr style="background-color:#eeeeee;">
+		      <td style="width:100%;" colspan="2"><?php print($msg->read($CAMPUS_SITENAME)); ?></td>
+		    </tr>
+	    
+		    <tr>
+		      <td style="width:100%;" colspan="2">
+				<?php print("<label for=\"title\"><input type=\"text\" id=\"title\" name=\"title\" size=\"50\" value=\"$title\" /></label>"); ?>
+		      </td>
+		    </tr>
+
+		    <tr style="background-color:#eeeeee;">
+		      <td style="width:100%;" colspan="2"><?php print($msg->read($CAMPUS_DESCRIPTION)); ?></td>
+		    </tr>
+
+		    <tr>
+		      <td style="width:100%;" colspan="2">
+				<?php print("<label for=\"texte\"><textarea id=\"texte\" name=\"texte\" rows=\"4\" cols=\"35\">$texte</textarea></label>"); ?>
+		      </td>
+		    </tr>
+
+		  <?php
+		  // intitulé non renseigné
+		  if ( $error AND !strlen($url) )
+		  	print("
+			    <tr>
+				<td style=\"width:100%;\" colspan=\"2\">
+				<span style=\"color:#FF0000;\">". $msg->read($CAMPUS_ERRURL) ."</span>
+				</td>
+			    </tr>
+				");
+		  ?>
+
+  		    <tr style="background-color:#eeeeee;">
+		      <td style="width:100%;" colspan="2"><?php print($msg->read($CAMPUS_URL)); ?></td>
+		    </tr>
+
+		    <tr>
+		      <td style="width:100%;" colspan="2">
+				<?php print("<label for=\"url\"><input type=\"text\" id=\"url\" name=\"url\" size=\"50\" value=\"$url\" /></label>"); ?>
+		      </td>
+		    </tr>
+
+  		    <tr style="background-color:#eeeeee;">
+		      <td style="width:100%;" colspan="2"><?php print($msg->read($CAMPUS_LANG)); ?></td>
+		    </tr>
+
+		    <tr>
+		      <td style="width:100%;" colspan="2">
+				<label for="mylang">
+				<select id="mylang" name="mylang">
+				<?php
+					// recherche des images
+					$myDir = @opendir("images/spip/langues");
+
+					// lecture du répertoire
+					while ( $entry = readdir($myDir) ) {
+						switch ( extension($entry) ) {
+							case "png" :	// seul le format PNG est accepté
+								if ( $mylang == $entry )
+									print("<option selected=\"selected\" value=\"$entry\">$entry</option>");
+								else
+									print("<option value=\"$entry\">$entry</option>");
+								break;
+
+							default :
+								break;
+							}
+				              }
+
+					closedir($myDir);
+				?>
+				</select>
+				</label>
+		      </td>
+		    </tr>
+
+		    <tr style="background-color:#eeeeee;">
+			<td style="width:100%;" colspan="2"><?php print($msg->read($CAMPUS_LICENSE)); ?></td>
+		    </tr>
+
+		    <tr>
+			<td style="width:100%;" colspan="2">
+				<label for="license">
+				<select id="license" name="license">
+					<option value="0">&nbsp;</option>
+					<?php
+						// recherche du type de licence
+						$query  = "select _IDlicense, _titre, _texte from resource_license ";
+						$query .= "where _visible = 'O' AND _lang = '".$_SESSION["lang"]."' ";
+						$query .= "order by _IDlicense";
+
+						$result = mysql_query($query, $mysql_link);
+						$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : "" ;
+
+						while ( $row ) {
+							printf("<option value=\"$row[0]\" %s>$row[1] - $row[2]</option>", $row[0] == $license ? "selected=\"selected\"" : "");
+
+							$row = remove_magic_quotes(mysql_fetch_row($result));
+							}
+					?>
+				</select>
+				</label>
+			</td>
+		    </tr>
+
+		  </table>
+
+		  </td>
+	     <td style="width:10%;">&nbsp;</td>
+	   </tr>
+	  </table>
+
+	<hr style="width:80%; text-align:center;" />
+
+         <table class="width100">
+           <tr>
+              <td style="width:10%;" class="valign-middle align-center">
+              	<?php print("<input type=\"image\" src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/valid.gif\" name=\"valid\" alt=\"".$msg->read($CAMPUS_INPUTOK)."\" />"); ?>
+              </td>
+              <td class="valign-middle">
+              	<?php print($IDlink ? $msg->read($CAMPUS_LINKUPDATE) : $msg->read($CAMPUS_LINKINSERT)); ?>
+              </td>
+           </tr>
+
+           <tr>
+              <td class="valign-middle align-center">
+              	<?php print("<a href=\"index.php?item=9&amp;IDparent=$IDparent&amp;IDmat=$IDmat&amp;cmde=link\">"); ?>
+              	<?php print("<img src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/cancel.gif\" title=\"\" alt=\"".$msg->read($CAMPUS_INPUTCANCEL)."\" />"); ?></a>
+              </td>
+              <td class="valign-middle">
+              	<?php print($msg->read($CAMPUS_BACK)); ?>
+              </td>
+           </tr>
+         </table>
+
+	</form>
+
+</div>

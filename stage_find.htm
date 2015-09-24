@@ -1,0 +1,261 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2002-2007 by Dominique Laporte(C-E-D@wanadoo.fr)
+   Copyright (c) 2006 by FG (persofg@gmail.com)
+   Copyright (c) 2006 by Nordine Zetoutou (nordine.zetoutou@educagri.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : stage_find.htm
+ *		projet   : la page des résultats de la recherche
+ *
+ *		version  : 1.0
+ *		auteur   : laporte
+ *		creation : 10/11/02
+ *		modif    : 20/06/05 par FG
+ *                     migration -> PHP5
+ * 		           17/07/06 - Nordine Zetoutou
+ * 	                 migration des balises HTML en XHTML 1.0 strict
+ */
+
+
+$IDclass   = ( @$_POST["IDclass"] )
+	? (int) $_POST["IDclass"]
+	: (int) @$_GET["IDclass"] ;
+$IDeleve   = ( @$_POST["IDeleve"] )
+	? (int) $_POST["IDeleve"]
+	: (int) @$_GET["IDeleve"] ;
+$secteur   = ( @$_POST["secteur"] )
+	? (int) $_POST["secteur"]
+	: (int) @$_GET["secteur"] ;
+
+$societe   = ( @$_POST["societe"] )
+	? addslashes(trim($_POST["societe"]))
+	: @$_GET["societe"] ;
+$activite  = ( @$_POST["activite"] )
+	? addslashes(trim($_POST["activite"]))
+	: @$_GET["activite"] ;
+$ville     = ( @$_POST["ville"] )
+	? addslashes(trim($_POST["ville"]))
+	: @$_GET["ville"] ;
+$directeur = ( @$_POST["directeur"] )
+	? addslashes(trim($_POST["directeur"]))
+	: @$_GET["directeur"] ;
+$cp        = ( @$_POST["cp"] )
+	? @$_POST["cp"]
+	: @$_GET["cp"] ;
+$loge      = ( @$_POST["loge"] )
+	? @$_POST["loge"]
+	: @$_GET["loge"] ;
+$nourri    = ( @$_POST["nourri"] )
+	? @$_POST["nourri"]
+	: @$_GET["nourri"] ;
+$idclass   = ( @$_POST["idclass"] )
+	? @$_POST["idclass"]
+	: @$_GET["idclass"] ;
+
+$IDcat1    = ( @$_POST["IDcat1"] )
+	? (int) $_POST["IDcat1"]
+	: (int) @$_GET["IDcat1"] ;
+$IDcat2    = ( @$_POST["IDcat2"] )
+	? (int) $_POST["IDcat2"]
+	: (int) @$_GET["IDcat2"] ;
+$IDcat3    = ( @$_POST["IDcat3"] )
+	? (int) $_POST["IDcat3"]
+	: (int) @$_GET["IDcat3"] ;
+
+$skpage    = ( @$_GET["skpage"] )		// n° de la page affichée
+	? (int) $_GET["skpage"]
+	: 1 ;
+$skshow    = ( @$_GET["skshow"] )		// n° du flash info
+	? (int) $_GET["skshow"]
+	: 1 ;
+?>
+
+
+	<?php
+		// filtre de saisie
+		if ( strlen($cp) == 1 )
+			$cp = "0" . $cp;
+
+		// chaîne de paramètres
+		$param  = "secteur=$secteur&societe=$societe&activite=$activite&directeur=$directeur&ville=$ville&cp=$cp&";
+		$param .= "IDcat1=$IDcat1&IDcat2=$IDcat2&IDcat3=$IDcat3";
+		
+		// construction de la requête
+		$Query  = "select distinctrow ";
+		$Query .= "stage_lieu._IDlieu, stage_lieu._societe, stage_lieu._activite, stage_lieu._secteur, stage_lieu._nourri, stage_lieu._loge, stage_lieu._ville, stage_lieu._cp ";
+		$Query .= "from stage_lieu ";
+		$Query .= ( $idclass ) ? ", stage_ok " : "" ;
+		$Query .= ( $IDcat1 ) ? ", prod_pa " : "" ;
+		$Query .= ( $IDcat2 ) ? ", prod_pv " : "" ;
+		$Query .= ( $IDcat3 ) ? ", prod_atcomp " : "" ;
+		$Query .= ( getAccess() == 2 ) ? "where stage_lieu._visible like '%' " : "where stage_lieu._visible = 'O' " ;
+		$Query .= ( $secteur ) ? "AND stage_lieu._secteur = '$secteur' " : "" ;
+		$Query .= ( strlen($societe) ) ? "AND stage_lieu._societe like '%$societe%' " : "" ;
+		$Query .= ( strlen($activite) ) ? "AND stage_lieu._activite like '%$activite%' " : "" ;
+		$Query .= ( strlen($directeur) ) ? "AND stage_lieu._directeur like '%$directeur%' " : "" ;
+		$Query .= ( strlen($ville) ) ? "AND stage_lieu._ville like '$ville%' " : "" ;
+		$Query .= ( strlen($cp) ) ? "AND stage_lieu._cp like '$cp%' " : "" ;
+		$Query .= ( $idclass ) ? "AND stage_lieu._IDlieu = stage_ok._IDlieu AND stage_ok._IDclasse = '$idclass' " : "" ;
+		$Query .= ( $IDcat1 ) ? "AND stage_lieu._IDlieu = prod_pa._IDlieu AND prod_pa._IDcat = '$IDcat1' " : "" ;
+		$Query .= ( $IDcat2 ) ? "AND stage_lieu._IDlieu = prod_pv._IDlieu AND prod_pv._IDcat = '$IDcat2' " : "" ;
+		$Query .= ( $IDcat3 ) ? "AND stage_lieu._IDlieu = prod_atcomp._IDlieu AND prod_atcomp._IDcat = '$IDcat3' " : "" ;
+		$Query .= "order by stage_lieu._societe asc";
+// vérif : mineur, fille, classe...
+
+		// lecture de la base de données
+		$result = mysql_query($Query, $mysql_link);
+		$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+					
+		$nbelem = ( $result ) ? mysql_numrows($result) : 0 ;
+	?>
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($STAGE_RESULTS)); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+
+            <p style="margin-top: 0px; margin-bottom: 10px;"><?php print($msg->read($STAGE_FOUND)." $nbelem"); ?></p>
+            
+            <table class="width100">
+              <tr>
+                <td class="valign-middle">
+                	<?php
+                		$texte = ( $IDeleve )
+                			? "<img src=\"".$_SESSION["ROOTDIR"]."/images/plus.gif\" title=\"\" alt=\"\" /> ". $msg->read($STAGE_ATTRIB)
+                			: "" ;
+                			
+                		print("$texte");
+                	?>
+                </td>
+                <td class="valign-middle align-right">
+			<?php print($msg->read($STAGE_NEXTPREV)); ?>
+                </td>
+              </tr>
+            </table>
+            
+            <table class="width100">
+              <tr style="background-color:#c0c0c0;">
+                <td class="align-center" style="width:34%;" colspan="2"><?php print($msg->read($STAGE_COMPANY)); ?></td>
+                <td class="align-center" style="width:30%;"><?php print($msg->read($STAGE_CITY)); ?></td>
+                <td class="align-center" style="width:30%;"><?php print($msg->read($STAGE_ACTIVITY)); ?></td>
+                <td class="align-center" style="width:6%;"><?php print($msg->read($STAGE_NL)); ?></td>
+              </tr>
+              
+            <?php
+			$page = $nbelem;
+			$show = 1;
+
+			if ( $nbelem ) {
+				$page  = ( $page % $MAXPAGE )
+					? (int) ($page / $MAXPAGE) + 1
+					: (int) ($page / $MAXPAGE) ;
+
+				$show  = ( $page % $MAXSHOW )
+					? (int) ($page / $MAXSHOW) + 1
+					: (int) ($page / $MAXSHOW) ;
+
+				// initialisation
+				$i     = 1;
+				$first = 1 + (($skpage - 1) * $MAXPAGE);
+				
+				// se positionne sur la page ad hoc
+				mysql_data_seek($result, $first - 1);
+				$row = remove_magic_quotes(mysql_fetch_row($result));
+
+            		// affichage de la recherche
+				while ( $row AND $i <= $MAXPAGE ) {
+					$bgcol = ( $i++ % 2 ) ? "menu" : "item" ;
+
+					// liens par rubriques
+					$icone = ( $IDeleve )
+						? "<a href=\"index.php?item=$item&amp;cmde=visit&amp;IDclass=$IDclass&amp;IDeleve=$IDeleve&amp;IDreturn=$row[0]\"><img src=\"".$_SESSION["ROOTDIR"]."/images/plus.gif\" title=\"\" alt=\"\" /></a>"
+						: "<img src=\"".$_SESSION["ROOTDIR"]."/images/stages/$row[3].gif\" title=\"\" alt=\"\" />" ;
+
+					$lien  = myurlencode("index.php?item=$item&cmde=visu&IDlieu=$row[0]&secteur=$row[3]&submit=find");
+						
+					$logo  = "";
+					$logo .= ( $row[4] == "O" ) ? "<img src=\"".$_SESSION["ROOTDIR"]."/images/stages/repas.gif\" title=\"\" alt=\"\" />" : "" ;
+					$logo .= ( $row[5] == "O" ) ? "<img src=\"".$_SESSION["ROOTDIR"]."/images/stages/home.gif\" title=\"\" alt=\"\" />" : "" ;
+
+					print("
+						<tr class=\"$bgcol\">
+       					  <td style=\"width:1%;\">$icone</td>
+          			    		  <td style=\"width:33%;\"><a href=\"$lien\">$row[1]</a></td>
+			       		  <td style=\"width:30%;\" class=\"align-center\">$row[6] ($row[7])</td>
+			       		  <td style=\"width:30%;\" class=\"align-center\">$row[2]</td>
+						  <td style=\"width:6%;\"  class=\"align-center\">$logo</td>
+	       				</tr>
+	       			       ");
+              
+					$row = remove_magic_quotes(mysql_fetch_row($result));
+					}
+				}
+            ?>
+            </table>
+
+		<?php
+		// bouton précédent
+		$where = $skshow - 1;
+		if ( $skshow == 1 )
+			$prev = "";
+		else {
+			$skpg = 1 + (($skshow - 2) * $MAXSHOW);
+			$prev = "[<a href=\"".myurlencode("index.php?item=$item&cmde=$cmde&skpage=$skpg&skshow=$where&IDclass=$IDclass&IDeleve=$IDeleve&$param")."\">". $msg->read($STAGE_PREV) ."</a>]";
+			}
+
+		// liens directs sur n° de page
+		$start = 1 + (($skshow - 1) * $MAXSHOW);
+		$end   = $skshow * $MAXSHOW;
+
+		$choix = ( $skpage == $start )
+			? "<img src=\"".$_SESSION["ROOTDIR"]."/images/nav_left.gif\" title=\"«\" alt=\"«\" /><strong>$start</strong><img src=\"".$_SESSION["ROOTDIR"]."/images/nav_right.gif\" title=\"»\" alt=\"»\" />"
+			: "<a href=\"".myurlencode("index.php?item=$item&cmde=$cmde&skpage=$start&skshow=$skshow&IDclass=$IDclass&IDeleve=$IDeleve&$param")."\">$start</a>" ;
+
+		for ($j = $start + 1; $j <= $end AND $j <= $page; $j++)
+			$choix .= ( $skpage == $j )
+				? "|<img src=\"".$_SESSION["ROOTDIR"]."/images/nav_left.gif\" title=\"«\" alt=\"«\" /><strong>$j</strong><img src=\"".$_SESSION["ROOTDIR"]."/images/nav_right.gif\" title=\"»\" alt=\"»\" />"
+				: "|<a href=\"".myurlencode("index.php?item=$item&cmde=$cmde&skpage=$j&skshow=$skshow&IDclass=$IDclass&IDeleve=$IDeleve&$param")."\">$j</a>" ;
+
+		// bouton suivant
+		$where = $skshow + 1;
+		$next  = ( $skshow == $show )
+			? ""
+			: "[<a href=\"".myurlencode("index.php?item=$item&cmde=$cmde&skpage=$j&skshow=$where&IDclass=$IDclass&IDeleve=$IDeleve&$param")."\">". $msg->read($STAGE_NEXT) ."</a>]" ;
+		?>
+
+	      <hr/>
+			<?php if ( $nbelem ) print("<div style=\"text-align:center;\">$prev $choix $next</div>"); ?>
+	      <hr/>
+	      
+		<table class="width100">
+		  <tr>
+		    <td style="width:100%" class="valign-middle">
+		    	<?php
+				print("[<a href=\"index.php?item=$item&amp;cmde=search\">". $msg->read($STAGE_BACK2SEARCH) ."</a>]");
+		    	?>
+		    </td>
+		  </tr>
+		</table>
+
+</div>

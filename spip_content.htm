@@ -1,0 +1,286 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2003-2007 by Dominique Laporte(C-E-D@wanadoo.fr)
+   Copyright (c) 2006 by Didier Roy (miraceti@free.fr)
+   Copyright (c) 2006 by Nordine Zetoutou (nordine.zetoutou@educagri.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : spip_content.htm
+ *		projet   : le sommaire des articles d'une publication par internet
+ *
+ *		version  : 1.0
+ *		auteur   : laporte
+ *		creation : 6/09/03
+ *		modif    : 16/06/06 - par Didier Roy
+ *		           migration PHP5 
+ *		           17/07/06 - Nordine Zetoutou
+ * 	                 migration des balises HTML en XHTML 1.0 strict
+ */
+
+
+$IDinfos  = ( @$_POST["IDinfos"] )		// ID de l'information
+	? (int) $_POST["IDinfos"]
+	: (int) @$_GET["IDinfos"] ;	
+$IDflash = ( @$_POST["IDflash"] )		// ID du flash info
+	? (int) $_POST["IDflash"]
+	: (int) @$_GET["IDflash"] ;
+$IDitem   = ( @$_POST["IDitem"] )		// ID de l'article
+	? (int) $_POST["IDitem"]
+	: (int) @$_GET["IDitem"] ; 
+$submit   = ( @$_POST["submit"] )		// bouton de validation
+	? $_POST["submit"]
+	: @$_GET["submit"] ; 
+?>
+
+
+    <?php
+		require "msg/spip.php";
+
+		$msg  = new TMessage($_SESSION["ROOTDIR"]."/msg/".$_SESSION["lang"]."/spip.php");
+
+		// recherche du modérateur
+		$result = mysql_query("select _IDmod, _lock from flash where _IDflash = '$IDflash' limit 1", $mysql_link);
+		$IDmod  = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+         	// seul le big chef ou le modérateur de la publi peut accéder aux commandes administrateur
+		if ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $IDmod[0] )
+		    	// interprétation des commandes sur un lien
+			switch ( $submit ) {
+				case "lock" :		// interdiction en écriture des rédacteurs
+				case "unlock" :	// autorisation en écriture des rédacteurs
+					$Query  = "update flash ";
+					$Query .= ( $submit== "lock" ) ? "set _lock = 'O' " : "set _lock = 'N' " ;
+					$Query .= "where _IDflash = '$IDflash' " ;
+					$Query .= ( $_SESSION["CnxAdm"] == 255 )
+						? ""
+						: "AND _IDmod = '".$_SESSION["CnxID"]."'" ;
+
+					mysql_query($Query, $mysql_link);
+					break;
+
+				case "next" :		// lecture de la publi suivante
+				case "prev" :		// lecture de la publi précédente
+					$Query  = "select _IDflash from flash ";
+					$Query .= ( $submit == "next" ) ? "where _IDflash > '$IDflash' " : "where _IDflash < '$IDflash' " ;
+					$Query .= "AND _type = 'P' AND _visible = 'O' ";
+					$Query .= "AND _lang = '".$_SESSION["lang"]."' ";
+					$Query .= ( $submit == "next" ) ? "order by _IDflash asc" : "order by _IDflash desc" ;
+
+					$result = mysql_query($Query, $mysql_link);
+					$row    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+					if ( mysql_numrows($result) )
+						$IDflash = $row[0];
+					break;
+
+				case "visible" :		// rendre la rubrique/l'article invisible
+				case "invisible" :	// rendre la rubrique/l'article visible
+					$Query  = ( $IDitem ) ? "update flash_items " : "update flash_data " ;
+					$Query .= ( $submit== "visible" ) ? "set _visible = 'N' " : "set _visible = 'O' " ;
+					$Query .= ( $IDitem ) ? "where _IDitem = '$IDitem'" : "where _IDinfos = '$IDinfos'" ;
+
+					mysql_query($Query, $mysql_link);
+					break;
+
+				case "delete" :		// effacer la rubrique ou l'article
+					if ( $IDitem )
+						mysql_query("delete from flash_items where _IDitem = '$IDitem'", $mysql_link);
+					else
+						if ( mysql_query("delete from flash_data where _IDinfos = '$IDinfos'", $mysql_link) )
+							mysql_query("delete from flash_items where _IDinfos = '$IDinfos'", $mysql_link);
+					break;
+
+				default :
+					break;
+				}
+
+		// lecture des paramètres de la publi
+		$Query  = "select _lock, _title, _IDmod, _IDgrp from flash ";
+		$Query .= "where (_IDgrprd & ".pow(2, $_SESSION["CnxGrp"] - 1).") ";
+		$Query .= "AND _IDflash = '$IDflash' ";
+		$Query .= "limit 1";
+
+		$result = mysql_query($Query, $mysql_link);
+		$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+		// la ligne de commande sur les liens
+		$cmdStr = "index.php?item=$item&IDflash=$IDflash";
+
+		$left  = "[<a href=\"".myurlencode("$cmdStr&cmde=$cmde&submit=prev")."\">«</a>]";
+		$right = "[<a href=\"".myurlencode("$cmdStr&cmde=$cmde&submit=next")."\">»</a>]";
+
+		$link  = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $row[2] )
+			? ( ( $row[0] == "O" ) 
+				? "<a href=\"".myurlencode("$cmdStr&cmde=$cmde&submit=unlock")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/locked.gif\" title=\"". $msg->read($SPIP_INPUTON) ."\" alt=\"". $msg->read($SPIP_INPUTON) ."\" /></a>" 
+				: "<a href=\"".myurlencode("$cmdStr&cmde=$cmde&submit=lock")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/unlocked.gif\" title=\"". $msg->read($SPIP_INPUTOFF) ."\" alt=\"". $msg->read($SPIP_INPUTOFF) ."\" /></a>"
+				)
+			: "" ;
+
+		print("
+		      <div class=\"boxtitle\" style=\"padding:2px;\">
+		        <div style=\"float:left;\">
+				$left
+		        </div>
+
+		        <div style=\"float:right;\">
+				$right
+		        </div>
+
+		        <div style=\"text-align:center;\">
+				$link $row[1]
+		        </div>
+		      </div>");
+
+		print("<div class=\"boxcontent\" style=\"margin:1px; padding:2px; background-color:".$_SESSION["CfgBgcolor"].";\">"); 
+	?>
+
+		<table class="width100">
+		<?php
+			// lecture des rubriques de la publi
+			$Query  = "select _IDinfos, _title, _visible, _ID from flash_data ";
+			$Query .= "where _IDflash = '$IDflash' ";
+			$Query .= ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $row[2] OR $row[0] == "N" ) ? "" : "AND _visible = 'O' ";
+			$Query .= "order by _IDinfos asc";
+
+			$res    = mysql_query($Query, $mysql_link);
+			$info   = ( $res ) ? remove_magic_quotes(mysql_fetch_row($res)) : 0 ;
+
+			while ( $info ) {
+				// puce des articles
+				$puce   = ( $IDinfos == $info[0] )
+					? "<img src=\"".$_SESSION["ROOTDIR"]."/images/this.gif\" title=\"\" alt=\"*\" />" 
+					: "<img src=\"".$_SESSION["CfgPuce"]."\" title=\"\" alt=\"*\" />" ;
+
+				// validation d'une rubrique
+				$image  = ( $info[2] == 'O' ) ? "visible" : "invisible" ;
+
+				// message d'avertissement
+				$req    = ( $info[2] == 'O' )
+					? $msg->read($SPIP_INVISIBLE)
+					: $msg->read($SPIP_VISIBLE) ;
+
+				// validation des articles
+				$valid  = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $row[2] )
+					? "<a href=\"".myurlencode("$cmdStr&cmde=$cmde&IDinfos=$info[0]&submit=$image")."\" onclick=\"return confirmLink(this, '$req');\"><img src=\"".$_SESSION["ROOTDIR"]."/images/$image.gif\" title=\"\" alt=\"\" /></a>"
+					: "" ;
+
+				// suppression de la rubrique
+				$req    = $msg->read($SPIP_ERASE, $info[1]);
+				$req    = str_replace("'", "\'", $req);			// le script java n'aime pas les '
+				$delete = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $row[2] )
+					? "<a href=\"".myurlencode("$cmdStr&cmde=$cmde&IDinfos=$info[0]&submit=delete")."\" onclick=\"return confirmLink(this, '$req');\"><img src=\"".$_SESSION["ROOTDIR"]."/images/corb.gif\" title=\"$req\" alt=\"$req\" /></a>"
+					: "" ;
+
+				// mise à jour de la rubrique
+				$update = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $row[2] OR ($_SESSION["CnxID"] == $info[3] AND $row[0] == "N") )
+					? "<a href=\"".myurlencode("$cmdStr&cmde=post&IDinfos=$info[0]&submit=Modifier")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/stats/post.gif\" title=\"\" alt=\"\" /></a>"
+					: "" ;
+
+				print("
+					<tr>
+					  <td class=\"align-left\" style=\"background-color:#eeeeee;\">
+						$puce <a href=\"".myurlencode("$cmdStr&cmde=$cmde&IDinfos=$info[0]")."\">$info[1]</a>$valid$delete$update
+					  </td>
+					</tr>
+					");
+
+				// lecture des articles des rubriques
+				$Query  = "select _IDitem, _title, _visible from flash_items ";
+				$Query .= "where _IDinfos = '$info[0]' ";
+				$Query .= ( $row[0] == "O" )
+					? (( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $row[2] )
+						? ""
+						: "AND _visible = 'O' ")
+					: "" ;
+				$Query .= "order by _IDitem asc";
+
+				$myres  = mysql_query($Query, $mysql_link);
+				$item   = ( $myres ) ? remove_magic_quotes(mysql_fetch_row($myres)) : 0 ;
+
+				print("
+					<tr>
+					  <td class=\"align-left\">
+
+
+
+						<ul style=\"margin: 0px 0px 0px 0px;\">");
+
+				while ( $item ) {
+					// validation des articles
+					$image  = ( $item[2] == 'O' ) ? "visible" : "invisible" ;
+					$req    = ( $item[2] == 'O' ) ? $msg->read($SPIP_NOSHOWITEM) : $msg->read($SPIP_SHOWITEM) ;
+					$valid  = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $row[2] )
+						? "<a href=\"".myurlencode("$cmdStr&cmde=$cmde&IDinfos=$info[0]&IDitem=$item[0]&submit=$image")."\" onclick=\"return confirmLink(this, '$req');\"><img src=\"".$_SESSION["ROOTDIR"]."/images/$image.gif\" title=\"$req\" alt=\"$req\" /></a>"
+						: (
+							// en mode mise à jour de rubrique
+							// on informe les rédacteurs de la validité de leurs articles
+							( $row[0] == "N" )
+								? (( $item[2] == "N" )
+									? "<img src=\"".$_SESSION["ROOTDIR"]."/images/invisible.gif\" title=\"".$msg->read($SPIP_NOSHOW)."\" alt=\"".$msg->read($SPIP_NOSHOW)."\" />"
+									: "<img src=\"".$_SESSION["ROOTDIR"]."/images/visible.gif\" title=\"".$msg->read($SPIP_SHOW)."\" alt=\"".$msg->read($SPIP_SHOW)."\" />"
+									)
+								: "" 
+							);
+
+					// suppression de l'article
+					$req    = $msg->read($SPIP_DELITEM);
+					$delete = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $row[2] )
+						? "<a href=\"".myurlencode("$cmdStr&cmde=$cmde&IDitem=$item[0]&submit=delete")."\" onclick=\"return confirmLink(this, '$req');\"><img src=\"".$_SESSION["ROOTDIR"]."/images/corb.gif\" title=\"$req\" alt=\"$req\" /></a>"
+						: "" ;
+
+					// mise à jour de l'article
+					$update = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $row[2] OR ($_SESSION["CnxID"] == $info[3] AND $row[0] == "N") )
+						? "<a href=\"".myurlencode("$cmdStr&cmde=post&IDinfos=$info[0]&IDitem=$item[0]&submit=Modifier")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/stats/post.gif\" title=\"\" alt=\"\" /></a>"
+						: "" ;
+
+					print("
+						<li class=\"menu\">
+						  <span class=\"x-small\">
+							<a href=\"".myurlencode("$cmdStr&cmde=$cmde&IDinfos=$info[0]#item$info[0].$item[0]")."\">$item[1]</a>$valid$delete$update
+						  </span>
+						</li>
+						");
+
+					$item = remove_magic_quotes(mysql_fetch_row($myres));
+					}
+
+   	 			print("
+						</ul>
+					  </td>
+					</tr>
+					");
+
+				$info = remove_magic_quotes(mysql_fetch_row($res));
+				}
+
+   	 		if ( $row[0] == "N" AND ($row[3] & pow(2, $_SESSION["CnxGrp"] - 1)) )
+   	 			print("
+					<tr>
+					  <td class=\"x-small align-center\">
+						<hr/>
+						[<a href=\"".myurlencode("$cmdStr&cmde=post&submit=NewRub")."\">". $msg->read($SPIP_ADDTOPIC) ."</a>]
+					  </td>
+					</tr>
+					");
+		?>
+		</table>
+
+	</div>
+

@@ -1,0 +1,72 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2002-2007 by Dominique Laporte(C-E-D@wanadoo.fr)
+   Copyright (c) 2006 by Nordine Zetoutou (nordine.zetoutou@educagri.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : page_bottom.htm
+ *		projet   : le bandeau du bas avec les coordonnées de l'établissement
+ *
+ *		version  : 1.0
+ *		auteur   : laporte
+ *		creation : 20/10/02
+ *		modif    : 17/07/06 - Nordine Zetoutou
+ * 	                 migration des balises HTML en XHTML 1.0 strict
+ */
+?>
+
+
+<?php
+	require_once "msg/page.php";
+
+	$msg    = new TMessage($_SESSION["ROOTDIR"]."/msg/".$_SESSION["lang"]."/page.php");
+
+	$style  =  ( strlen($_SESSION["CfgTdcolor"]) )
+		? "style=\"background-color:#".$_SESSION["CfgTdcolor"]."\""
+		: "" ;
+
+	print("<br /><footer style=\"background-color: #F5F5F5; padding: 5px\" class=\"noprint\"><div class=\"align-center\">");
+
+	$file   = $_SESSION["ROOTDIR"]."/download/logos/".$_SESSION["CfgIdent"]."/logo02.jpg";
+
+	$footer = $_SESSION["CfgAdr"];
+	$footer .= ( strlen($_SESSION["CfgTel"]) ) ? " - <img src=\"".$_SESSION["ROOTDIR"]."/images/tel.gif\" title=\"\" alt=\"\" /> ".$_SESSION["CfgTel"] : "" ;
+	$footer .= ( strlen($_SESSION["CfgFax"]) ) ? " - <img src=\"".$_SESSION["ROOTDIR"]."/images/fax.gif\" title=\"\" alt=\"\" /> ".$_SESSION["CfgFax"] : "" ;
+	$footer .= "<br/>";
+
+	if ( $_SESSION["CfgWeb"] ) {
+		$href    = ( strstr($_SESSION["CfgWeb"], "http://") != "" )
+			? $_SESSION["CfgWeb"]
+			: "http://".$_SESSION["CfgWeb"] ;
+
+		$footer .= "<img src=\"".$_SESSION["ROOTDIR"]."/images/url.png\" title=\"\" alt=\"\" /> <a href=\"$href\" onclick=\"window.open(this.href,'_blank');return false;\">".$_SESSION["CfgWeb"]."</a>";
+		}
+
+	if ( $_SESSION["CfgWeb"] AND $_SESSION["CfgEmail"] )
+		$footer .= " - ";
+
+	if ( strlen($_SESSION["CfgEmail"]) )
+		$footer .= "<img src=\"".$_SESSION["ROOTDIR"]."/images/email.gif\" title=\"\" alt=\"\" /> <a href=\"mailto:".$_SESSION["CfgEmail"]."\">".$_SESSION["CfgEmail"]."</a>";
+
+	if ( strlen($_SESSION["CfgAdmin"]) )
+		$footer .= "<br/>". $msg->read($PAGE_WEBMASTER) . " <a href=\"mailto:".$_SESSION["CfgAdmin"]."\">".$_SESSION["CfgAdmin"]."</a>";
+
+	print("$footer</div></footer>");
+?>

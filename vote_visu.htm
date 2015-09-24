@@ -1,0 +1,93 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2005-2007 by Dominique Laporte(C-E-D@wanadoo.fr)
+   Copyright (c) 2006 by Nordine Zetoutou (nordine.zetoutou@educagri.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : vote_visu.htm
+ *		projet   : la page des sondages du campus virtuel
+ *
+ *		version  : 1.1
+ *		auteur   : laporte
+ *		creation :  9/06/05
+ *		modif    : 17/07/06 - par Nordine Zetoutou
+ * 	                 migration des balises HTML en XHTML 1.0 strict
+ */
+
+
+$IDmat  = ( @$_POST["IDmat"] )			// ID de la matière
+	? (int) $_POST["IDmat"]
+	: (int) @$_GET["IDmat"] ;
+$IDdata = ( strlen(@$_GET["IDdata"]) )		// ID du e-groupe ou du e-campus (0 : général)
+	? (int) $_GET["IDdata"]
+	: (int) @$_SESSION["egroup"] ;
+?>
+
+
+<?php
+	// recherche d'un sondage
+	$Query  = "select _IDpoll from sondage_data ";
+	$Query .= "where  _IDdata = '$IDdata' AND _lang = '".$_SESSION["lang"]."' ";
+	$Query .= ( $_SESSION["CnxAdm"] == 255 ) ? "" : "AND (_IDgrpwr & ".pow(2, $_SESSION["CnxGrp"] - 1).") ";
+	$Query .= "order by _IDpoll desc";
+
+	$result = mysql_query($Query, $mysql_link);
+	$row    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+	$IDpoll = $row[0];
+
+	// le sondage est trouvé, on l'affiche
+	if ( $IDpoll )
+		require "vote.htm";
+	else {
+		// recherche d'un sondage
+		$Query  = "select _IDmod from campus_data ";
+		$Query .= "where _IDmat = '".abs($IDdata)."' AND _lang = '".$_SESSION["lang"]."' ";
+		$Query .= "limit 1";
+
+		$result = mysql_query($Query, $mysql_link);
+		$row    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+		$texte  = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $row[0] )
+			? $msg->read($VOTE_CREATE, "index.php?item=$item&amp;cmde=new&amp;IDdata=$IDdata")
+			: $msg->read($VOTE_PREV, "index.php?item=$item&amp;IDmat=$IDmat") ;
+//			: $msg->read($VOTE_PREV, "index.php?item=$item&amp;IDres=$IDres&amp;IDmat=$IDmat") ;
+
+		print("
+				<div class=\"maintitle\" style=\"background-image: url('". $_SESSION["CfgHeader"] ."'); background-repeat: repeat;\">
+					<div style=\"text-align: center;\">". $msg->read($VOTE_LIST) ."</div>
+				</div>
+
+				<div class=\"maincontent\">
+
+					<table class=\"width100\">
+					  <tr>
+					    <td style=\"width:25%;\" class=\"align-right\"><img src=\"".$_SESSION["ROOTDIR"]."/images/warning.png\" title=\"\" alt=\"\" /></td>
+					    <td style=\"width:75%;\">
+						". $msg->read($VOTE_NOPOLL) ."<br/>$texte
+					    </td>
+					  </tr>
+					</table>
+
+			      </div>
+			");
+		}
+?>
+

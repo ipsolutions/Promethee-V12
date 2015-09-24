@@ -1,0 +1,679 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2003-2008 by Dominique Laporte(C-E-D@wanadoo.fr)
+   Copyright (c) 2006 by Hugues Lecocq(hugues.lecocq@laposte.net)
+   Copyright (c) 2006 by Nordine Zetoutou (nordine.zetoutou@educagri.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : postit.htm
+ *		projet   : page d'affichage des post-it reçus et envoyés
+ *
+ *		version  : 1.1
+ *		auteur   : laporte
+ *		creation : 18/10/03
+ *		modif    : 30/12/05 - par D. Laporte
+ *                     gestion des droits
+ *                     15/06/06 - par hugues lecocq
+ *                     migration PHP5 
+ *		           17/07/06 - Nordine Zetoutou
+ * 	                 migration des balises HTML en XHTML 1.0 strict
+ */
+
+
+$IDroot = ( @$_POST["IDroot"] ) 		// ID du répertoire racine
+	? (int) $_POST["IDroot"]
+	: (int) @$_GET["IDroot"] ;
+$IDdata = ( @$_POST["IDdata"] )		// ID du répertoire parent
+	? (int) $_POST["IDdata"]
+	: (int) @$_GET["IDdata"] ;
+$sort   = ( @$_POST["sort"] )     		// mode de tri d'affichage
+	? (int) $_POST["sort"]
+	: (int) @$_GET["sort"] ;
+$wait   = ( @$_POST["wait"] )    		// post-it en attente			
+	? (int) $_POST["wait"]
+	: (int) @$_GET["wait"] ;
+
+$skpage = ( @$_GET["skpage"] )		// n° de la page affichée
+	? (int) $_GET["skpage"]
+	: 1 ;
+$skshow = ( @$_GET["skshow"] )		// n° du flash info
+	? (int) $_GET["skshow"]
+	: 1 ;
+
+$submit = ( @$_POST["del_x"] )		// bouton de validation
+	? "del"
+	: (@$_POST["move_x"] ? "move" : @$_GET["submit"]) ;
+?>
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($POSTIT_POSTITLIST)); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+
+	<p style="margin-top:0px; margin-bottom:10px; text-align:justify;">
+	<?php print($msg->read($POSTIT_DISCLAIMER)); ?>
+	</p>
+
+	<?php
+		// lecture des droits
+		$Query  = "select _IDgrpwr, _IDgrprd from postit ";
+		$Query .= "where _IDcentre = '".$_SESSION["CnxCentre"]."'";
+
+		$result = mysql_query($Query, $mysql_link);
+		$auth   = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+		// vérification des autorisations
+		verifySessionAccess(0, $auth[1]);
+
+		// on efface le post-it
+		switch ( $submit ) {
+			case "rmdir" :
+				$query  = "delete from postit_data ";
+				$query .= "where _IDdata = '$IDdata' AND _ID = '".$_SESSION["CnxID"]."' ";
+				$query .= "limit 1";
+
+				mysql_query($query, $mysql_link);
+				break;
+
+			case "cancel" :
+				$IDpost = @$_GET["IDpost"];		// identifiant du message
+
+				$query  = "delete from postit_items ";
+				$query .= "where _IDpost = '$IDpost' AND _IDexp = '".$_SESSION["CnxID"]."' ";
+				$query .= "limit 1";
+
+				if ( mysql_query($query, $mysql_link) ) {
+					$res = mysql_query("select _IDpj, _ext from postit_pj where _IDpost = '$IDpost'", $mysql_link);
+					$row = ( $res ) ? mysql_fetch_row($res) : 0 ;
+
+					while ( $row ) {
+						if ( mysql_query("delete from postit_pj where _IDpj = '$row[0]' limit 1", $mysql_link) )
+							unlink("$DOWNLOAD/post-it/$row[0].$row[1]");
+
+						$row = mysql_fetch_row($res);
+						}
+					}
+				break;
+
+			case "del" :
+				$IDpost = @$_POST["IDpost"];		// identifiant des messages instantannés
+				$IDdst  = @$_POST["IDdst"];		// identifiant des destinataires
+
+				for ($i = 1; $i <= $MAXPAGE; $i++ )
+					if ( @$IDpost[$i] AND ($auth[1] & pow(2, $_SESSION["CnxGrp"] - 1)) ) {
+						$Query  = "update postit_items ";
+						$Query .= ( @$IDdst[$i] == $_SESSION["CnxID"] ) ? "set _deldst = 'O' " : "set _delexp = 'O' " ;
+						$Query .= "where _IDpost = '$IDpost[$i]' ";
+						$Query .= "limit 1";
+
+						if ( !mysql_query($Query, $mysql_link) )
+							mysql_error($mysql_link);
+						else {
+							mysql_query("delete from postit_items where _deldst = 'O' AND _delexp = 'O'", $mysql_link);
+
+							if ( mysql_affected_rows($mysql_link) ) {
+								$res = mysql_query("select _IDpj, _ext from postit_pj where _IDpost = '$IDpost[$i]'", $mysql_link);
+								$row = ( $res ) ? mysql_fetch_row($res) : 0 ;
+
+								while ( $row ) {
+									if ( mysql_query("delete from postit_pj where _IDpj = '$row[0]' limit 1", $mysql_link) )
+										unlink("$DOWNLOAD/post-it/$row[0].$row[1]");
+
+									$row = mysql_fetch_row($res);
+									}
+								}
+							}
+						}
+				break;
+
+			default :
+				$page_cmde = @$_POST["page_cmde"];
+				$ident     = trim(addslashes(@$_POST["ident"]));
+
+				// création répertoire
+				if ( $page_cmde == $msg->read($POSTIT_CREATE) AND $ident != "" ) {
+					$Query  = "insert into postit_data ";
+					$Query .= "values('', '$IDroot', '".$_SESSION["CnxID"]."', '".$_SESSION["CnxIP"]."', '".date("Y-m-d H:i:s")."', '$ident')";
+
+					if ( !mysql_query($Query, $mysql_link) )
+						sql_error($mysql_link);
+					}
+
+				// modification répertoire
+				if ( $page_cmde == $msg->read($POSTIT_MODIFICATION) AND $ident != "" ) {
+					$Query  = "update postit_data ";
+					$Query .= "set _ident = '$ident' ";
+					$Query .= "where _IDdata = '$IDdata' AND _ID = '".$_SESSION["CnxID"]."' ";
+					$Query .= "limit 1";
+
+					if ( !mysql_query($Query, $mysql_link) )
+						sql_error($mysql_link);
+					}
+
+				// déplacement dans répertoire
+				if ( $page_cmde == $msg->read($POSTIT_MOVE) ) {
+					$dir = @$_POST["newdir"];
+					$cbi = @$_POST["mvitem"];
+
+					for ($i = 0; $i < count($cbi); $i++) {
+						$Query  = "update postit_items ";
+						$Query .= "set _IDdata = '$dir' ";
+						$Query .= "where _IDpost = '$cbi[$i]' ";
+						$Query .= "limit 1";
+
+						if ( !mysql_query($Query, $mysql_link) )
+							sql_error($mysql_link);
+						}
+					}
+				break;
+			}
+
+		// autorisation d'envoyer un post-it
+		if ( $auth[0] & pow(2, $_SESSION["CnxGrp"] - 1) ) {
+			print("
+				<form id=\"post\" action=\"index.php\" method=\"post\">
+					<p class=\"hidden\"><input type=\"hidden\" name=\"item\"    value=\"$item\" /></p>
+					<p class=\"hidden\"><input type=\"hidden\" name=\"IDroot\"  value=\"$IDroot\" /></p>
+					<p class=\"hidden\"><input type=\"hidden\" name=\"IDdata\"  value=\"$IDdata\" /></p>
+					<p class=\"hidden\"><input type=\"hidden\" name=\"sort\"    value=\"$sort\" /></p>
+					<p class=\"hidden\"><input type=\"hidden\" name=\"skpage\"  value=\"$skpage\" /></p>
+					<p class=\"hidden\"><input type=\"hidden\" name=\"skshow\"  value=\"$skshow\" /></p>");
+
+			switch ( $submit ) {
+				case "move" :	// déplacement des messages
+					$cbi    = @$_POST["mvitem"];
+					for ($i = 0; $i < $MAXPAGE; $i++)
+						if ( @$cbi[$i] )
+							print("<p class=\"hidden\"><input type=\"hidden\" name=\"mvitem[]\" value=\"$cbi[$i]\" /></p>");
+
+					$query  = "select _IDdata, _ident from postit_data ";
+					$query .= "where _ID = '".$_SESSION["CnxID"]."' AND _IDparent = '$IDroot' ";
+					$query .= "order by _ident";
+
+					$result = mysql_query($query, $mysql_link);
+					$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+					$select  = "<label for=\"newdir\" >" ;
+					$select .= "<select id=\"newdir\" name=\"newdir\" style=\"font-size:9px;\" >" ;
+					$select .= ( $IDroot ) ? "<option value=\"0\">..</option>" : "<option value=\"0\">.</option>" ;
+
+					while ( $row ) {			
+						$select .= "<option value=\"$row[0]\">$row[1]</option>";
+
+						$row = remove_magic_quotes(mysql_fetch_row($result));
+						}				
+					$select .= "</select>";
+					$select .= "</label>";
+
+					$value   = $msg->read($POSTIT_MOVE);
+
+					print("
+						<p style=\"margin:0px;\">
+							<img src=\"".$_SESSION["ROOTDIR"]."/images/mvcopy.gif\" title=\"\" alt=\"\" />
+							". $msg->read($POSTIT_MOVINTO, $value) ." $select
+							<input type=\"submit\" name=\"page_cmde\" value=\"$value\" style=\"font-size: 9px;\" />
+							". $msg->read($POSTIT_OR) ."
+							<input type=\"submit\" value=\"".$msg->read($POSTIT_INPUTCANCEL)."\" name=\"page_cancel\" style=\"font-size: 9px;\" />
+						</p>");
+					break;
+
+				case "newdir" :	// création de dossier
+					$value = ( $IDdata ) ? $msg->read($POSTIT_MODIFICATION) : $msg->read($POSTIT_CREATE) ;
+
+					$result = mysql_query("select _ident from postit_data where _IDdata = '$IDdata' limit 1", $mysql_link);
+					$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+					print("
+						<p style=\"margin:0px;\">
+							<img src=\"".$_SESSION["ROOTDIR"]."/images/folder-add.gif\" title=\"\" alt=\"\" />
+							<label for=\"ident\"><input type=\"text\" id=\"ident\" name=\"ident\" size=\"30\" value=\"$row[0]\" style=\"font-size:9px;\" /></label>
+							<input type=\"submit\" value=\"$value\" name=\"page_cmde\" style=\"font-size:9px;\" />
+							". $msg->read($POSTIT_OR) ."
+							<input type=\"submit\" value=\"".$msg->read($POSTIT_INPUTCANCEL)."\" name=\"page_cancel\" style=\"font-size: 9px;\" />
+						</p>");
+					break;
+
+				default : 	// envoi d'un post-it
+					print("<p class=\"hidden\"><input type=\"hidden\" name=\"cmde\"    value=\"post\" /></p>");
+
+			         	$add = ( $IDroot )
+						? "<a href=\"".myurlencode("index.php?item=$item&IDroot=0&sort=$sort")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/folder-up.gif\" title=\"". $msg->read($POSTIT_PARENTDIR) ."\" alt=\"". $msg->read($POSTIT_PARENTDIR) ."\" /></a>"
+						: "<a href=\"".myurlencode("index.php?item=$item&IDroot=$IDroot&sort=$sort&submit=newdir")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/folder-new.gif\" title=\"".$msg->read($POSTIT_NEWDIR)."\" alt=\"".$msg->read($POSTIT_NEWDIR)."\" /></a>" ;
+
+					$result = mysql_query("select _ident from postit_data where _IDdata = '$IDroot' limit 1", $mysql_link);
+					$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+					$mydir  = ( $row ) ? $row[0] : $msg->read($POSTIT_ROOTDIR) ;
+
+					print("
+				            <table class=\"width100\">
+			      	        <tr>
+				                <td style=\"width:10%;\" class=\"valign-middle\">
+							<input type=\"image\" src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/post.gif\" name=\"new\" alt=\"".$msg->read($POSTIT_INPUTNEW)."\" />
+				                </td>
+				                <td style=\"width:40%;\" class=\"valign-middle\">
+							<label for=\"IDtype\">
+							<select id=\"IDtype\" name=\"IDtype\">");
+
+							$query  = "select _IDtype, _ident from postit_type ";
+							$query .= "where _visible = 'O' AND _lang = '".$_SESSION["lang"]."' ";
+							$query .= ( getAccess() == 2 ) ? "" : "AND _IDtype = '1' " ;
+							$query .= "order by _IDtype";
+
+							$result = mysql_query($query, $mysql_link);
+							$row = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+							while ( $row ) {
+								print("<option value=\"$row[0]\">$row[1]</option>");
+
+								$row = mysql_fetch_row($result);
+								}
+
+					print("
+							</select>
+							</label>
+						    </td>
+				                <td class=\"valign-middle align-right\">[$add $mydir ]</td>
+				              </tr>
+				            </table>");
+					break;
+				}	// endswitch
+
+			print("</form>");
+			}
+	?>
+
+	<form id="formulaire" action="index.php" method="post">
+	<?php
+		print("
+			<p class=\"hidden\"><input type=\"hidden\" name=\"item\"    value=\"$item\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"IDroot\"  value=\"$IDroot\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"sort\"    value=\"$sort\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"skpage\"  value=\"$skpage\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"skshow\"  value=\"$skshow\" /></p>");
+
+		// tri par colonne
+		$mysort = "<a href=\"#\" onclick=\"ts_resortTable(this); return false;\"><img src=\"".$_SESSION["ROOTDIR"]."/images/sort_none.gif\" title=\"\" alt=\"\" /></a>";
+	?>
+
+            <table class="width100">
+              <tr class="align-center" style="background-color:#c0c0c0;">
+                <td style="width:1%;"></td>
+                <td style="width:1%;">
+			<img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/document.gif" title="<?php print($msg->read($POSTIT_MSGPRIORITY)); ?>" alt="<?php print($msg->read($POSTIT_MSGPRIORITY)); ?>" />
+                </td>
+                <td style="width:38%;"><?php print("$mysort ". $msg->read($POSTIT_MESSAGE)); ?></td>
+                <td style="width:1%;">
+			<input type="image" src="images/corb.gif" name="del" title="<?php print($msg->read($POSTIT_ERASE)); ?>" alt="<?php print($msg->read($POSTIT_ERASE)); ?>" />
+                </td>
+                <td style="width:1%;">
+			<input type="image" src="images/mv.gif" name="move" title="<?php print($msg->read($POSTIT_MOVE)); ?>" alt="<?php print($msg->read($POSTIT_MOVE)); ?>" />
+                </td>
+                <td style="width:1%;">
+			<?php
+				// sélection des post-it reçus/expédiés
+				switch ( $sort ) {
+					case 1 : // visualisation des messages reçus
+						$toggle = 2;
+						$alt    = $msg->read($POSTIT_VISUALIZESND);
+						break;
+					case 2 : // visualisation des messages expédiés
+						$toggle = 3;
+						$alt    = $msg->read($POSTIT_VISUALIZE);
+						break;
+					default : // visualisation de tous les messages
+						$toggle = 1;
+						$alt    = $msg->read($POSTIT_VISUALIZERCV);
+						break;
+					}
+
+				print("
+					<a href=\"".myurlencode("index.php?item=$item&IDroot=$IDroot&sort=$toggle")."\">
+					<img src=\"".$_SESSION["ROOTDIR"]."/images/goto.gif\" title=\"$alt\" alt=\"$alt\" />
+					</a>");
+			?>
+                </td>
+                <td style="width:29%;"><?php print("$mysort ". $msg->read($POSTIT_EXPDST)); ?></td>
+                <td style="width:14%;"><?php print("$mysort ". $msg->read($POSTIT_MSGACK)); ?></td>
+                <td style="width:14%;"><?php print($msg->read($POSTIT_ATTACHED)); ?></td>
+              </tr>
+
+		<?php
+			require_once "include/calendar_tools.php";
+
+			// date du jour
+			$date = date("Y-m-d H:i:s");
+
+			// suppression automatique des post-it
+			// à condition que le message n'ai jamais été visualisé
+			// et que le délai max soit passé
+			$Query  = "delete from postit_items ";
+			$Query .= "where (_IDexp = '".$_SESSION["CnxID"]."' OR _IDdst = '".$_SESSION["CnxID"]."') ";
+			$Query .= "AND _date = _vu ";
+			$Query .= "AND _date < '". date("Y-m-d H:i:s", (time() - (2 * $MAXPOST))) ."'";
+
+			mysql_query($Query, $mysql_link);
+
+			//---- lecture des répertoires
+			$Query  = "select _IDdata, _IDparent, _ident from postit_data ";
+			$Query .= "where _ID = '".$_SESSION["CnxID"]."' AND _IDparent = '$IDroot' ";
+			$Query .= "order by _ident";
+
+			$result = mysql_query($Query, $mysql_link);
+			$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+			// initialisation
+			$i      = 1;
+
+			while ( $row ) {
+				$bgcol = ( $i++ % 2 ) ? "item" : "menu" ;
+
+				$return = mysql_query("select _IDpost from postit_items where _IDdata = '$row[0]'", $mysql_link);
+				$count  = ( $return ) ? mysql_affected_rows($mysql_link) : 0 ;
+				$msg->isPlural = (bool) ( $count > 1 );
+
+				$update = "<a href=\"".myurlencode("index.php?item=$item&IDroot=$IDroot&sort=$sort&IDdata=$row[0]&submit=newdir")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/stats/post.gif\" title=\"". $msg->read($POSTIT_MODIFICATION) ."\" alt=\"". $msg->read($POSTIT_MODIFICATION) ."\" /></a>";
+
+				$delete = ( $count == 0 )
+					? "<a href=\"".myurlencode("index.php?item=$item&IDroot=$IDroot&sort=$sort&IDdata=$row[0]&submit=rmdir")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/corb.gif\" title=\"". $msg->read($POSTIT_ERASE) ."\" alt=\"". $msg->read($POSTIT_ERASE) ."\" /></a>"
+					: "" ;
+
+				print("
+					<tr class=\"$bgcol\">
+          		    		    <td class=\"valign-top\"><img src=\"".$_SESSION["ROOTDIR"]."/images/folder-opened.gif\" alt=\"\" title=\"\" /></td>
+          		    		    <td></td>
+          		    		    <td>
+						<a href=\"".myurlencode("index.php?item=$item&IDroot=$row[0]&sort=$sort")."\">$row[2]</a>
+						<span class=\"x-small\">".$msg->read($POSTIT_NBMSG, strval($count))."</span>
+						$update $delete
+						</td>
+          		    		    <td colspan=\"6\"></td>
+	       		       </tr>
+	       		       ");
+
+				$row   = remove_magic_quotes(mysql_fetch_row($result));
+				}
+
+			//---- lecture des post-it
+			$Query  = "select _IDpost, _IDexp, _IDdst, _titre, _vu, _date, _ack, _priority from postit_items ";
+			$Query .= "where _IDdata = '$IDroot' ";
+			$Query .= "AND (_timer = _date OR _timer <= '$date') ";
+			switch ( $sort ) {
+				case 2 : // visualisation des messages reçus
+					$Query .= ( $SHOWPOST AND $wait )
+						? "AND _vu = _date "
+						: "AND (_IDdst = '".$_SESSION["CnxID"]."' AND _deldst = 'N') " ;
+					break;
+				case 3 : // visualisation des messages expédiés
+					$Query .= ( $SHOWPOST AND $wait )
+						? "AND _vu = _date "
+						: "AND (_IDexp = '".$_SESSION["CnxID"]."' AND _delexp = 'N') ";
+					break;
+				default : // visualisation de tous les messages
+					$Query .= ( $SHOWPOST AND $wait )
+						? "AND _vu = _date "
+						: "AND ((_IDexp = '".$_SESSION["CnxID"]."' AND _delexp = 'N') OR (_IDdst = '".$_SESSION["CnxID"]."' AND _deldst = 'N')) ";
+					break;
+				}
+			$Query .= "order by _IDpost desc";
+
+			$result = mysql_query($Query, $mysql_link);
+			$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+			// détermination du nombre de pages
+			$result = mysql_query($Query, $mysql_link);
+			$nbelem = ( $result ) ? mysql_affected_rows($mysql_link) : 0 ;
+
+			$page   = $nbelem;
+			$show   = 1;
+
+			if ( $nbelem ) {
+				$page  = ( $page % $MAXPAGE )
+					? (int) ($page / $MAXPAGE) + 1
+					: (int) ($page / $MAXPAGE) ;
+
+				$show  = ( $page % $MAXSHOW )
+					? (int) ($page / $MAXSHOW) + 1
+					: (int) ($page / $MAXSHOW) ;
+
+				// initialisation
+				$j     = 1;
+				$first = 1 + (($skpage - 1) * $MAXPAGE);
+				$pos   = $first;
+				
+				// se positionne sur la page ad hoc
+				mysql_data_seek($result, $first - 1);
+				$row = remove_magic_quotes(mysql_fetch_row($result));
+
+				while ( $row AND $j <= $MAXPAGE ) {
+					$bgcol = ( $i++ % 2 ) ? "item" : "menu" ;
+
+					// post-it reçu ou expédié
+					$img   = ( $row[1] == $_SESSION["CnxID"] ) ? "post-out.gif" : "post-in.gif" ;
+					$txt   = ( $row[1] == $_SESSION["CnxID"] )
+						? "<span style=\"color:#0000FF\">". $msg->read($POSTIT_SENT) ."</span>"
+						: "<span style=\"color:#FF0000\">". $msg->read($POSTIT_RECEIVED) ."</span>" ;
+
+					// qui est l'expéditeur ou le destinataire
+					switch ( $row[1] ) {
+						case '0' :
+							// message système automatique
+							$who = $msg->read($POSTIT_MSGSYS);
+							break;
+						default :
+							// les listes de diffusion
+							if ( $row[2] < 0 ) {
+								$list  = ( -$row[2] < 1000 )
+									? -$row[2]						// lidies automatiques (groupes)
+									: ( -$row[2] < 10000
+										? -($row[2] + 1000)			// lidies par classes
+										: ( -$row[2] < 100000
+											? -($row[2] + 10000) 		// lidies persos
+											: -($row[2] + 100000) ));	// lidies e-groupes
+
+								$query = ( -$row[2] < 1000 )
+									? "select _ident from user_group where _IDgrp = '$list' AND _lang = '".$_SESSION["lang"]."' limit 1"
+									: ( -$row[2] < 10000
+										? "select _ident from campus_classe where _IDclass = '$list' limit 1"
+										: ( -$row[2] < 100000
+											? "select _nom from postit_lidi where _IDlidi = '$list' limit 1"
+											: "select _ident from egroup_data where _IDdata = '$list' limit 1" ));
+
+								$res   = mysql_query($query, $mysql_link);
+								$list  = ( $res ) ? remove_magic_quotes(mysql_fetch_row($res)) : 0 ;
+
+								$who   = $msg->read($POSTIT_LIDI, $list[0]);
+								}
+							// les utilisateurs
+							else {
+								$id  = ( $SHOWPOST AND $wait )
+									? $row[2]
+									: (($row[1] == $_SESSION["CnxID"] ) ? $row[2] : $row[1]) ;
+
+								$who = getUserName($id);
+								}
+							break;
+						}
+
+					// message visualisé ?
+					if ( $row[2] < 0 ) {
+						$vu  = "";
+						$saw = "files.gif";
+						}
+					else {
+						$vu  = ( $row[5] == $row[4] ) ? $msg->read($POSTIT_SENT) : $msg->read($POSTIT_HIT, $row[4]) ;
+						$saw = ( $row[5] == $row[4] ) ? "invisible.gif" : "visible.gif" ;
+						}
+
+					// message acquitté ?
+					if ( $row[2] < 0 )
+						$ack = $msg->read($POSTIT_NA);
+					else
+						$ack = ( $row[5] == $row[6] ) ? $msg->read($POSTIT_NOTACK) : $row[6] ;
+
+					// PJ acquittée ?
+					$res    = mysql_query("select _IDpj, _ext from postit_pj where _IDpost = '$row[0]' order by _IDpj limit 1", $mysql_link);
+					$pj     = ( $res ) ? mysql_fetch_row($res) : 0 ;
+
+					$path   = ( $pj ) ? "$DOWNLOAD/post-it/$pj[0].$pj[1]" : "" ;
+
+					$query  = "select download._date ";
+					$query .= "from download, download_data ";
+					$query .= "where download._ID = '$row[2]' AND download_data._file = '$path' ";
+					$query .= "AND download._IDdown = download_data._IDdown ";
+					$query .= "order by download._IDdown asc ";
+					$query .= "limit 1";
+
+					$res    = mysql_query($query, $mysql_link);
+					$down   = ( $res ) ? mysql_fetch_row($res) : 0 ;
+
+					if ( $row[2] < 0 )
+						$apj = $msg->read($POSTIT_NA);
+					else
+						$apj = ( $pj )
+							? ($down ? $down[0] : $msg->read($POSTIT_NOTACK))
+							: "" ;
+
+					$ipj    = ( $pj ) ? "<img src=\"".$_SESSION["ROOTDIR"]."/images/pj.gif\" title=\"\" alt=\"\" />" : "" ;
+
+					// suppression du post-it
+					// pour les lidies
+					// ou à condition que le message ai été acquitté
+					// ou que le délai max soit passé
+					$isrm   = ( $row[2] < 0 OR $row[5] != $row[6] OR ($MAXPOST AND $row[5] <= date("Y-m-d H:i:s", (time() - $MAXPOST))) )
+						? ""
+						: "disabled=\"disabled\"" ;
+
+					// déplacement des messages
+					$ismv   = ( @$_POST["move_x"] AND @in_array($row[0], @$_POST["mvitem"]) )
+						? "checked=\"checked\""
+						: "" ;
+
+					// accès au post-it
+					$link   = ( $SHOWPOST AND $wait )
+						? "$row[3]"
+						: "<a href=\"".myurlencode("index.php?item=$item&IDpost=$row[0]&IDroot=$IDroot&sort=$sort&cmde=visu")."\">$row[3]</a>" ;
+
+					// priorité des messages
+					$list   = explode(",", $msg->read($POSTIT_PRIORITYLEVEL));
+					$idx    = (int) $row[7];
+
+					$icon   = ( $idx )
+						? "<img src=\"".$_SESSION["ROOTDIR"]."/images/p$idx.gif\" title=\"$list[$idx]\" alt=\"$list[$idx]\" />"
+						: "" ;
+
+					// annuler un envoi
+					$cancel = ( $row[5] == $row[4] )
+						? "<a href=\"".myurlencode("index.php?item=$item&IDpost=$row[0]&IDroot=$IDroot&sort=$sort&submit=cancel")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/callback.gif\" title=\"". $msg->read($POSTIT_CANCELMSG) ."\" alt=\"". $msg->read($POSTIT_CANCELMSG) ."\" /></a>"
+						: "" ;
+
+					print("
+						<tr class=\"$bgcol\">
+	          		    		    <td class=\"valign-top\">
+							<img src=\"".$_SESSION["ROOTDIR"]."/images/$saw\" alt=\"\" title=\"\" />
+							<p class=\"hidden\"><input type=\"hidden\" name=\"IDdst[$j]\" value=\"$row[2]\" /></p>
+			       	          </td>
+	          		    		    <td class=\"valign-top\">$icon</td>
+	          		    		    <td>
+	          		    		  	$link $ipj $cancel<br/>
+	          		    		  	<span class=\"x-small\">".$msg->read($POSTIT_SEND, date2longfmt($row[5]))."</span>
+			       	          </td>
+	          		    		    <td class=\"valign-top\">
+							<label for=\"IDpost_$row[0]\"><input type=\"checkbox\" id=\"IDpost_$row[0]\" name=\"IDpost[$j]\" value=\"$row[0]\" $isrm /></label>
+			       	          </td>
+	          		    		    <td class=\"valign-top\">
+							<label for=\"mvitem_$row[0]\"><input type=\"checkbox\" id=\"mvitem_$row[0]\" name=\"mvitem[$j]\" value=\"$row[0]\" $ismv /></label>
+			       	          </td>
+	       			          <td class=\"align-center valign-middle\">
+							<img src=\"".$_SESSION["ROOTDIR"]."/images/$img\" alt=\"\" title=\"\" /><br/>
+	          		    		  	<span class=\"x-small\">$txt</span>
+	          		    		    </td>
+			       	          <td class=\"align-center\">
+			       	         	$who<br/>
+			       	         	<span class=\"x-small\">$vu</span>
+			       	          </td>
+				                 <td class=\"align-center\"><span class=\"x-small\">". str_replace(" ", "<br/>", $ack) ."&nbsp;</span></td>
+				                 <td class=\"align-center\"><span class=\"x-small\">". str_replace(" ", "<br/>", $apj) ."&nbsp;</span></td>
+		       		       </tr>
+		       		       ");
+
+					$j++;
+					$row = remove_magic_quotes(mysql_fetch_row($result));
+					}
+				}
+		?>
+            </table>
+
+		</form>
+
+		<?php
+			// bouton précédent
+			$where = $skshow - 1;
+			if ( $skshow == 1 )
+				$prev = "";
+			else {
+				$skpg = 1 + (($skshow - 2) * $MAXSHOW);
+				$prev = "[<a href=\"".myurlencode("index.php?item=$item&IDroot=$IDroot&sort=$sort&skpage=$skpg&skshow=$where&wait=$wait")."\">".$msg->read($POSTIT_PREV)."</a>]";
+				}
+
+			// liens directs sur n° de page
+			$start = 1 + (($skshow - 1) * $MAXSHOW);
+			$end   = $skshow * $MAXSHOW;
+
+			$choix = ( $skpage == $start )
+				? "<img src=\"".$_SESSION["ROOTDIR"]."/images/nav_left.gif\" title=\"«\" alt=\"«\" /><strong>$start</strong><img src=\"".$_SESSION["ROOTDIR"]."/images/nav_right.gif\" title=\"»\" alt=\"»\" />"
+				: "<a href=\"".myurlencode("index.php?item=$item&IDroot=$IDroot&sort=$sort&skpage=$start&skshow=$skshow&wait=$wait")."\">$start</a>" ;
+
+			for ($j = $start + 1; $j <= $end AND $j <= $page; $j++)
+				$choix .= ( $skpage == $j )
+					? "|<img src=\"".$_SESSION["ROOTDIR"]."/images/nav_left.gif\" title=\"«\" alt=\"«\" /><strong>$j</strong><img src=\"".$_SESSION["ROOTDIR"]."/images/nav_right.gif\" title=\"»\" alt=\"»\" />"
+					: "|<a href=\"".myurlencode("index.php?item=$item&IDroot=$IDroot&sort=$sort&skpage=$j&skshow=$skshow&wait=$wait")."\">$j</a>" ;
+
+			// bouton suivant
+			$where = $skshow + 1;
+			$next  = ( $skshow == $show )
+				? ""
+				: "[<a href=\"".myurlencode("index.php?item=$item&IDroot=$IDroot&sort=$sort&skpage=$j&skshow=$where&wait=$wait")."\">".$msg->read($POSTIT_NEXT)."</a>]";
+		?>
+
+	      <hr/>
+			<?php if ( $nbelem ) print("<div style=\"text-align:center;\">$prev $choix $next</div>"); ?>
+		<hr/>
+
+		<!-- recherche d'un message dans les post-it -->
+		<table class="width100">
+		  <tr>
+			<td>
+			      <img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/search.gif" title="?" alt="?" />
+			      <?php print($msg->read($POSTIT_SEARCH, "index.php?item=91&amp;cmde=search&amp;rub=6")); ?>
+			</td>
+			<td class="align-right">
+			<?php
+				if ( $SHOWPOST )
+					print("[<a href=\"".myurlencode("index.php?item=$item&IDroot=$IDroot&sort=$sort&wait=1")."\">".$msg->read($POSTIT_WAITING)."</a>]");
+			?>
+			</td>
+		  </tr>
+		</table>
+</div>

@@ -1,0 +1,600 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2004-2007 by Dominique Laporte (C-E-D@wanadoo.fr)
+   Copyright (c) 2006 by Didier Roy (miraceti@free.fr)
+   Copyright (c) 2006 by Nordine Zetoutou (nordine.zetoutou@educagri.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : campus_upload.htm
+ *		projet   : la page de téléchargement des travaux
+ *
+ *		version  : 1.1
+ *		auteur   : laporte
+ *		creation : 20/03/04
+ *		modif    : 08/06/06 - par Didier Roy
+ *		           migration PHP5  
+ *		modif    : 17/07/06 - Nordine Zetoutou
+ * 	                 migration des balises HTML en XHTML 1.0 strict
+ */
+
+
+$IDsel  = ( strlen(@$_POST["IDsel"]) )			// ID de la matière
+	? (int) $_POST["IDsel"]
+	: (int) @$_GET["IDsel"] ;
+$IDmat  = ( strlen(@$_POST["IDmat"]) )			// ID de la matière/formation
+	? (int) $_POST["IDmat"]
+	: (int) @$_GET["IDmat"] ;
+$IDroot = ( @$_POST["IDroot"] )				// ID répertoire racine
+	? (int) $_POST["IDroot"]
+	: (int) @$_GET["IDroot"] ;
+$IDwork = ( strlen(@$_POST["IDwork"]) )			// ID du travail à télécharger
+	? (int) $_POST["IDwork"]
+	: (int) @$_GET["IDwork"] ;
+
+$centre = @$_POST["centre"];					// centres concernés
+$title  = addslashes(trim(@$_POST["title"]));		// intitulé du travail
+$texte  = addslashes(trim(@$_POST["texte"]));		// description du travail
+$_open  = ( @$_POST["_open"] )				// date et heure de début de téléchargement
+	? $_POST["_open"]
+	: date("d/m/Y H:i");
+$_close = @$_POST["_close"];					// date et heure de fin de téléchargement
+$start  = ( @$_POST["start"] )				// date et heure du dépôt du travail
+	? $_POST["start"]
+	: date("d/m/Y H:i");
+$end    = @$_POST["end"];					// date et heure de fin de dépôt
+$group  = @$_POST["group"];					// classes concernées
+$cbrd   = @$_POST["cbrd"];					// lecteurs autorisés
+
+$submit = ( @$_POST["submit"] )				// bouton de validation
+	? $_POST["submit"]
+	: @$_GET["submit"] ;
+?>
+
+
+<?php
+	//---------------------------------------------------------------------------
+	function showClass($centre, $IDsel, $IDitem, $group)
+	{
+	/*
+	 * fonction :	affichage des classes par centres
+	 */
+
+		require "globals.php";
+
+		$Query  = "select _IDcentre, _ident from config_centre ";
+		$Query .= "where _visible = 'O' AND _lang = '".$_SESSION["lang"]."' ";
+		$Query .= "order by _ident";
+
+		// affichage des centres
+		$result = mysql_query($Query, $mysql_link);
+		$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+		while ( $row ) {
+			print("
+				<fieldset style=\"width:80%; border:#cccccc solid 1px;\">
+				<legend>$row[1]</legend>");
+
+				print("<table class=\"width100\">");
+
+				$Query  = "select _IDclass, _ident from campus_classe ";
+				$Query .= "where _visible = 'O' AND _IDcentre = '$row[0]' ";
+				$Query .= "order by _ident";
+
+				// affichage des groupes
+				$return = mysql_query($Query, $mysql_link);
+				$grp    = ( $return ) ? remove_magic_quotes(mysql_fetch_row($return)) : 0 ;
+
+				$i = 0;
+				while ( $grp ) {
+					if ( $i++ % 2 == 0 )
+						print("<tr>");
+
+					if ( $IDitem )
+						$check = ( in_array($grp[0], explode(" ", $group)) ) ? "checked=\"checked\"" : "" ;
+					else
+						$check = ( $IDsel )
+							? (( $IDsel == $grp[0] ) ? "checked=\"checked\"" : "")
+							: "checked=\"checked\"" ;
+
+					print("
+						<td style=\"width:50%;\">
+							<label for=\"group_$grp[0]\"><input type=\"checkbox\" id=\"group_$grp[0]\" name=\"group[]\" value=\"$grp[0]\" $check /> $grp[1]</label>
+						</td>
+						");
+
+					if ( $i % 2 == 0 )
+						print("</tr>");
+
+					$grp = remove_magic_quotes(mysql_fetch_row($return));
+					}
+
+				if ( $i % 2 )
+					print("
+						  <td style=\"width:50%;\"></td>
+						</tr>
+						");
+
+				print("</table>");
+				print("</fieldset>");
+				
+				$row = remove_magic_quotes(mysql_fetch_row($result));
+			}
+	}
+	//---------------------------------------------------------------------------
+
+	// initialisation
+	$error  = 0;
+	$status = ( $IDwork )
+		? $msg->read($CAMPUS_WORKMODIFY)
+		: $msg->read($CAMPUS_WORKNEW) ;
+
+	// on sélectionne la matière pédagogique ou la formation des campus
+	if ( $IDmat < 0 ) {
+		$Query  = "select _ident, _IDmod from campus_classe ";
+		$Query .= "where _IDclass = abs($IDmat) ";
+		$Query .= "AND _visible = 'O' ";
+		$Query .= "limit 1";
+		}
+	else {
+		$Query  = "select _titre, _IDmod from campus_data ";
+		$Query .= "where _IDmat = '$IDmat' ";
+		$Query .= "AND _visible = 'O' AND _lang = '".$_SESSION["lang"]."' ";
+		$Query .= "limit 1";
+		}
+
+	$result = mysql_query($Query, $mysql_link);
+	$campus = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+     	// seuls le big chef, le modérateur ou un prof
+	// peuvent peuvent créer un travail
+     	if ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $campus[1] OR $_SESSION["CnxGrp"] == 2 )
+		switch ( $submit ) {
+			case "Valider" :
+			case "Update" :
+				$status = ( $submit == "Valider" )
+					? $msg->read($CAMPUS_INSERT) ." "
+					: $msg->read($CAMPUS_MODIFICATION) ." " ;
+
+				// transfert du fichier
+				$file   = @$_FILES["UploadedFile"]["tmp_name"];
+				$PJdesc = @$_POST["PJdesc"];
+
+				// pb de transfert
+				for ($i = 0; $i < count($file); $i++)
+					if ( $file[$i] AND !authfile(@$_FILES["UploadedFile"]["name"][$i]) )
+						$error = 4;
+					else
+		   		 		if ( $file[$i] AND @$_FILES["UploadedFile"]["size"][$i] == 0 )
+		    					$error = 2;
+						else
+			   		 		if ( $file[$i] AND @$_FILES["UploadedFile"]["name"][$i] == "" )
+								$error = 3;
+
+				// test d'erreur sur champs non renseignés
+				if ( $title == "" )
+					$error = 1;
+
+    				if ( !$error ) {
+					// initialisation des champs
+					$date   = date("Y-m-d H:i:00");
+
+					$d1     = ( $_open )  ? format2date($_open)  : $date ;
+					$d2     = ( $_close ) ? format2date($_close) : $d1 ;
+					$d3     = ( $start )  ? format2date($start)  : $date ;
+					$d4     = ( $end )    ? format2date($end)    : $d3 ;
+
+					// groupes autorisés
+					$grpid  = " ";
+					@sort($group);
+					for ( $i = 0; $i < count($group); $i++ )
+						$grpid .= ( @$group[$i] ) ? "$group[$i] " : "" ;
+
+					// droits des lecteurs
+					$grprd = 0;
+					for ($i = 0; $i < count($cbrd); $i++)
+						$grprd += ( @$cbrd[$i] ) ? $cbrd[$i] : 0 ;
+
+					// on insére une nouvelle ressource dans la base de données
+					if ( $submit == "Valider" ) {
+						$Query  = "insert into campus_download ";
+						$Query .= "values('', '".abs($IDmat)."', '$IDroot', '$date', '".$_SESSION["CnxID"]."', '$grpid', '$grprd', '".$_SESSION["CnxIP"]."', '$title', '$texte', '$d1', '$d2', '$d3', '$d4')";
+						}
+					// mise à jour
+					else {
+						$Query  = "update campus_download ";
+						$Query .= "set _titre = '$title', _texte = '$texte', _IDgrpwr = '$grpid', _IDgrprd = '$grprd', ";
+						$Query .= "_open = '$d1', _close = '$d2', _start = '$d3', _end = '$d4' ";
+						$Query .= "where _IDwork = '$IDwork' ";
+						$Query .= "limit 1";
+						}
+
+					if ( !mysql_query($Query, $mysql_link) ) {
+						$status .= "<img src=\"".$_SESSION["ROOTDIR"]."/images/bad.gif\" title=\"\" alt=\"\" />";
+						sql_error($mysql_link);
+						}
+					else {
+						$status .= "<img src=\"".$_SESSION["ROOTDIR"]."/images/ok.gif\" title=\"\" alt=\"\" />";
+
+						$idwork  = ( $IDwork ) ? $IDwork : mysql_insert_id() ;
+
+						// on transfére le fichier si pas d'erreur
+						for ($i = 0; $i < count($file); $i++) {
+							$filename = addslashes(stripaccent($_FILES["UploadedFile"]["name"][$i]));
+							$size     = $_FILES["UploadedFile"]["size"][$i];
+							$text     = addslashes(trim(@$PJdesc[$i]));
+
+							$text     = ( $text == "" ) ? $filename : $text ;
+
+							// on détermine le répertoire de stockage
+							$dest   = "$DOWNLOAD/campus/" . stripaccent($campus[0]);
+							if ( !is_dir($dest) )
+								mymkdir($dest, $CHMOD);
+
+							$dest   = "$DOWNLOAD/campus/". stripaccent($campus[0]) ."/$idwork";
+							if ( !is_dir($dest) )
+								if ( mymkdir($dest, $CHMOD) )
+									copy("$DOWNLOAD/campus/index.php", "$dest/index.php");
+
+							$dest   = stripaccent($dest . "/" . $_FILES["UploadedFile"]["name"][$i]);
+
+							// copie du fichier temporaire -> répertoire de stockage
+							if ( move_uploaded_file($file[$i], $dest) ) {
+								mychmod($dest, $CHMOD);
+
+								$Query  = "insert into campus_upload ";
+								$Query .= "values('', '$idwork', '$date', '".$_SESSION["CnxID"]."', '".$_SESSION["CnxIP"]."', '$filename', '$text', '$size', 'E', 'O')";
+
+								mysql_query($Query, $mysql_link);
+								}
+							}
+
+						// mise à jour des logs d'activité
+						if ( !mysql_query("update user_id set _res = _res + 1 where _ID = '".$_SESSION["CnxID"]."' limit 1", $mysql_link) )
+							sql_error($mysql_link);
+						}
+					}
+				else
+					$status .= "<img src=\"".$_SESSION["ROOTDIR"]."/images/bad.gif\" title=\"\" alt=\"\" /> <span style=\"color:FF0000\">". $msg->read($CAMPUS_NOFILE) ."</span>";
+				break;
+
+			case "delpj" :
+				$Query  = "select _file from campus_upload ";
+				$Query .= "where _IDupload = '".@$_GET["IDpj"]."' ";
+				$Query .= "limit 1";
+
+				$result = mysql_query($Query, $mysql_link);
+				$row    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+				// répertoire de stockage des travaux
+				$path   = "$DOWNLOAD/campus/" . stripaccent($campus[0]) . "/$IDwork/" . stripaccent($row[0]);
+
+				$Query  = "delete from campus_upload ";
+				$Query .= "where _IDupload = '".@$_GET["IDpj"]."' ";
+				$Query .= "limit 1";
+
+				if ( mysql_query($Query, $mysql_link) )
+					@unlink($path);
+				break;
+
+			default :
+				break;
+			}
+
+	$Query   = "select _titre, _texte, _open, _close, _start, _end, _ID, _IDgrpwr, _IDgrprd ";
+	$Query  .= "from campus_download where _IDwork = '$IDwork' ";
+	$Query  .= "limit 1";
+
+	$result  = mysql_query($Query, $mysql_link);
+	$row     = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+	// initialisation des champs de saisie
+	$title   = $row[0];
+	$texte   = $row[1];
+	$_open   = date2shortfmt($row[2]);
+	$_close  = date2shortfmt($row[3]);
+	$start   = date2shortfmt($row[4]);
+	$end     = date2shortfmt($row[5]);
+	$group   = $row[7];
+	$grprd   = $row[8];
+?>				
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($CAMPUS_FORMUPLOAD, $campus[0])); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+
+	<form id="formulaire" action="index.php" method="post" enctype="multipart/form-data">
+	<?php
+		print("
+			<p class=\"hidden\"><input type=\"hidden\" name=\"item\"   value=\"$item\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"cmde\"   value=\"upload\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"IDmat\"  value=\"$IDmat\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"IDsel\"  value=\"$IDsel\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"IDroot\" value=\"$IDroot\" /></p>
+			");
+
+		if ( $IDwork )
+			print("
+				<p class=\"hidden\"><input type=\"hidden\" name=\"IDwork\" value=\"$IDwork\" /></p>
+				<p class=\"hidden\"><input type=\"hidden\" name=\"submit\" value=\"Update\" /></p>
+				");
+		else
+			print("
+				<p class=\"hidden\"><input type=\"hidden\" name=\"submit\" value=\"Valider\" /></p>
+				");
+	?>
+
+		  <table class="width100">
+		    <tr>
+		      <td style="width:15%;" class="align-right"><?php print($msg->read($CAMPUS_STATUS)); ?></td>
+		      <td style="width:85%;" colspan="2"><?php print("$status"); ?></td>
+		    </tr>
+
+		    <tr>
+		      <td class="align-right"><?php print($msg->read($CAMPUS_AUTHOR)); ?></td>
+		      <td colspan="2"><?php print($_SESSION["CnxName"]); ?></td>
+		    </tr>
+		  </table>
+
+	<hr style="width:80%; text-align:center;" />
+
+	  <table class="width100">
+	   <tr>
+	     <td style="width:10%;">&nbsp;</td>
+	     <td style="width:80%;">
+
+		  <table class="width100">
+		  <?php
+		  // intitulé non renseigné
+		  if ( $error == 1 )
+		  	print("
+			    <tr>
+			      <td style=\"width:100%;\" colspan=\"2\">
+			        <span style=\"color:#FF0000;\">".$msg->read($CAMPUS_ERRIDENT)."</span>
+			      </td>
+			    </tr>
+				");
+		  ?>
+	    
+		    <tr style="background-color:#eeeeee;">
+		      <td style="width:100%;" colspan="2">
+			<?php print($msg->read($CAMPUS_UPLOADNAME)); ?>
+		      </td>
+		    </tr>
+	    
+		    <tr>
+		      <td style="width:100%;" colspan="2">
+			<?php print("<label for=\"title\"><input type=\"text\" id=\"title\" name=\"title\" size=\"40\" value=\"$title\" /></label>"); ?>
+		      </td>
+		    </tr>
+	    
+		    <tr style="background-color:#eeeeee;">
+		      <td style="width:100%;" colspan="2">
+			<?php print($msg->read($CAMPUS_DESCRIPTION)); ?>
+		      </td>
+		    </tr>
+	    
+		    <tr>
+		      <td style="width:100%;" colspan="2">
+		        <?php print("<label for=\"texte\"><textarea id=\"texte\" name=\"texte\" rows=\"4\" cols=\"35\">$texte</textarea></label>"); ?>
+		      </td>
+		    </tr>
+
+		<?php
+			switch ( $error ) {
+				case 2 :
+					$errmsg = $msg->read($CAMPUS_FILESIZE, strval($FILESIZE));
+					break;
+
+				case 3 :
+					$errmsg = $msg->read($CAMPUS_ERRFILE);
+					break;
+
+				case 4 :
+					$errmsg = $msg->read($CAMPUS_NOPERM);
+					break;
+
+				case 5 :
+					$errmsg = $msg->read($CAMPUS_EEXIST);
+					break;
+
+				default :
+					$errmsg = "";
+					break;
+				}
+
+			if ( $errmsg != "" )
+			  	print("
+				    <tr>
+				      <td style=\"width:100%;\" colspan=\"2\" class=\"align-justify\">
+				        <span style=\"color:#FF0000;\">". $msg->read($CAMPUS_WARNING, $errmsg) ."</span>
+		   		      </td>
+				    </tr>
+					");
+
+			// fichier à transférer
+		  	print("
+			    <tr style=\"background-color:#eeeeee;\">
+			      <td style=\"width:100%;\" colspan=\"2\">
+			        ". $msg->read($CAMPUS_CLICKHERE) ."
+			      </td>
+			    </tr>
+	    
+			    <tr>
+			      <td style=\"width:100%;\" colspan=\"2\">");
+
+				// lecture des PJ
+				$Query  = "select _IDupload, _file, _size, _text ";
+				$Query .= "from campus_upload ";
+				$Query .= "where _IDwork ='$IDwork' AND _type = 'E' ";
+				$Query .= "order by _IDupload";
+
+				$res = mysql_query($Query, $mysql_link);
+				$doc = ( $res ) ? remove_magic_quotes(mysql_fetch_row($res)) : 0 ;
+
+				if ( $doc )
+					while ( $doc ) {
+						// suppression la pièce jointe
+						$ext   = extension($doc[1]);
+
+						$req   = $msg->read($CAMPUS_DELATTACH);
+						$del   = ( $_SESSION["CnxAdm"] == 255 OR $row[4] == $_SESSION["CnxID"] )
+							? "<a href=\"".myurlencode("index.php?item=$item&cmde=$cmde&IDpj=$doc[0]&IDmat=$IDmat&IDwork=$IDwork&IDroot=$IDroot&submit=delpj")."\" onclick=\"return confirmLink(this, '$req');\">
+							   <img src=\"".$_SESSION["ROOTDIR"]."/images/corb.gif\" title=\"$req\" alt=\"$req\" />
+							   </a>"
+							: "" ;
+
+						print("<img src=\"".$_SESSION["ROOTDIR"]."/images/mime/$ext.gif\" title=\"$ext\" alt=\"$ext\" /> $doc[3] $del<br/>");
+
+						$doc   = remove_magic_quotes(mysql_fetch_row($res));
+						}
+
+			  	print("
+					<p class=\"hidden\"><input type=\"hidden\" name=\"MAX_FILE_SIZE\" value=\"$FILESIZE\" /></p>
+					<p style=\"margin-top:0px; margin-bottom:5px;\">
+						<input type=\"file\" name=\"UploadedFile[]\" size=\"50\" style=\"font-size:9px;\" />
+						<span style=\"cursor: pointer;\" onclick=\"$('uploadpj')._display.toggle(); return false;\"><img src=\"".$_SESSION["ROOTDIR"]."/images/max.gif\" title=\"+\" alt=\"+\" /></span>
+					</p>
+
+					<label for=\"PJdesc_0\"><input type=\"text\" id=\"PJdesc_0\" name=\"PJdesc[]\" size=\"50\" /></label>
+					". $msg->read($CAMPUS_DESCRIPTION) ."
+
+					<div id=\"uploadpj\" style=\"display:none;\">
+					<p style=\"margin-top:5px; margin-bottom:5px;\">
+						<input type=\"file\" name=\"UploadedFile[]\" size=\"50\" style=\"font-size:9px;\" />
+					</p>
+
+					<label for=\"PJdesc_1\"><input type=\"text\" id=\"PJdesc_1\" name=\"PJdesc[]\" size=\"50\" /></label>
+					". $msg->read($CAMPUS_DESCRIPTION) ."
+
+					<p style=\"margin-top:5px; margin-bottom:5px;\">
+						<input type=\"file\" name=\"UploadedFile[]\" size=\"50\" style=\"font-size:9px;\" />
+					</p>
+
+					<label for=\"PJdesc_2\"><input type=\"text\" id=\"PJdesc_2\" name=\"PJdesc[]\" size=\"50\" /></label>
+					". $msg->read($CAMPUS_DESCRIPTION) ."
+					</div>
+			      </td>
+			    </tr>");
+		?>
+
+  		    <tr style="background-color:#eeeeee;">
+		      <td style="width:100%;" colspan="2">
+		        <?php print($msg->read($CAMPUS_UPLOADATE)); ?>
+		      </td>
+		    </tr>
+
+		    <tr>
+		      <td style="width:100%;" colspan="2">
+				<?php print("<label for=\"_open\"><input type=\"text\" id=\"_open\"  name=\"_open\"  size=\"18\" value=\"$_open\" /></label> ". $msg->read($CAMPUS_BEGINUPLOAD) ."<br/>"); ?>
+				<?php print("<label for=\"_close\"><input type=\"text\" id=\"_close\" name=\"_close\" size=\"18\" value=\"$_close\" /></label> ". $msg->read($CAMPUS_ENDUPLOAD) ."<br/>"); ?>
+		      </td>
+		    </tr>
+
+  		    <tr style="background-color:#eeeeee;">
+		      <td style="width:100%;" colspan="2">
+		        <?php print($msg->read($CAMPUS_FMTDATE)); ?>
+		      </td>
+		    </tr>
+
+		    <tr>
+		      <td style="width:100%;" colspan="2">
+				<?php print("<label for=\"start\"><input type=\"text\" id=\"start\" name=\"start\" size=\"18\" value=\"$start\" /></label> ". $msg->read($CAMPUS_BEGIN) ."<br/>"); ?>
+				<?php print("<label for=\"end\"><input type=\"text\" id=\"end\"   name=\"end\"   size=\"18\" value=\"$end\" /></label> ". $msg->read($CAMPUS_END) ."<br/>"); ?>
+		      </td>
+		    </tr>
+
+  		    <tr style="background-color:#eeeeee;">
+		      <td style="width:100%;" colspan="2">
+		        <?php print($msg->read($CAMPUS_TARGET)); ?>
+		      </td>
+		    </tr>
+
+		    <tr>
+		      <td style="width:100%;" colspan="2">
+			<?php
+				showClass($centre, $IDsel, $IDwork, $group);
+			 ?>
+		      </td>
+		    </tr>
+
+  		    <tr style="background-color:#eeeeee;">
+		      <td style="width:100%;" colspan="2">
+		        <?php print($msg->read($CAMPUS_AUTHREADING)); ?>
+		      </td>
+		    </tr>
+
+		    <tr>
+		      <td class="valign-top">
+	      		<?php
+					// recherche des groupes
+					$query  = "select _IDgrp, _ident from user_group ";
+					$query .= "where _visible = 'O' AND _lang = '".$_SESSION["lang"]."' ";
+					$query .= "order by _IDgrp asc";
+
+					$result = mysql_query($query, $mysql_link);
+					$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+					while ( $row ) {
+						$check = ( $grprd & pow(2, $row[0] - 1) ) ? "checked=\"checked\"" : "" ;
+
+	             			print("<label for=\"cbrd_$row[0]\"><input type=\"checkbox\" id=\"cbrd_$row[0]\" name=\"cbrd[]\" value=\"". pow(2, $row[0] - 1) ."\" $check /> $row[1]</label><br/>");
+
+						$row   = remove_magic_quotes(mysql_fetch_row($result));
+						}
+             		?>
+		      </td>
+		    </tr>
+		  </table>
+
+		  </td>
+	     <td style="width:10%;"></td>
+	   </tr>
+	  </table>
+
+	<hr style="width:80%; text-align:center;" />
+
+         <table class="width100">
+           <tr>
+              <td style="width:10%;" class="valign-middle align-center">
+              	<?php print("<input type=\"image\" src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/valid.gif\" name=\"valid\" alt=\"".$msg->read($CAMPUS_INPUTOK)."\" />"); ?>
+              </td>
+              <td class="valign-middle">
+              	<?php print($IDwork ? $msg->read($CAMPUS_UPDTACTION) : $msg->read($CAMPUS_ADDACTION)); ?>
+              </td>
+           </tr>
+           <tr>
+              <td class="valign-middle align-center">
+              	<?php print("<a href=\"".myurlencode("index.php?item=$item&IDmat=$IDmat&IDsel=$IDsel&IDroot=$IDroot&cmde=work")."\">"); ?>
+              	<?php print("<img src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/cancel.gif\" title=\"\" alt=\"".$msg->read($CAMPUS_INPUTCANCEL)."\" />"); ?></a>
+              </td>
+              <td class="valign-middle">
+              	<?php print($msg->read($CAMPUS_BACK)); ?>
+              </td>
+           </tr>
+         </table>
+
+	</form>
+
+</div>

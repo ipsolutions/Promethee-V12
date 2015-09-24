@@ -1,0 +1,746 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2002-2008 by Dominique Laporte(C-E-D@wanadoo.fr)
+   Copyright (c) 2006 by Nordine Zetoutou (nordine.zetoutou@educagri.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : user_visu.htm
+ *		projet   : page de visualisation des comptes des utilisateurs
+ *
+ *		version  : 2.1
+ *		auteur   : laporte
+ *		creation : 20/10/02
+ *		modif    : 16/08/05 - par D. Laporte
+ *                     affichage par centre
+ *		           17/07/06 - Nordine Zetoutou
+ * 	                 migration des balises HTML en XHTML 1.0 strict
+ */
+
+
+$IDcentre = ( strlen(@$_POST["IDcentre"]) )	// ID du centre
+	? (int) $_POST["IDcentre"]
+	: (int) (strlen(@$_GET["IDcentre"]) ? $_GET["IDcentre"] : $_SESSION["CnxCentre"]) ;
+$IDalpha  = ( @$_GET["IDalpha"] )			// ordre alphabétique
+	? $_GET["IDalpha"]
+	: "A" ;
+$visu     = ( @$_POST["visu"] )			// type de visualisation
+	? (int) $_POST["visu"]
+	: (int) @$_GET["visu"] ;
+$IDsel    = ( $visu )					// catégorie
+	? (int) $_SESSION["CnxClass"]
+	: (int) (strlen(@$_POST["IDsel"]) ? $_POST["IDsel"]: @$_GET["IDsel"] );
+$sort     = ( strlen(@$_POST["sort"]) )		// filtre affichage sur les dates de connexion
+	? $_POST["sort"]
+	: @$_GET["sort"] ;
+$sortadm  = ( strlen(@$_POST["sortadm"]) )	// filtre affichage sur les droits utilisateur
+	? $_POST["sortadm"]
+	: @$_GET["sortadm"] ;
+$mylang   = ( strlen(@$_POST["mylang"]) )		// filtre affichage sur la langue
+	? $_POST["mylang"]
+	: @$_GET["mylang"] ;
+
+$ID       = ( @$_POST["ID"] )				// ID de l'utilisateur
+	? (int) $_POST["ID"]
+	: (int) @$_GET["ID"] ;
+$authuser = ( @$_POST["authuser"] )			// validation des comptes utilisateurs
+	? (int) $_POST["authuser"]
+	: (int) @$_GET["authuser"] ;
+
+$skpage   = ( @$_GET["skpage"] )			// n° de la page affichée
+	? (int) $_GET["skpage"]
+	: 1 ;
+$skshow   = ( @$_GET["skshow"] )			// n° du flash info
+	? (int) $_GET["skshow"]
+	: 1 ;
+
+$submit   = ( @$_POST["valid"] )			// bouton de validation
+	? $_POST["valid"]
+	: @$_GET["submit"] ;
+?>
+
+
+<?php
+	// initialisation lien
+	$href = "IDcentre=$IDcentre&IDsel=$IDsel&authuser=$authuser&visu=$visu&sort=$sort&sortadm=$sortadm&mylang=$mylang";
+
+	//---------------------------------------------------------------------------
+	function sendMail($id)
+	{
+	/*
+	 * fonction :	envoie de l'avertissement d'une ouverture de compte
+	 * in :		$id : ID du compte utilisateur
+	 */
+
+		require "globals.php";
+
+		require "msg/user.php";
+		require_once "include/TMessage.php";
+
+		$msg  = new TMessage($_SESSION["ROOTDIR"]."/msg/".$_SESSION["lang"]."/user.php");
+
+		// lecture du mél de l'utilisateur
+		$query  = "select _email from user_id ";
+		$query .= "where _ID = '$id' ";
+		$query .= "limit 1";
+
+		$result = mysql_query($query, $mysql_link);
+		$row    = mysql_fetch_row($result);
+
+		if ( $row ) {
+			require_once "lib/libmail.php";
+
+			// entête du message
+			$subject = $msg->read($USER_SENDPWD);
+
+			// entête du corps du message
+			$texte   = $msg->read($USER_WELCOME, $_SESSION["CfgWeb"]) ."\n";
+
+			// pied de page du corps du message
+			$texte  .= "\n--\n";
+			$texte  .= $_SESSION["CfgAdr"] . "\n";
+			$texte  .= $_SESSION["CfgWeb"];
+
+			$mymail  = new Mail(); // create the mail
+
+			$mymail->From("noreply@".$_SESSION["CfgWeb"]);
+			$mymail->Subject(stripslashes($subject));	
+			$mymail->Body(stripslashes($texte), $CHARSET);	// set the body
+
+			$mymail->Send();	// send the mail
+			}
+	}
+	//---------------------------------------------------------------------------
+
+	// lecture des différents droits utilisateur
+	$query  = "select _adm, _ident from user_admin ";
+	$query .= "where _adm > 0 AND _adm != 255 ";
+	$query .= "AND _lang = '".$_SESSION["lang"]."' ";
+	$query .= "order by _adm";
+
+	$result = mysql_query($query, $mysql_link);
+	$count  = ( $result ) ? mysql_affected_rows($mysql_link) : 0 ;
+
+	for ($i = 0; $i < $count; $i++) {
+		$row = remove_magic_quotes(mysql_fetch_row($result));
+
+		$adm[0][$i] = $row[0];
+		$adm[1][$i] = $row[1];
+		}
+
+	// seul l'administrateur peut efectuer ces commandes
+     	if ( strlen($submit) AND $_SESSION["CnxAdm"] == 255 ) {
+		// modification des droits d'un utilisateur
+     	     	if ( $submit == $msg->read($USER_VALIDATION) ) {
+			$my_id = @$_POST["my_id"];
+			$date  = date("Y-m-d H:i:s");
+
+			for ($i = 0; $i < count($my_id); $i++)
+				if ( @$my_id[$i] ) {
+					$chk   = @$_POST["chk_$my_id[$i]"];
+     					$admin = 0;
+
+					for ($j = 0; $j < count($chk); $j++)
+						$admin += (int) @$chk[$j];
+
+					// compte utilisateur
+          				$Query  = "update user_id ";
+     	     				$Query .= "set _adm = '$admin', _visible = 'O' ";
+					$Query .= ( $authuser AND $admin ) ? ", _create = '$date' " : "" ;
+      		    		$Query .= "where _ID = '$my_id[$i]' AND _adm != 255 ";
+	          			$Query .= "limit 1";
+
+					if ( mysql_query($Query, $mysql_link) )
+						// envoi email d'ouverture de compte
+						if ( $authuser AND $admin )
+							sendMail($my_id[$i]);
+					}
+			};
+
+		// suppression d'un compte
+		if ( $submit == "delete" ) {
+			// compte utilisateur
+          		$Query  = "delete from user_id ";
+    			$Query .= "where _ID = '$ID' ";
+          		$Query .= "limit 1";
+
+			if ( !mysql_query($Query, $mysql_link) )
+				sql_error($mysql_link);
+			}
+		}
+?>
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($USER_ROLE, $_SESSION["CfgIdent"])); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+
+	<form id="formulaire" action="index.php" method="post">
+	<?php
+		print("
+			<p class=\"hidden\"><input type=\"hidden\" name=\"item\"     value=\"$item\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"IDalpha\"  value=\"$IDalpha\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"authuser\" value=\"$authuser\" /></p>");
+	?>
+
+		<table class="width100">
+		  <tr>
+			<td style="width:50%;" class="align-right">
+			    	<?php print($msg->read($USER_CHOOSECENTER)); ?> 
+			</td>
+			<td style="width:50%;">
+				<label for="IDcentre">
+			  	<select id="IDcentre" name="IDcentre" onchange="document.forms.formulaire.submit()">
+					<option value="0"><?php print($msg->read($USER_ALLCENTER)); ?></option>
+				<?php
+					// lecture des centres constitutifs
+					$query  = "select _IDcentre, _ident from config_centre ";
+					$query .= "where _visible = 'O' AND _lang = '".$_SESSION["lang"]."' ";
+					$query .= "order by _IDcentre";
+
+					$result = mysql_query($query, $mysql_link);
+					$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+					while ( $row ) {			
+						printf("<option value=\"$row[0]\" %s>$row[1]</option>", ($IDcentre == $row[0]) ? "selected=\"selected\"" : "");
+
+						$row = remove_magic_quotes(mysql_fetch_row($result));
+						}				
+				?>
+				</select> <img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/home.gif" title="" alt="" />
+				</label>
+			</td>
+		  </tr>
+		</table>
+
+		<hr style="width:80%;" />
+
+		<div style="text-align:center;">
+		<?php
+			// accès par ordre alphabétique
+	            $alpha = "BCDEFGHIJKLMNOPQRSTUVWXYZ";
+
+			$index = ( $IDalpha == "A" ) ? "<span style=\"text-decoration:underline;\">A</span>" : "A" ;
+	            print("<a href=\"".myurlencode("index.php?item=$item&IDalpha=A&$href")."\">$index</a>");
+
+	            for ($i = 0; $i < 25; $i++) {
+				$index = ( $IDalpha == $alpha[$i] ) ? "<span style=\"text-decoration:underline;\">$alpha[$i]</span>" : "$alpha[$i]" ;
+		            print("<strong>.</strong><a href=\"".myurlencode("index.php?item=$item&IDalpha=$alpha[$i]&$href")."\">$index</a>");
+				}
+		?>
+
+		<hr style="width:80%;" />
+
+		<label for="IDsel">
+		  	<select id="IDsel" name="IDsel" onchange="document.forms.formulaire.submit()">
+			<?php
+				// intialisation
+				$Query  = "select _IDgrp, _ident, _delay from user_group ";
+				$Query .= "where _visible = 'O' AND _lang = '".$_SESSION["lang"]."' ";
+
+				// l'administrateur doit pouvoir visualiser les élèves
+				$Query .= ( $_SESSION["CnxAdm"] == 255 ) ? "" : "AND _IDcat > 1 " ;
+
+				$Query .= "order by _IDgrp";
+
+				// affichage des catégories
+				$result = mysql_query($Query, $mysql_link);
+				$cat    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+				printf("<option value=\"0\" %s>".$msg->read($USER_ALLCATEGORY)."</option>", $IDsel ? "" : "selected=\"selected\"");
+
+				$i = 0;
+				while ( $cat ) {
+					$groupe[0][$i]   = $cat[0];	// ID
+					$groupe[1][$i]   = $cat[1];	// intitulé
+					$groupe[2][$i++] = $cat[2];	// durée de validité
+
+					printf("<option value=\"$cat[0]\" %s>$cat[1]</option>", ($IDsel == $cat[0]) ? "selected=\"selected\"" : "");
+
+					$cat = remove_magic_quotes(mysql_fetch_row($result));
+					}	// endwhile catégorie
+			  ?>
+			</select>
+		</label>
+
+		<label for="sort">
+		  	<select id="sort" name="sort" onchange="document.forms.formulaire.submit()">
+			<?php
+				print("<option value=\"0\">". $msg->read($USER_SELECTDATE) ."</option>");
+
+				// affichage filtrer
+				$list = explode("|", $msg->read($USER_FILTER));
+
+				for ($i = 1; $i < count($list); $i++) {
+					$select = ( $sort == $i ) ? "selected=\"selected\"" : "" ;
+
+					print("<option value=\"$i\" $select >".$list[$i]."</option>");
+					}
+			?>
+			</select>
+		</label>
+
+		<label for="sortadm">
+		  	<select id="sortadm" name="sortadm" onchange="document.forms.formulaire.submit()">
+			<?php
+				print("<option value=\"0\">". $msg->read($USER_SELECTRIGHT) ."</option>");
+
+				$query  = "select _adm, _ident from user_admin ";
+				$query .= "where _lang = '".$_SESSION["lang"]."' ";
+				$query .= "order by _adm";
+
+				$result = mysql_query($query, $mysql_link);
+				$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+				while ( $row ) {
+					$value  = $row[0] + 1;
+					$select = ( $sortadm == $value ) ? "selected=\"selected\"" : "" ;
+
+					print("<option value=\"$value\" $select >$row[1]</option>");
+
+					$row    = remove_magic_quotes(mysql_fetch_row($result));
+					}
+			?>
+			</select>
+		</label>
+
+		<label for="mylang">
+		  	<select id="mylang" name="mylang" onchange="document.forms.formulaire.submit()">
+			<?php
+				print("<option value=\"0\">". $msg->read($USER_SELECTLANG) ."</option>");
+
+				$list    = Array();
+
+				// ouverture du répertoire des langues
+				$myDir   = @opendir("msg");
+
+				// lecture des répertoires
+				while ( $entry = @readdir($myDir) )
+					if ( is_dir("msg/$entry") AND strlen($entry) == 2 AND $entry != ".." )
+						array_push($list, $entry);
+
+				// fermeture du répertoire
+				@closedir($myDir);
+
+				for ($i = 0; $i < count($list); $i++) {
+					$select = ( $mylang == $list[$i] ) ? "selected=\"selected\"" : "" ;
+
+					print("<option value=\"$list[$i]\" $select >".$list[$i]."</option>");
+					}
+			?>
+			</select>
+		</label>
+
+		<?php
+			// il faut les droits admin
+			if ( $_SESSION["CnxAdm"] == 255 )
+				print("
+					<a href=\"".myurlencode("index.php?item=$item&cmde=new&$href")."\">
+					<img src=\"".$_SESSION["ROOTDIR"]."/images/addrecord.gif\" title=\"". $msg->read($USER_ADDRECORD) ."\" alt=\"". $msg->read($USER_ADDRECORD) ."\" />
+					</a>
+					<a href=\"".$_SESSION["ROOTDIR"]."/user_csv.php?sid=".$_SESSION["sessID"]."&amp;IDsel=$IDsel\" onclick=\"window.open(this.href, '_blank'); return false;\">
+					<img src=\"".$_SESSION["ROOTDIR"]."/images/post-in.gif\" title=\"". $msg->read($USER_CSV) ."\" alt=\"". $msg->read($USER_CSV) ."\" />
+					</a>");
+		?>
+		</div>
+
+		<hr style="width:80%;" />
+
+	<?php
+		// on classe par ordre alphabétique
+		$Query  = "select distinctrow ";
+		$Query .= "user_id._ID, user_id._cnx, user_id._title, user_id._fonction, user_id._sexe, user_id._adm, user_id._IDgrp, user_id._lastcnx, user_id._create, user_id._delay, user_id._lang, user_id._email, user_id._IDcentre, user_id._tel, ";
+		$Query .= "user_group._IDcat ";
+		$Query .= "from user_id, user_group " ;
+		$Query .= "where user_id._IDgrp = user_group._IDgrp ";
+		$Query .= ( $authuser ) ? "AND user_id._create = '0000-00-00 00:00:00' " : "AND user_id._create != '0000-00-00 00:00:00' " ;
+		$Query .= ( $IDsel ) ? "AND user_id._IDgrp = '$IDsel' " : "" ;
+		$Query .= ( $IDcentre ) ? "AND (user_id._IDcentre = '$IDcentre' OR user_id._centre & pow(2, $IDcentre - 1)) " : "" ;
+		$Query .= ( strlen($IDalpha) ) ? "AND user_id._name >= '$IDalpha' " : "" ;
+		$Query .= ( $mylang ) ? "AND user_id._lang = '$mylang' " : "" ;
+		$Query .= ( $_SESSION["CnxAdm"] == 255 ) ? "" : "AND user_id._adm " ;
+		$Query .= ( $_SESSION["CnxAdm"] == 255 ) ? "AND user_group._IDcat " : "AND user_group._IDcat > 1 " ;
+		$Query .= "AND user_id._visible = 'O' " ;
+
+		switch ( $sortadm ) {
+			case 1 :
+				$Query .= "AND user_id._adm = '0' ";
+				break;
+			case 2 :
+				$Query .= "AND user_id._adm = '1' ";
+				break;
+			case 3 :
+				$Query .= "AND (user_id._adm & 2) AND user_id._adm != '255' ";
+				break;
+			case 5 :
+				$Query .= "AND (user_id._adm & 4) AND user_id._adm != '255' ";
+				break;
+			case 9 :
+				$Query .= "AND (user_id._adm & 8) AND user_id._adm != '255' ";
+				break;
+			case 256 :
+				$Query .= "AND user_id._adm = '255' ";
+				break;
+			default :
+				break;
+			}
+
+		switch ( $sort ) {
+			case 1 :
+				$Query .= "order by user_id._ID, user_id._name";
+				break;
+			case 2 :
+				$Query .= "order by user_id._ID desc, user_id._name";
+				break;
+			case 3 :
+				$Query .= "order by user_id._lastcnx desc, user_id._name";
+				break;
+			case 4 :
+				$Query .= "order by user_id._lastcnx, user_id._name";
+				break;
+			default :
+				$Query .= "order by user_id._name";
+				break;
+			}
+
+		$result = mysql_query($Query, $mysql_link);
+
+		// détermination du nombre de pages
+		$page   = ( $result ) ? mysql_affected_rows($mysql_link) : 0 ;
+		$show   = 1;
+
+		if ( $result AND $page ) {
+			print("<table class=\"width100\">");
+
+			$page  = ( $page % $MAXPAGE )
+				? (int) ($page / $MAXPAGE) + 1
+				: (int) ($page / $MAXPAGE) ;
+
+			$show  = ( $page % $MAXSHOW )
+				? (int) ($page / $MAXSHOW) + 1
+				: (int) ($page / $MAXSHOW) ;
+
+			// initialisation
+			$i     = 1;
+			$first = 1 + (($skpage - 1) * $MAXPAGE);
+				
+			// se positionne sur la page ad hoc
+			@mysql_data_seek($result, $first - 1);
+			$row   = remove_magic_quotes(mysql_fetch_row($result));
+
+			while ( $row AND $i <= $MAXPAGE ) {
+				$idpict = $row[0];
+
+				// on vérifie si la photo existe
+				$path  = ( getAccess($row[6]) == 1 )
+					? "$DOWNLOAD/photo/eleves"
+					: "$DOWNLOAD/photo" ;
+				$photo = ( file_exists("$path/$idpict.gif") ) 
+					? "<img src=\"$path/$idpict.gif\" title=\"\" alt=\"\" />" 
+					: "<img src=\"".$_SESSION["ROOTDIR"]."/css/themes/".$_SESSION["CfgTheme"]."/images/0.gif\" title=\"\" alt=\"\" />" ;
+
+				switch ( $row[4] ) {
+					case "H" :
+	      	      		$sex = "<img src=\"".$_SESSION["ROOTDIR"]."/images/male.gif\"      title=\"$path/$idpict[0]\" alt=\"$path/$idpict[0]\" />";
+	            			break;
+	            		case "F" :
+	            			$sex = "<img src=\"".$_SESSION["ROOTDIR"]."/images/female.gif\"    title=\"$path/$idpict[0]\" alt=\"$path/$idpict[0]\" />";
+		            		break;
+		            	default :
+	            			$sex = "<img src=\"".$_SESSION["ROOTDIR"]."/images/anonymous.gif\" title=\"$path/$idpict[0]\" alt=\"$path/$idpict[0]\" />";
+	            			break;
+	            		}
+
+				// compte ouvert ou fermé ?
+				$mycnx = ( $row[5] ) 
+					? "<img src=\"".$_SESSION["ROOTDIR"]."/images/stats/online.gif\" title=\"". $msg->read($USER_ACCOUNTOPEN) ."\" alt=\"". $msg->read($USER_ACCOUNTOPEN) ."\" />" 
+					: "<img src=\"".$_SESSION["ROOTDIR"]."/images/stats/offline.gif\" title=\"". $msg->read($USER_ACCOUNTCLOSE) ."\" alt=\"". $msg->read($USER_ACCOUNTCLOSE) ."\" />" ;
+
+				$mycnx = ( $_SESSION["CnxAdm"] == 255 )
+					? "<a href=\"".myurlencode("index.php?item=$item&cmde=new&ID=$row[0]&authuser=$authuser&IDcentre=$IDcentre&IDsel=$IDsel&IDalpha=$IDalpha&sort=$sort")."\">$mycnx</a>"
+					: $mycnx ;
+
+				// mise à jour des apprenants
+				$update = ( $_SESSION["CnxAdm"] == 255 AND $row[14] == 1 AND $row[4] != "A" )
+					? "<a href=\"".myurlencode("index.php?item=38&cmde=account&account=$row[0]&authuser=$authuser&IDsel=$IDsel&IDalpha=$IDalpha&sort=$sort")."\">$sex</a>"
+					: $sex ;
+
+				// suppression
+				$req    = $msg->read($USER_DELUSER, getUserName($row[0], false));
+				$delete = ( $_SESSION["CnxAdm"] == 255 AND $_SESSION["CnxID"] != $row[0] )
+					? "<a href=\"".myurlencode("index.php?item=$item&submit=delete&ID=$row[0]&authuser=$authuser&IDcentre=$IDcentre&IDsel=$IDsel&IDalpha=$IDalpha&sort=$sort")."\" onclick=\"return confirmLink(this, '".str_replace("'", "\'", $req)."');\"><img src=\"".$_SESSION["ROOTDIR"]."/images/corb.gif\" title=\"$req\" alt=\"$req\" /></a>"
+					: "" ;
+
+				// dernière connexion
+				if ( $row[7] == "0000-00-00 00:00:00" )
+					$last = $msg->read($USER_NEVERCONNECT);
+				else {
+					$delai = time() - strtotime($row[7]);
+
+					$year  = (int) ($delai / (3600 * 24 * 365));
+					$month = (int) ($delai / (3600 * 24 * 7 * 52));
+					$day   = (int) ($delai / (3600 * 24));
+					$hour  = (int) ($delai / 3600);
+					$min   = (int) ($delai / 60);
+
+					if ( $year > 1 )
+						$last = $msg->read($USER_YEARMONTH, Array(strval($year), strval($month % 12)));
+					else
+						if ( $month > 1 )
+							$last = $msg->read($USER_MONTHDAYS, Array(strval($month), strval($day % 30)));
+						else
+							if ( $day > 1 )
+								$last = $msg->read($USER_DAYSHOUR, Array(strval($day), strval($hour % 24)));
+							else
+								if ( $hour > 1 )
+									$last = $msg->read($USER_HOURMIN, Array(strval($hour), strval($min % 60)));
+								else
+									if ( $min > 1 )
+										$last = $msg->read($USER_MINSEC, Array(strval($min), strval($delai % 60)));
+									else
+										$last = $msg->read($USER_SECONDS, strval($delai));
+
+					}
+
+				// date d'inscription
+				$isreg = ( $row[8] == "0000-00-00 00:00:00" )
+					? $msg->read($USER_NOTVALIDATE)
+					: date2longfmt($row[8]) ;
+
+				// validité de connexion
+				$limit = ( $row[9] == "0000-00-00 00:00:00" )
+					? $msg->read($USER_NOLIMIT)
+					: date2longfmt($row[9]) ;
+
+				// nombre de connexions
+				$star  = (int) ($row[1] / $HITBYSTAR);
+				$star  = ( $star > $MAXSTAR ) ? $MAXSTAR : $star ;
+
+				$msg->isPlural = (bool) ( $row[1] > 1 );
+				$cnx   = $msg->read($USER_NBCONNECT, strval($row[1]));
+
+				print("
+					  <tr>
+					    <td style=\"width:15%;\" class=\"valign-top\">
+						<p class=\"center\">$photo</p>
+						<span class=\"x-small\">".$msg->read($USER_INSCRIPTION)."<br/>$isreg</span><br/>
+						<span class=\"x-small\">".$msg->read($USER_LASTCONNEXION)."<br/>$last</span><br/>
+					      <img src=\"".$_SESSION["ROOTDIR"]."/images/stats/r$star.gif\" title=\"$cnx\" alt=\"$cnx\" />
+					    </td>
+
+					    <td class=\"valign-top\">
+						<div style=\"border:#cccccc solid 1px; padding:2px;\">
+					");
+
+				// envoie des post-it
+				require_once "include/postit.php";
+
+				if ( canPost($_SESSION["CnxID"]) AND canRead($row[0]) )
+					$post = ( $_SESSION["CnxID"] != $row[0] AND $_SESSION["CnxSex"] != "A" )
+						? "<a href=\"index.php?item=4&amp;IDpost=".$_SESSION["CnxID"]."&amp;IDdst=$row[0]&amp;cmde=post\"><img src=\"".$_SESSION["ROOTDIR"]."/images/document.gif\" title=\"".$msg->read($USER_POSTIT)."\" alt=\"".$msg->read($USER_POSTIT)."\" /></a>"
+						: "" ;
+				else
+					$post = "";
+
+				// envoie d'un email
+				$mailto = ( getAccess() == 2 AND $row[11] != "" )
+					? "<a href=\"mailto:$row[11]\"><img src=\"".$_SESSION["ROOTDIR"]."/images/email.gif\" title=\"".$msg->read($USER_SENDEMAIL)."\" alt=\"".$msg->read($USER_SENDEMAIL)."\" /></a>"
+					: "" ;
+
+				// paramètrage des droits utilisateurs				
+				if ( $_SESSION["CnxAdm"] == 255 ) {
+					$table  = "<div style=\"background-color:#EEEEEE; border:#cccccc solid 1px; padding:2px;\">";
+					$table .= "<p class=\"hidden\"><input type=\"hidden\" name=\"my_id[]\" value=\"$row[0]\" /></p>";
+						
+					$mask   = 1;
+
+					for ($j = 0; $j < count($adm[0]); $j++) {
+						$isok   = ( $row[5] == 255 ) ? "disabled=\"disabled\"" : "" ;
+						$check  = ( $row[5] & $mask ) ? "checked=\"checked\"" : "" ;
+
+						$table .= "<label for=\"chk_$row[0]_$j\"><input type=\"checkbox\" id=\"chk_$row[0]_$j\" name=\"chk_$row[0][]\" value=\"".$adm[0][$j]."\" $check $isok />".$adm[1][$j]."</label><br/>";
+
+						$mask  *= 2;
+						}
+
+					// évite de changer les droits du webmaster de l'intranet
+					$table .= ( $row[5] != 255 )
+						? "<p style=\"margin-top:10px; margin-bottom:0px; text-align:center;\"><input type=\"submit\" name=\"valid\" value=\"". $msg->read($USER_VALIDATION) ."\" style=\"font-size:9px;\" /></p>"
+						: "" ;
+
+					$table .= "</div>";
+					}
+				else
+					$table = "";
+
+				$width   = ( $_SESSION["CnxAdm"] == 255 ) ? 25 : 0 ;
+				$account = ( $_SESSION["CnxAdm"] == 255 )
+					? "<a href=\"".myurlencode("index.php?item=1&cmde=account&show=0&ID=$row[0]")."\">".getUserName($row[0], false)."</a>"
+					: getUserName($row[0]) ;
+
+				$idx     = 0;
+				for (; $idx < count($groupe[0]); $idx++)
+					if ( $groupe[0][$idx] == $row[6] ) break;
+
+				// durée de validité des groupes
+				$alt     = ( $groupe[2][$idx] == "0000-00-00 00:00:00" )
+					? $msg->read($USER_NOLIMIT)
+					: date2longfmt($groupe[2][$idx]) ;
+
+				// lecture du centre d'affectation
+				// attention : une personne peut être affectée sur plusieurs centres
+				$query  = "select _ident from config_centre ";
+				$query .= ( $IDcentre ) ? "where _IDcentre = '$IDcentre' " : "where _IDcentre = '$row[12]' " ;
+				$query .= "AND _lang = '".$_SESSION["lang"]."' ";
+				$query .= "limit 1";
+
+				$return = mysql_query($query, $mysql_link);
+				$myrow  = ( $return ) ? remove_magic_quotes(mysql_fetch_row($return)) : 0 ;
+
+				$centre = ( $IDcentre AND $IDcentre != $row[12] )
+					? "$myrow[0] <img src=\"".$_SESSION["ROOTDIR"]."/images/register.gif\" title=\"\" alt=\"\" />"
+					: $myrow[0] ;
+
+				print("
+					<table  class=\"width100\">
+			              <tr>
+			                <td style=\"width:20%;\" class=\"align-right valign-top\">
+			                  ". $msg->read($USER_GROUP) ."
+			                </td>
+			                <td class=\"align-left valign-top\">
+			                  ". $groupe[1][$idx] ." [<img src=\"".$_SESSION["ROOTDIR"]."/images/smiley/$row[6].gif\" title=\"$alt\" alt=\"$alt\" />]
+						$delete
+			                </td>
+			                <td class=\"align-left valign-top\" rowspan=\"4\" style=\"width:$width%;\">
+						". $table ."
+			                </td>
+			              </tr>
+
+			              <tr>
+			                <td class=\"align-right valign-top\">
+			                  ". $msg->read($USER_NAME) ."
+			                </td>
+			                <td class=\"align-left valign-top\">
+						$account [<img src=\"".$_SESSION["ROOTDIR"]."/images/lang/ico-$row[10].png\" title=\"$row[10]\" alt=\"$row[10]\" /> $update $mycnx]
+						$post $mailto
+			                </td>
+			              </tr>
+
+			              <tr>
+			                <td class=\"align-right valign-top\">
+			                  ". $msg->read($USER_CENTER) ."
+			                </td>
+			                <td class=\"align-left valign-top\">
+			                  $centre
+			                </td>
+			              </tr>
+
+			              <tr>
+			                <td class=\"align-right valign-top\">
+			                  ". $msg->read($USER_TITLE) ."
+			                </td>
+			                <td class=\"align-left valign-top\">
+			                  $row[2]
+			                </td>
+			              </tr>
+
+			              <tr>
+			                <td class=\"align-right valign-top\">
+			                  ". $msg->read($USER_FUNCTION) ."
+			                </td>
+			                <td class=\"align-left valign-top\">
+			                  ". replace_smile(find_typo($row[3], $note, false)) ."
+			                </td>
+			              </tr>
+
+			              <tr>
+			                <td class=\"align-right valign-top\">
+			                  ". $msg->read($USER_TEL) ."
+			                </td>
+			                <td class=\"align-left valign-top\">
+			                  $row[13]
+			                </td>
+			              </tr>
+
+			              <tr>
+			                <td class=\"align-right valign-top\">
+			                  ". $msg->read($USER_VALIDITY) ."
+			                </td>
+			                <td class=\"align-left valign-top\">
+			                  $limit
+			                </td>
+			              </tr>
+			            </table>
+
+			            </div>
+                
+		                </td>
+		              </tr>
+					");
+
+				$i++;
+				$row = remove_magic_quotes(mysql_fetch_row($result));
+				}	// endwhile row
+
+            	print("</table>");
+			}	// endif page
+	      ?>
+
+	</form>
+
+	<?php
+		// bouton précédent
+		$where = $skshow - 1;
+
+		if ( $skshow == 1 )
+			$prev = "";
+		else {
+			$skpg = 1 + (($skshow - 2) * $MAXSHOW);
+			$prev = "[<a href=\"".myurlencode("index.php?item=$item&IDsel=$IDsel&IDcentre=$IDcentre&IDalpha=$IDalpha&sort=$sort&skpage=$skpg&skshow=$where&authuser=$authuser")."\">". $msg->read($USER_PREV) ."</a>]";
+			}
+
+		// liens directs sur n° de page
+		$start = 1 + (($skshow - 1) * $MAXSHOW);
+		$end   = $skshow * $MAXSHOW;
+
+		$choix = ( $skpage == $start )
+			? "<img src=\"".$_SESSION["ROOTDIR"]."/images/nav_left.gif\" title=\"«\" alt=\"«\" /><strong>$start</strong><img src=\"".$_SESSION["ROOTDIR"]."/images/nav_right.gif\" title=\"»\" alt=\"»\" />"
+			: "<a href=\"".myurlencode("index.php?item=$item&IDsel=$IDsel&IDcentre=$IDcentre&IDalpha=$IDalpha&sort=$sort&skpage=$start&skshow=$skshow&authuser=$authuser")."\">$start</a>" ;
+
+		for ($j = $start + 1; $j <= $end AND $j <= $page; $j++)
+			$choix .= ( $skpage == $j )
+				? "|<img src=\"".$_SESSION["ROOTDIR"]."/images/nav_left.gif\" title=\"«\" alt=\"«\" /><strong>$j</strong><img src=\"".$_SESSION["ROOTDIR"]."/images/nav_right.gif\" title=\"»\" alt=\"»\" />"
+				: "|<a href=\"".myurlencode("index.php?item=$item&IDsel=$IDsel&IDcentre=$IDcentre&IDalpha=$IDalpha&sort=$sort&skpage=$j&skshow=$skshow&authuser=$authuser")."\">$j</a>" ;
+
+		// bouton suivant
+		$where = $skshow + 1;
+		$next  = ( $skshow == $show )
+			? ""
+			: "[<a href=\"".myurlencode("index.php?item=$item&IDsel=$IDsel&IDcentre=$IDcentre&IDalpha=$IDalpha&sort=$sort&skpage=$j&skshow=$where&authuser=$authuser")."\">". $msg->read($USER_NEXT) ."</a>]";
+	?>
+
+		<hr style="width:80%;" />
+
+		<?php print("<div style=\"text-align:center;\">$prev $choix $next</div>"); ?>
+
+</div>

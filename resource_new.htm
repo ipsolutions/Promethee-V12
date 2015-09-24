@@ -1,0 +1,427 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2007-2008 by Dominique Laporte(C-E-D@wanadoo.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : resource_new.htm
+ *		projet   : la page de saisie des ressources en ligne
+ *
+ *		version  : 1.0
+ *		auteur   : laporte
+ *		creation : 4/02/07
+ *		modif    : 
+ */
+
+
+$IDres   = ( @$_POST["IDres"] )		 		// identifiant de la ressource
+	? (int) $_POST["IDres"]
+	: (int) @$_GET["IDres"] ;
+$IDcat   = ( @$_POST["IDcat"] )				// identifiant de la catégorie
+	? (int) $_POST["IDcat"]
+	: (int) @$_GET["IDcat"] ;
+$IDsel   = ( @$_POST["IDsel"] )				// identifiant du niveau
+	? (int) $_POST["IDsel"]
+	: (int) @$_GET["IDsel"] ;
+$IDtype  = ( @$_POST["IDtype"] )				// type de ressource
+	? (int) $_POST["IDtype"]
+	: (int) @$_GET["IDtype"] ;
+$IDitem  = ( @$_POST["IDitem"] )	 			// ID de la ressource
+	? (int) $_POST["IDitem"]
+	: (int) @$_GET["IDitem"] ;
+
+$titre   = addslashes(trim(@$_POST["titre"]));		// titre
+$url     = addslashes(trim(@$_POST["url"]));		// url
+$mylang  = addslashes(trim(@$_POST["mylang"]));		// langue
+$texte   = addslashes(trim(@$_POST["texte"]));		// texte
+$tags    = addslashes(trim(@$_POST["tags"]));		// liste des mots-clef
+$auteur  = addslashes(trim(@$_POST["auteur"]));		// auteur
+$license = (int) @$_POST["license"];			// type de license
+$type    = @$_POST["type"];					// type de contenu
+$level   = @$_POST["level"];					// niveaux scolaire
+$mat     = @$_POST["mat"];					// liste des matières
+?>
+
+
+<?php
+	// lecture du droit d'écriture
+	$Query  = "select _IDgrpwr, _IDmod from ressource ";
+	$Query .= "where _IDres = '$IDres' ";
+	$Query .= "limit 1";
+
+	$result = mysql_query($Query, $mysql_link);
+	$auth   = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+	// vérification des autorisations
+	verifySessionAccess($auth[1], $auth[0]);
+
+	// initialisation
+	$retcode       = "";
+	$error_subject = 0;
+	$href          = "index.php?item=$item&IDres=$IDres&IDcat=$IDcat&IDsel=$IDsel&IDtype=$IDtype";
+
+	// l'utilisateur a validé son message
+	if ( @$_POST["valid_x"] ) {
+		// test de la saisie
+		$error_subject = ( strlen($titre) ) ? 0 : 1 ;
+
+		if ( !$error_subject ) {
+			// date de création du message
+			$date    = date("Y-m-d H:i:s");
+
+			//-- types de contenu
+			$idtype  = " ";
+			@sort($type);
+			for ( $i = 0; $i < count($type); $i++ )
+				$idtype .= ( @$type[$i] ) ? "$type[$i] " : "" ;
+
+			//-- niveau scolaire
+			$idlevel = " ";
+			@sort($level);
+			for ( $i = 0; $i < count($level); $i++ )
+				$idlevel .= ( @$level[$i] ) ? "$level[$i] " : "" ;
+
+			//-- les matières
+			$idmat   = " ";
+			@sort($mat);
+			for ( $i = 0; $i < count($mat); $i++ )
+				$idmat .= ( @$mat[$i] ) ? "$mat[$i] " : "" ;
+
+			//-- les mots fles
+			$tags = " ".trim($tags)." ";
+
+			if ( $IDitem ) {
+				$Query  = "update resource_online ";
+				$Query .= "set _IDlicense = '$license', _update = '$date', _IDgrprd = '$idlevel', _IDtype = '$idtype', _IDcat = '$idmat', _title = '$titre', _texte = '$texte', _author = '$auteur', _tags = '$tags', _url = '$url', _lang = '$mylang' ";
+				$Query .= "where _IDitem = '$IDitem'";
+				}
+			else {
+				$Query  = "insert into resource_online ";
+				$Query .= "values('', '$license', '$date', '', '".$_SESSION["CnxID"]."', '".$_SESSION["CnxIP"]."', '$idlevel', '$idtype', '$idmat', '', '$titre', '$texte', '$auteur', '$tags', '$url', '$mylang', 'N', '0', 'O')";
+				}
+
+			$retcode = ( mysql_query($Query, $mysql_link) )
+				? " <img src=\"".$_SESSION["ROOTDIR"]."/images/ok.gif\" title=\"\" alt=\"\" />"
+				: " <img src=\"".$_SESSION["ROOTDIR"]."/images/bad.gif\" title=\"\" alt=\"\" /> " . sql_error($mysql_link) ;
+			}	// endif erreur
+		else
+			$retcode = " <img src=\"".$_SESSION["ROOTDIR"]."/images/bad.gif\" title=\"\" alt=\"\" />";
+		}	// endif post
+
+	//---- lecture de la base de données ----
+	$Query  = "select _IDitem, _title, _texte, _url, _lang, _author, _tags, _IDlicense, _IDtype, _IDcat, _IDgrprd ";
+	$Query .= "from resource_online ";
+	$Query .= "where _IDitem = '$IDitem' " ;
+
+	$result  = mysql_query($Query, $mysql_link);
+	$row     = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+	if ( !$error_subject ) {
+		// initialisation des champs de saisie
+		$titre   = $row[1];
+		$texte   = $row[2];
+		$url     = $row[3];
+		$mylang  = ( $row ) ? $row[4] : "$LANG.png" ;
+		$auteur  = $row[5];
+		$tags    = trim($row[6]);
+		$license = $row[7];
+		$idtype  = $row[8];
+		$idmat   = $row[9];
+		$idlevel = $row[10];
+		}
+	else
+		$idtype = $idlevel = $idmat = "";
+?>
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($RESOURCE_FORMFEED)); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+
+		<?php
+		    	print("
+				<form id=\"formulaire\" action=\"index.php\" method=\"post\">
+					<p class=\"hidden\"><input type=\"hidden\" name=\"item\"    value=\"$item\" /></p>
+					<p class=\"hidden\"><input type=\"hidden\" name=\"cmde\"    value=\"$cmde\" /></p>
+					<p class=\"hidden\"><input type=\"hidden\" name=\"IDres\"   value=\"$IDres\" /></p>
+					<p class=\"hidden\"><input type=\"hidden\" name=\"IDcat\"   value=\"$IDcat\" /></p>
+					<p class=\"hidden\"><input type=\"hidden\" name=\"IDsel\"   value=\"$IDsel\" /></p>
+					<p class=\"hidden\"><input type=\"hidden\" name=\"IDtype\"  value=\"$IDtype\" /></p>
+					<p class=\"hidden\"><input type=\"hidden\" name=\"IDitem\"  value=\"$IDitem\" /></p>
+				");
+
+			$statut = ( $IDitem ) ? $msg->read($RESOURCE_MODIFICATION) : $msg->read($RESOURCE_NEWRECORD) ;
+
+			print("
+				<table class=\"width100\">
+				  <tr>
+				    <td class=\"align-left\" colspan=\"3\">
+				    	". $msg->read($RESOURCE_STATUS) ." $statut $retcode
+				    </td>
+				  </tr>
+
+				  <tr>
+				    <td class=\"align-left\" colspan=\"3\">
+					<hr style=\"width:80%; text-align:center;\" />
+				    </td>
+				  </tr>
+
+				  <tr>
+				    <td style=\"width:20%;\" class=\"align-right\">
+				    	". $msg->read($RESOURCE_TITLE) ."
+				    </td>
+				    <td class=\"align-left\" colspan=\"2\">
+					<label for=\"titre\"><input type=\"text\" id=\"titre\" name=\"titre\" size=\"60\" value=\"$titre\" /></label>
+				    </td>
+				  </tr>
+
+				  <tr>
+				    <td class=\"align-right\">
+				    	". $msg->read($RESOURCE_URL) ."
+				    </td>
+				    <td class=\"align-left\" colspan=\"2\">
+					<label for=\"url\"><input type=\"text\" id=\"url\" name=\"url\" size=\"60\" value=\"$url\" /></label>
+				    </td>
+				  </tr>
+
+				  <tr>
+				    <td class=\"align-right\">
+				    	". $msg->read($RESOURCE_LANG) ."
+				    </td>
+				    <td class=\"align-left\" colspan=\"2\">
+					<label for=\"lang\">
+					<select id=\"lang\" name=\"lang\">
+				");
+
+			// recherche des images
+			$myDir = @opendir("images/spip/langues");
+
+			// lecture du répertoire
+			while ( $entry = readdir($myDir) )
+				switch ( extension($entry) ) {
+					case "png" :	// seul le format PNG est accepté
+						if ( $mylang == $entry )
+							print("<option selected=\"selected\" value=\"$entry\">$entry</option>");
+						else
+							print("<option value=\"$entry\">$entry</option>");
+						break;
+
+					default :
+						break;
+					}
+
+			closedir($myDir);
+
+			print("
+					</select>
+					</label>
+				    </td>
+				  </tr>
+
+				  <tr>
+				    <td class=\"align-right\">
+				    	". $msg->read($RESOURCE_DESCRIPTION) ."
+				    </td>
+				    <td class=\"align-left\" colspan=\"2\">
+					<label for=\"texte\"><textarea id=\"texte\" name=\"texte\" rows=\"5\" cols=\"50\">$texte</textarea></label>
+				    </td>
+				  </tr>
+
+				  <tr>
+				    <td class=\"align-right\">
+				    	". $msg->read($RESOURCE_KWORD) ."
+				    </td>
+				    <td class=\"align-left\" colspan=\"2\">
+					<label for=\"tags\"><input type=\"text\" id=\"tags\" name=\"tags\" size=\"45\" value=\"$tags\" /></label>
+				    </td>
+				  </tr>
+
+				  <tr>
+				    <td class=\"align-right\">
+				    	". $msg->read($RESOURCE_AUTHOR) ."
+				    </td>
+				    <td class=\"align-left\" colspan=\"2\">
+					<label for=\"auteur\"><input type=\"text\" id=\"auteur\" name=\"auteur\" size=\"45\" value=\"$auteur\" /></label>
+				    </td>
+				  </tr>
+
+				  <tr>
+				    <td class=\"align-right\">
+				    	". $msg->read($RESOURCE_LICENSE) ."
+				    </td>
+				    <td class=\"align-left\">
+
+
+
+					<label for=\"license\">
+					<select id=\"license\" name=\"license\">
+				");
+
+			// recherche du type de licence
+			$query  = "select _IDlicense, _texte from resource_license ";
+			$query .= "where _visible = 'O' AND _lang = '".$_SESSION["lang"]."' ";
+			$query .= "order by _IDlicense";
+
+			$result = mysql_query($query, $mysql_link);
+			$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : "" ;
+
+			while ( $row ) {
+				printf("<option value=\"$row[0]\" %s>$row[1]</option>", $row[0] == $license ? "selected=\"selected\"" : "");
+
+				$row = remove_magic_quotes(mysql_fetch_row($result));
+				}
+
+			print("
+					</select>
+					</label>
+				    </td>
+				  </tr>
+
+				  <tr>
+				    <td class=\"align-right valign-top\">
+				    	". $msg->read($RESOURCE_CONTENT) ."
+				    </td>
+				    <td style=\"width:40%; \">
+				");
+
+			// type de contenu
+			$query  = "select _IDtype, _ident from resource_type ";
+			$query .= "where _visible = 'O' AND _lang = '".$_SESSION["lang"]."' ";
+			$query .= "order by _IDtype";
+
+			$result = mysql_query($query, $mysql_link);
+			$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+			$count  = (int) (mysql_affected_rows($mysql_link) / 2);
+
+			$i = 0;
+			while ( $row ) {
+				$check = ( in_array($row[0], explode(" ", $idtype)) ) ? "checked=\"checked\"" : "" ;
+
+				print("<label for=\"type_$row[0]\"><input type=\"checkbox\" id=\"type_$row[0]\" name=\"type[]\" value=\"$row[0]\" $check />$row[1]</label><br/>");
+
+				if ( $i++ == $count )
+					print("
+						</td>
+						<td class=\"valign-top\">
+						");
+
+				$row = remove_magic_quotes(mysql_fetch_row($result));
+				}
+
+	    		print("
+				    </td>
+				  </tr>
+
+				  <tr>
+				    <td class=\"align-right valign-top\">
+				    	". $msg->read($RESOURCE_LEVEL) ."
+				    </td>
+				    <td class=\"align-left valign-top\">
+				");
+
+			// les niveaux
+			$Query  = "select _IDlevel, _ident from campus_level ";
+			$Query .= "where _visible = 'O' AND _lang = '".$_SESSION["lang"]."' ";
+			$Query .= "order by _IDlevel";
+
+			$result = mysql_query($Query, $mysql_link);
+			$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+			$count  = (int) (mysql_affected_rows($mysql_link) / 2);
+
+			$i = 0;
+			while ( $row ) {
+				$check = ( in_array($row[0], explode(" ", $idlevel)) ) ? "checked=\"checked\"" : "" ;
+
+				print("<label for=\"level_$row[0]\"><input type=\"checkbox\" id=\"level_$row[0]\" name=\"level[]\" value=\"$row[0]\" $check />$row[1]</label><br/>");
+
+				if ( $i++ == $count )
+					print("
+						</td>
+						<td class=\"valign-top\">
+						");
+
+				$row = remove_magic_quotes(mysql_fetch_row($result));
+				}
+
+	    		print("
+				    </td>
+				  </tr>
+
+				  <tr>
+				    <td class=\"align-right valign-top\">
+				    	". $msg->read($RESOURCE_MATTER) ."
+				    </td>
+				    <td class=\"align-left valign-top\">
+				");
+
+			// les matières
+			$Query  = "select _IDmat, _titre from campus_data ";
+			$Query .= "where _visible = 'O' AND _lang = '".$_SESSION["lang"]."' ";
+			$Query .= "order by _IDmat";
+
+			$result = mysql_query($Query, $mysql_link);
+			$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+			$count  = (int) (mysql_affected_rows($mysql_link) / 2);
+
+			$i = 0;
+			while ( $row ) {
+				$check = ( in_array($row[0], explode(" ", $idmat)) ) ? "checked=\"checked\"" : "" ;
+
+				print("<label for=\"mat_$row[0]\"><input type=\"checkbox\" id=\"mat_$row[0]\" name=\"mat[]\" value=\"$row[0]\" $check />$row[1]</label><br/>");
+
+				if ( $i++ == $count )
+					print("
+						</td>
+						<td class=\"valign-top\">
+						");
+
+				$row = remove_magic_quotes(mysql_fetch_row($result));
+				}
+
+	    		print("
+				    </td>
+				  </tr>
+
+				  <tr>
+				    <td style=\"width:100%;\" colspan=\"3\"><hr style=\"width:80%;\" /></td>
+				  </tr>
+
+				  <tr>
+				    <td class=\"valign-middle align-right\">
+					<input type=\"image\" src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/valid.gif\" name=\"valid\" alt=\"".$msg->read($RESOURCE_INPUTOK)."\" />
+				    </td>
+				    <td class=\"valign-middle\" colspan=\"2\">". $msg->read($RESOURCE_RECORD) ."</td>
+				  </tr>
+				  <tr>
+				    <td class=\"valign-middle align-right\">
+					<a href=\"".myurlencode("$href&cmde=online")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/cancel.gif\" title=\"\" alt=\"".$msg->read($RESOURCE_INPUTCANCEL)."\" /></a>
+				    </td>
+				    <td class=\"valign-middle\" colspan=\"2\">". $msg->read($RESOURCE_QUIT) ."</td>
+				  </tr>
+           			</table>
+				");
+
+			print("</form>");
+		?>
+
+</div>

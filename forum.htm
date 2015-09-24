@@ -1,0 +1,503 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2002-2007 by Dominique Laporte(C-E-D@wanadoo.fr)
+   Copyright (c) 2006 by Cyril Fresne (cyril.fresne@gmail.com)
+   Copyright (c) 2006 by Nordine Zetoutou (nordine.zetoutou@educagri.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : forum.htm
+ *		projet   : la page des forums
+ *
+ *		version  : 1.3
+ *		auteur   : laporte
+ *		creation : 10/11/02
+ *		modif    : 29/07/03 - par D. Laporte
+ *                     suppression d'un forum par l'administrateur
+ *                     15/11/05 - par D. Laporte
+ *                     gestion des répertoires
+ *                     15/06/06 - par cyril fresne
+ *                     migration PHP5
+ *		           17/07/06 - Nordine Zetoutou
+ * 	                 migration des balises HTML en XHTML 1.0 strict
+ */
+
+
+$IDgroup = ( @$_POST["IDgroup"] )		// identifiant du e-groupe
+	? (int) $_POST["IDgroup"]
+	: (int) @$_GET["IDgroup"] ;
+$IDroot  = ( @$_POST["IDroot"] ) 		// ID du répertoire racine
+	? (int) $_POST["IDroot"]
+	: (int) @$_GET["IDroot"] ;
+$IDforum = ( @$_POST["IDforum"] ) 		// ID du forum
+	? (int) $_POST["IDforum"]
+	: (int) @$_GET["IDforum"] ;
+
+$dir     = @$_GET["dir"];			// répertoire
+
+$submit  = @$_GET["submit"];			// bouton de validation
+
+// réinitialisation
+if ( @$_GET["salon"] == "" )
+	$_SESSION["CampusName"] = "";
+
+//---------------------------------------------------------------------------
+function isregistered($IDforum)
+{
+	/*
+	 * fonction :	détermine si un utilisateur est abonné à un forum
+	 * in :		ID du forum
+	 * out :		vrai si abonné, faux sinon
+	 */
+
+	require "globals.php";
+
+	$Query  = "select _visible from forum_list ";
+	$Query .= "where _IDforum = '$IDforum' AND _ID = '".$_SESSION["CnxID"]."' ";
+	$Query .= "limit 1";
+
+	$result = mysql_query($Query, $mysql_link);
+	$row    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+	return (bool) ( $row[0] == "O" );
+}
+//---------------------------------------------------------------------------
+function deleteForumPJ($IDmsg)
+{
+	/*
+	 * fonction :	efface les PJ d'un forum
+	 * in :		$IDmsg : identifiant du message
+	 */
+
+	require "globals.php";
+
+	$Query  = "delete from forum_pj ";
+	$Query .= "where _IDmsg = '$IDmsg' ";
+
+	if ( !mysql_query($Query, $mysql_link) )
+		mysql_error($mysql_link);
+	else {
+		// on efface les stats des messages
+		$Query  = "delete from forum_vu ";
+		$Query .= "where _IDmsg = '$IDmsg' ";
+
+		if ( !mysql_query($Query, $mysql_link) )
+			mysql_error($mysql_link);
+		// et les fichiers ?
+		}
+}
+//---------------------------------------------------------------------------
+function deleteForum($IDforum)
+{
+	/*
+	 * fonction :	efface un forum
+	 * in :		$IDforum : identifiant du forum
+	 */
+
+	require "globals.php";
+
+	$Query  = "delete from forum_data ";
+	$Query .= "where _IDforum = '$IDforum' ";
+
+	if ( !mysql_query($Query, $mysql_link) )
+		mysql_error($mysql_link);
+	else {
+		// on efface les PJ des messages
+		$Query  = "select _IDmsg from forum_items ";
+		$Query .= "where _IDforum = '$IDforum' ";
+
+		$result = mysql_query($Query, $mysql_link);
+		$row    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+		while ( $row ) {
+			deleteForumPJ($row[0]);
+
+			$row = mysql_fetch_row($result);
+			}
+
+		// et les messages associés
+		if ( !mysql_query("delete from forum_items where _IDforum = '$IDforum'", $mysql_link) )
+			mysql_error($mysql_link);
+		}
+}
+//---------------------------------------------------------------------------
+function showForum($item, $IDgroup, $IDroot, $i18n, $i)
+{
+	/*
+	 * fonction :	affichage des forums
+	 * in :		$IDforum : identifiant du forum
+	 */
+
+	require "globals.php";
+	require_once "include/user.php";
+
+	require "msg/forum.php";
+	require_once "include/TMessage.php";
+
+	$msg  = new TMessage($_SESSION["ROOTDIR"]."/msg/".$_SESSION["lang"]."/forum.php");
+
+	// pour les forums privés (gestion par ACL)
+	$acl = new user_acl("forum");
+
+	//---- lecture des forums
+	// NB : les élèves n'ont pas accès aux forums privés
+	//      et seuls les forums ouverts sont accessibles aux utilisateurs
+	$Query  = "select _IDforum, _IDmod, _title, _visible, _date, _access, _private, _mailcp, _lang from forum_data ";
+	$Query .= "where _IDroot = '$IDroot' AND _IDgroup = '$IDgroup' ";
+	$Query .= ( $i18n == "N" ) ? "AND _lang = '".$_SESSION["lang"]."' " : "" ;
+	$Query .= ( $_SESSION["CnxAdm"] == 255 ) ? "" : "AND _visible = 'O' AND (_IDgrprd & ".pow(2, $_SESSION["CnxGrp"] - 1).") ";
+	$Query .= "order by _IDforum";
+
+	$result = mysql_query($Query, $mysql_link);
+	$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+	while ( $row ) {
+		$bgcol = ( $i++ % 2 ) ? "item" : "menu" ;
+		$ident = ucfirst(strtolower(str_replace($keywords_search, $keywords_replace, $row[2])));
+
+		// le forum est-il ouvert ?
+		$img   = ( $_SESSION["CnxAdm"] == 255 )
+			? ($row[3] == "O"
+				? "<a href=\"index.php?item=$item&amp;IDgroup=$IDgroup&amp;IDforum=$row[0]&amp;submit=close\"><img src=\"".$_SESSION["ROOTDIR"]."/images/folder.gif\" title=\"". stripHTMLtags($msg->read($FORUM_CLOSEFORUM)) ."\" alt=\"". stripHTMLtags($msg->read($FORUM_CLOSEFORUM)) ."\" /></a>"
+				: "<a href=\"index.php?item=$item&amp;IDgroup=$IDgroup&amp;IDforum=$row[0]&amp;submit=open\"><img src=\"".$_SESSION["ROOTDIR"]."/images/lock.gif\" title=\"". stripHTMLtags($msg->read($FORUM_OPENFORUM)) ."\" alt=\"". stripHTMLtags($msg->read($FORUM_OPENFORUM)) ."\" /></a>")
+			: "<img src=\"".$_SESSION["ROOTDIR"]."/images/folder.gif\" title=\"\" alt=\"\" />" ;
+
+		// le forum est-il privé ?
+		if ( $row[6] == "O" ) {
+			$priv = ( $_SESSION["CnxAdm"] == 255 OR $row[1] == $_SESSION["CnxID"] )
+				? "<a href=\"index.php?item=1&amp;cmde=acl&amp;ident=forum&amp;IDident=$row[0]\"><img src=\"".$_SESSION["ROOTDIR"]."/images/invisible.gif\" title=\"".$msg->read($FORUM_PRIVATE)."\" alt=\"".$msg->read($FORUM_PRIVATE)."\" /></a>"
+				: "<img src=\"".$_SESSION["ROOTDIR"]."/images/invisible.gif\" title=\"". $msg->read($FORUM_PRIVATE) ."\" alt=\"". $msg->read($FORUM_PRIVATE) ."\" />" ;
+			$link = ( $_SESSION["CnxAdm"] == 255 OR $acl->isMember($row[0], $_SESSION["CnxID"]) )
+				? "<a href=\"index.php?item=$item&amp;cmde=visu&amp;IDforum=$row[0]&amp;IDroot=$IDroot&amp;IDgroup=$IDgroup\">$ident</a>"
+				: $ident ;
+			}
+		else {
+			$priv = "";
+			$link = "<a href=\"index.php?item=$item&amp;cmde=visu&amp;IDforum=$row[0]&amp;IDroot=$IDroot&amp;IDgroup=$IDgroup\">$ident</a>";
+			}
+
+		// s'abonner à des forums (interdit aux anonymes)
+		$reg   = ( $row[7] == "O" AND strstr($link, "<a href") AND $_SESSION["CnxSex"] != "A" )
+			? (isregistered($row[0])
+				? "<a href=\"index.php?item=$item&amp;IDforum=$row[0]&amp;submit=unregister\"><img src=\"".$_SESSION["ROOTDIR"]."/images/unregister.gif\" title=\"".$msg->read($FORUM_UNREGISTER)."\" alt=\"".$msg->read($FORUM_UNREGISTER)."\" /></a>"
+				: "<a href=\"index.php?item=$item&amp;IDforum=$row[0]&amp;submit=register\"><img src=\"".$_SESSION["ROOTDIR"]."/images/register.gif\" title=\"".$msg->read($FORUM_REGISTER)."\" alt=\"".$msg->read($FORUM_REGISTER)."\" /></a>" )
+			: "" ;
+
+		// modification des forums
+		$maj   = ( $_SESSION["CnxAdm"] == 255 OR $row[1] == $_SESSION["CnxID"] )
+			? "<a href=\"index.php?item=$item&amp;cmde=new&amp;IDgroup=$IDgroup&amp;IDforum=$row[0]&amp;IDroot=$IDroot\"><img src=\"".$_SESSION["ROOTDIR"]."/images/stats/post.gif\" title=\"".$msg->read($FORUM_UPDATE)."\" alt=\"".$msg->read($FORUM_UPDATE)."\" /></a>"
+			: "" ;
+
+		// suppression des forums
+		$req   = $msg->read($FORUM_DELFORUM, $row[2]);
+		$del   = ( $_SESSION["CnxAdm"] == 255 )
+			? "<a href=\"index.php?item=$item&amp;IDgroup=$IDgroup&amp;IDforum=$row[0]&amp;IDroot=$IDroot&amp;submit=del\" onclick=\"return confirmLink(this, '$req');\"><img src=\"".$_SESSION["ROOTDIR"]."/images/corb.gif\" title=\"$req\" alt=\"$req\" /></a>"
+			: "" ;
+
+		// envoie des post-it
+		$post  = getUserName($row[1]);
+
+		// liste des abonnés
+		$msg->isPlural = true;
+
+		$post .= ( $row[7] == "O" )
+			? " <a href=\"#\" onclick=\"popWin('".$_SESSION["ROOTDIR"]."/forum_list.php?IDforum=$row[0]&amp;lang=".$_SESSION["lang"]."', '450', '300'); return false;\"><img src=\"".$_SESSION["ROOTDIR"]."/images/reguser.gif\" title=\"".$msg->read($FORUM_REGUSERS)."\" alt=\"".$msg->read($FORUM_REGUSERS)."\" /></a><br/>"
+			: "" ;
+
+		// pour savoir le nombre d'inscrits
+		$res   = mysql_query("select _ID from forum_list where _IDforum = '$row[0]' AND _visible = 'O'", $mysql_link);
+		$nbusr = ( $res ) ? mysql_numrows($res) : 0 ;				
+
+		$msg->isPlural = (bool) ( $nbusr > 1 );
+
+		$post .= ( $row[7] == "O" )
+			? "<span class=\"x-small\">".$msg->read($FORUM_REGUSERS, strval($nbusr))."</span>"
+			: "" ;
+
+		// pour savoir le nombre total de messages visualisables
+		$res   = mysql_query("select _IDmsg from forum_items where _IDforum = '$row[0]' AND _visible = 'O'", $mysql_link);
+		$nbmsg = ( $res ) ? mysql_numrows($res) : 0 ;				
+
+		// pour savoir le nombre de messages en attente de validation
+		$res   = mysql_query("select _IDmsg from forum_items where _IDforum = '$row[0]' AND _visible = 'N'", $mysql_link);
+		$val   = ( $res ) ? mysql_numrows($res) : 0 ;				
+
+		// seul le big chef OU le modérateur peuvent valider les messages d'un forum
+		$valid = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $row[1] )
+			? "<a href=\"index.php?item=$item&amp;cmde=moderer&amp;IDforum=$row[0]&amp;IDroot=$IDroot&amp;IDgroup=$IDgroup\">$val</a>"
+			: "$val" ;
+
+		// dernier message en attente
+		$return  = mysql_query("select _date from forum_items where _IDforum = '$row[0]' AND _visible = 'N' order by _IDmsg desc limit 1", $mysql_link);
+		$myrow   = ( $return ) ? remove_magic_quotes(mysql_fetch_row($return)) : 0 ;
+
+		$waitmsg = ( $myrow )
+			? "<img src=\"".$_SESSION["ROOTDIR"]."/images/minireply.gif\" title=\"\" alt=\"\" /> <span class=\"x-small\">$myrow[0]</span>"
+			: "" ;
+
+		// dernier message validé
+		$query   = "select _date, _ID, _IDmsg, _parent from forum_items ";
+		$query  .= "where _IDforum = '$row[0]' AND _visible = 'O' ";
+		$query  .= "order by _IDmsg desc limit 1";
+
+		$return  = mysql_query($query, $mysql_link);
+		$myrow   = ( $return ) ? remove_magic_quotes(mysql_fetch_row($return)) : 0 ;
+
+		$mylink  = ( strstr($link, "href") )
+			? myurlencode("index.php?item=$item&cmde=show&IDgroup=$IDgroup&IDroot=$IDroot&IDmsg=$myrow[2]")
+			: "#" ;
+
+		$icon    = "
+			<a href=\"$mylink\" class=\"overlib\">
+			<img src=\"".$_SESSION["ROOTDIR"]."/images/minireply.gif\" title=\"\" alt=\"\" />
+			<span>". getUserName(@$myrow[1], false) ."</span>
+			</a>";
+
+		$lastmsg = ( $myrow )
+			? "$icon <span class=\"x-small\">$myrow[0]</span>"
+			: "" ;
+
+		print("
+			<tr class=\"$bgcol\">
+			  <td class=\"align-center\">$img</td>
+	    		  <td>
+				<img src=\"".$_SESSION["ROOTDIR"]."/images/lang/ico-$row[8].png\" title=\"$row[8]\" alt=\"$row[8]\" />
+				$link $priv $reg $del $maj<br/>
+	    		  	<span class=\"x-small\">". $msg->read($FORUM_CREATBY, date2longfmt($row[4])) ."</span>
+	    		  </td>
+			  <td class=\"align-center\">$post</td>
+			  <td class=\"align-center\">$valid<br/>$waitmsg</td>
+			  <td class=\"align-center\">$nbmsg<br/>$lastmsg</td>
+     			</tr>
+     			");
+
+		$row = remove_magic_quotes(mysql_fetch_row($result));
+		}
+
+	return $i;
+}
+//---------------------------------------------------------------------------
+?>
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($FORUM_FORUMLIST)); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+
+	<?php
+         	// seul le big chef peut supprimer un forum
+         	if ( $_SESSION["CnxAdm"] == 255 )
+			switch ( $submit ) {
+				case "open" :	// ouverture forum
+				case "close" :	// fermeture forum
+					$Query  = "update forum_data ";
+					$Query .= ( $submit == "open" ) ? "set _visible = 'O' " : "set _visible = 'N' " ;
+					$Query .= "where _IDforum = '$IDforum' limit 1";
+
+					if ( !mysql_query($Query, $mysql_link) )
+						mysql_error($mysql_link);
+					break;
+
+				case "opendir" :	// ouverture dossier
+				case "closedir" :	// fermeture dossier
+					$Query  = "update forum ";
+					$Query .= ( $submit == "opendir" ) ? "set _visible = 'O' " : "set _visible = 'N' " ;
+					$Query .= "where _IDroot = '$dir' limit 1";
+
+					if ( !mysql_query($Query, $mysql_link) )
+						mysql_error($mysql_link);
+					break;
+
+				case "deldir" :	// on efface le dossier
+					$Query  = "select _IDforum from forum_data ";
+					$Query .= "where _IDroot = '$IDroot' ";
+
+					$result = mysql_query($Query, $mysql_link);
+					$row    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+					while ( $row ) {
+						deleteForum($row[0]);
+
+						$row = mysql_fetch_row($result);
+						}
+
+					if ( mysql_query("delete from forum where _IDroot = '$IDroot'", $mysql_link) )
+						$IDroot = 0;
+					break;
+
+				case "del" :	// on efface le forum
+					deleteForum($IDforum);
+					break;
+
+				default :
+					break;
+				}
+
+         	// commandes des utilisateurs
+		switch ( $submit ) {
+			case "register" :		// s'abonner
+				$Query  = "insert into forum_list ";
+				$Query .= "values('$IDforum', '".$_SESSION["CnxID"]."', 'O')";
+
+				if ( !mysql_query($Query, $mysql_link) )
+					mysql_error($mysql_link);
+				break;
+
+			case "unregister" :	// se désabonner
+				$Query  = "delete from forum_list ";
+				$Query .= "where _IDforum = '$IDforum' AND _ID = '".$_SESSION["CnxID"]."' ";
+				$Query .= "limit 1";
+
+				if ( !mysql_query($Query, $mysql_link) )
+					mysql_error($mysql_link);
+				break;
+
+			default :
+				break;
+			}
+
+		$result = mysql_query("select _title, _texte from forum where _IDroot = '$IDroot' limit 1", $mysql_link);
+		$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+		$mydir  = ( $row ) ? "$row[0]" : $msg->read($FORUM_ROOTDIR) ;
+		$texte  = ( $row )
+			? "$row[1]"
+			: $msg->read($FORUM_DISCLAIMER) ;
+
+        	print("<div style=\"background-color:#eeeeee; padding: 2px;\">$texte</div><br/>");
+
+         	// seul le big chef peut créer un forum
+    		print("
+	            <table class=\"width100\">
+	              <tr>
+			");
+
+         	if ( $_SESSION["CnxAdm"] == 255 )
+	    		print("
+	                <td style=\"width:10%;\" class=\"valign-middle\">
+				<a href=\"index.php?item=$item&amp;cmde=new&amp;IDroot=$IDroot&amp;IDgroup=$IDgroup\"><img src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/post.gif\" title=\"".$msg->read($FORUM_NEW)."\" alt=\"".$msg->read($FORUM_NEW)."\" /></a>
+		          </td>
+		          <td style=\"width:40%;\" class=\"valign-middle\">". $msg->read($FORUM_FORUMCREATE) ."</td>
+				");
+
+         	// seul le big chef peut créer un dossier
+         	$add = ( $IDroot )
+			? "<a href=\"index.php?item=$item&amp;IDgroup=$IDgroup\"><img src=\"".$_SESSION["ROOTDIR"]."/images/folder-up.gif\" title=\"". $msg->read($FORUM_PARENTDIR) ."\" alt=\"". $msg->read($FORUM_PARENTDIR) ."\" /></a>"
+			: ($_SESSION["CnxAdm"] == 255
+				? "<a href=\"index.php?item=$item&amp;cmde=newdir&amp;IDgroup=$IDgroup\"><img src=\"".$_SESSION["ROOTDIR"]."/images/folder-new.gif\" title=\"".$msg->read($FORUM_DIRCREATE)."\" alt=\"".$msg->read($FORUM_DIRCREATE)."\" /></a>"
+				: "") ;
+
+    		print("<td class=\"valign-middle align-right\">[$add $mydir ]</td>");
+
+    		print("
+	              </tr>
+	            </table>
+	            ");
+	?>
+
+            <table class="width100">
+              <tr class="align-center" style="background-color:#c0c0c0;">
+                <td style="width:40%;" colspan="2"><?php print($msg->read($FORUM_MYFORUM)); ?></td>
+                <td style="width:30%;"><?php print($msg->read($FORUM_MODO)); ?></td>
+                <td style="width:15%;"><?php print($msg->read($FORUM_WAITING)); ?></td>
+                <td style="width:15%;"><strong><?php print($msg->read($FORUM_MESSAGE)); ?></strong></td>
+              </tr>
+
+            <?php
+			//---- lecture des répertoires
+			$Query  = "select _IDroot, _IDmod, _title, _visible, _i18n, _maximize from forum ";
+			$Query .= "where _IDgroup = '$IDgroup' ";
+			$Query .= ( $IDroot ) ? "AND _IDroot = '$IDroot' " : "" ;
+			$Query .= ( $_SESSION["CnxAdm"] == 255 ) ? "" : "AND _visible = 'O' AND (_IDgrprd & ".pow(2, $_SESSION["CnxGrp"] - 1).") ";
+			$Query .= "order by _title";
+
+			$result = mysql_query($Query, $mysql_link);
+			$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+			$i = 0;
+			while ( $row AND $IDroot == 0 ) {
+				$bgcol = ( $i++ % 2 ) ? "item" : "menu" ;
+
+				// le répertoire est-il ouvert ?
+				$img   = ( $_SESSION["CnxAdm"] == 255 )
+					? ($row[3] == "O"
+						? "<a href=\"".myurlencode("index.php?item=$item&IDgroup=$IDgroup&dir=$row[0]&submit=closedir")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/folder-opened.gif\" title=\"". stripHTMLtags($msg->read($FORUM_CLOSEDIR)) ."\" alt=\"". stripHTMLtags($msg->read($FORUM_CLOSEDIR)) ."\" /></a>"
+						: "<a href=\"".myurlencode("index.php?item=$item&IDgroup=$IDgroup&dir=$row[0]&submit=opendir")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/folder-lock.jpg\" title=\"". stripHTMLtags($msg->read($FORUM_OPENDIR)) ."\" alt=\"". stripHTMLtags($msg->read($FORUM_OPENDIR)) ."\" /></a>")
+					: "<img src=\"".$_SESSION["ROOTDIR"]."/images/folder-opened.gif\" title=\"". stripHTMLtags($msg->read($FORUM_DIR)) ."\" alt=\"". stripHTMLtags($msg->read($FORUM_DIR)) ."\" />" ;
+
+				// modification des dossiers
+				$maj   = ( $_SESSION["CnxAdm"] == 255 OR $row[1] == $_SESSION["CnxID"] )
+					? "<a href=\"".myurlencode("index.php?item=$item&cmde=newdir&IDgroup=$IDgroup&IDroot=$row[0]")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/stats/post.gif\" title=\"".$msg->read($FORUM_FORUMUPDATE)."\" alt=\"".$msg->read($FORUM_FORUMUPDATE)."\" /></a>"
+					: "" ;
+
+				// suppression des dossiers
+				$req   = $msg->read($FORUM_DELDIR, $row[2]);
+				$del   = ( $_SESSION["CnxAdm"] == 255 OR $row[1] == $_SESSION["CnxID"] )
+					? "<a href=\"".myurlencode("index.php?item=$item&IDgroup=$IDgroup&IDroot=$row[0]&submit=deldir")."\" onclick=\"return confirmLink(this, '$req');\"><img src=\"".$_SESSION["ROOTDIR"]."/images/corb.gif\" title=\"".$msg->read($FORUM_DELDIR, $row[2])."\" alt=\"".$msg->read($FORUM_DELDIR, $row[2])."\" /></a>"
+					: "" ;
+
+				// pour savoir le nombre de forums du répertoire
+				$res   = mysql_query("select _IDforum from forum_data where _IDroot = '$row[0]' AND _visible = 'O'", $mysql_link);
+				$nbf   = ( $res ) ? mysql_numrows($res) : 0 ;				
+
+				print("
+					<tr class=\"$bgcol\">
+       				  <td style=\"width:1%;\" class=\"align-center\">$img</td>
+          		    		  <td style=\"width:39%;\">
+          		    		  	<a href=\"".myurlencode("index.php?item=$item&IDgroup=$IDgroup&IDroot=$row[0]")."\">$row[2]</a> $del $maj
+          		    		  </td>
+       				  <td class=\"align-center\">". getUserName($row[1]) ."</td>
+					  <td></td>
+					  <td class=\"align-center\">[$nbf]</td>
+	       			</tr>
+	       			");
+
+				if ( $row[5] == "O" )
+					$i = showForum($item, $IDgroup, $row[0], $row[4], $i);
+
+				$row = remove_magic_quotes(mysql_fetch_row($result));
+				}	
+
+			//---- lecture des forums
+			showForum($item, $IDgroup, $IDroot, ($IDroot ? $row[4] : "N"), $i);
+            ?>
+
+            </table>
+
+		<!-- recherche d'un message dans les forums -->
+		<hr style="width:80%;" />
+
+		<span><img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/search.gif" title="" alt="" />
+		<?php print($msg->read($FORUM_GLOBALRESEARCH, myurlencode("index.php?item=91&IDgroup=$IDgroup&cmde=search&rub=3"))); ?>
+		</span>
+
+		<form id="gotomsg" action="<?php echo myurlencode("index.php?item=3&IDgroup=$IDgroup&IDroot=$IDroot&cmde=show"); ?>" method="post" >
+			<p style="margin:0;">
+			<img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/in.gif" title="" alt="" /> <?php print($msg->read($FORUM_GOTO)); ?>
+
+			<label for="IDmsg"><input type="text" id="IDmsg" name="IDmsg" size="4" style="font-size:9px;" /></label>
+			<input type="image" src="images/go.gif" title="<?php echo $msg->read($FORUM_GOTO); ?>" alt="<?php echo $msg->read($FORUM_GOTO); ?>" />
+			</p>
+		</form>
+
+</div>

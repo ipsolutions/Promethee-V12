@@ -1,0 +1,5 @@
+Le informamos que su hijo %1 %2
+Ausente ha informado hasta la fecha : 3%
+Y de no haber asistido a los cursos : 4%
+
+Atentamente.

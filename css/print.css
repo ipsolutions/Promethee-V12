@@ -1,0 +1,14 @@
+.noprint {
+	display: none;
+}
+
+#table_print td {
+	border: 1px solid #CCCCCC;
+}
+
+.width-left {
+	margin-left: 0px;
+}
+.decal-left {
+	margin-left: 0px;
+}

@@ -1,0 +1,267 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2003-2008 by Dominique Laporte(C-E-D@wanadoo.fr)
+   Copyright (c) 2006 by Hugues Lecocq(hugues.lecocq@laposte.net)
+   Copyright (c) 2006 by Nordine Zetoutou (nordine.zetoutou@educagri.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : gallery_theme.htm
+ *		projet   : la page de création des thèmes des galeries
+ *
+ *		version  : 1.1
+ *		auteur   : laporte
+ *		creation : 2/07/03
+ *		modif    : 15/06/06 - par hugues lecocq
+ *                     migration PHP5 
+ *		           17/07/06 - Nordine Zetoutou
+ * 	                 migration des balises HTML en XHTML 1.0 strict
+ */
+
+
+$IDgal  = ( @$_POST["IDgal"] )		// identifiant des galeries
+	? (int) $_POST["IDgal"]
+	: (int) @$_GET["IDgal"] ;
+$IDsel  = ( @$_POST["IDsel"] )		// Identifiant de la classe sélectionnée
+	? (int) $_POST["IDsel"]
+	: (int) (@$_GET["IDsel"] ? $_GET["IDsel"] : $_SESSION["CnxClass"]) ;
+$title  = ( @$_POST["title"] )		// item titre de la table thèmes de photothèque
+	? $_POST["title"]
+	: @$_GET["title"] ; 
+$texte  = ( @$_POST["texte"] )		// item texte de la table thèmes de photothèque
+	? $_POST["texte"]
+	: @$_GET["texte"] ; 
+ 
+$submit = @$_POST["valid_x"];		// bouton validation
+?>
+
+
+<?php
+	// initialisation des erreurs
+	$error  = 0;
+	$status = "-";
+	$query  = "";
+
+	// recherche de l'auteur
+	$auteur = $_SESSION["CnxName"];
+
+	// l'utilisateur a validé
+	if ( $submit ) {
+		// initialisation des champs
+		$date  = date("Y-m-d H:i:s", time());
+		$title = addslashes(trim($title));
+		$texte = addslashes(trim($texte));
+
+		// test d'erreur sur champs non renseignés
+		$error = ( $title == "" ) ? 1 : 0 ;
+
+		// on procède à la création si pas d'erreur
+		if ( !$error ) {
+			$status = ( $IDgal )
+				? $msg->read($GALLERY_MODIFICATION) ." <img src=\"".$_SESSION["ROOTDIR"]."/images/ok.gif\" title=\"\" alt=\"\" /> "
+				: $msg->read($GALLERY_INSERT) ." <img src=\"".$_SESSION["ROOTDIR"]."/images/ok.gif\" title=\"\" alt=\"\" /> " ;
+
+			if ( $IDgal ) {
+				// mise à jour d'une galerie
+				$Query  = "update gallery ";
+				$Query .= "set _title = '$title', _texte = '$texte' ";
+				$Query .= "where _IDgal = '$IDgal'";
+				}
+			else {
+				// création d'un thème
+				$IDgal  = sql_getunique("gallery");
+
+				$Query  = "insert into gallery ";
+				$Query .= "values('$IDgal', '".$_SESSION["CnxID"]."', '254', '255', '$date', '$title', '$texte', '0', 'O', 'O', '".$_SESSION["lang"]."')";
+				}
+
+			if ( !mysql_query($Query, $mysql_link) ) {
+				$status = "erreur <img src=\"".$_SESSION["ROOTDIR"]."/images/bad.gif\" title=\"\" alt=\"\" />";
+				sql_error($mysql_link);
+				}
+			}
+		}
+
+	$query = ( $IDgal )
+		? "select _title, _texte from gallery where _IDgal = '$IDgal' AND _lang = '".$_SESSION["lang"]."' limit 1"
+		: "select _titre from campus_data where _IDmat = '$IDsel' AND _lang = '".$_SESSION["lang"]."' limit 1" ;
+
+	// recherche d'une galerie pédagogique
+	$result = mysql_query($query, $mysql_link);
+	$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+	// initialisation des champs de saisie
+	$txtdesc = $msg->read($GALLERY_DISCLAIMER);
+
+	$title   = ( $_SESSION["CampusName"] ) ? $_SESSION["CampusName"] : @$row[0] ;
+	$texte   = ( $_SESSION["CampusName"] ) ? $txtdesc    : @$row[1] ;
+?>
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($GALLERY_FORMINSERT)); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+
+		<form id="formulaire" action="index.php" method="post" enctype="multipart/form-data">
+		<?php
+			print("
+				<p class=\"hidden\"><input type=\"hidden\" name=\"item\"   value=\"$item\" /></p>
+				<p class=\"hidden\"><input type=\"hidden\" name=\"cmde\"   value=\"$cmde\" /></p>
+				<p class=\"hidden\"><input type=\"hidden\" name=\"IDsel\"  value=\"$IDsel\" /></p>
+				<p class=\"hidden\"><input type=\"hidden\" name=\"IDgal\"  value=\"$IDgal\" /></p>
+				<p class=\"hidden\"><input type=\"hidden\" name=\"title\"  value=\"$title\" /></p>
+				");
+		?>
+
+		<table class="width100">
+		    <tr>
+		      <td style="width:15%" class="align-right valign-top"><?php print($msg->read($GALLERY_STATUS)); ?></td>
+		      <td style="width:85%" class="valign-top"><?php print("$status"); ?></td>
+		    </tr>
+
+		    <tr>
+		      <td style="width:15%" class="align-right valign-top"><?php print($msg->read($GALLERY_AUTHOR)); ?></td>
+		      <td style="width:85%" class="valign-top"><?php print("$auteur"); ?></td>
+		    </tr>
+		</table>
+
+		<hr style="width:80%;" />
+
+		<table class="width100">
+		    <tr>
+		      <td style="width:100%" class="valign-top align-center">
+			<?php print($msg->read($GALLERY_PEDAGO)); ?>
+				<label for="IDsel">
+			  	<select id="IDsel" name="IDsel" onchange="document.forms.formulaire.submit()">
+					<option value="0"><?php print($msg->read($GALLERY_OTHER)); ?></option>
+					<?php
+						// on sélectionne les matières pédagogiques du campus virtuel
+						$Query  = "select _IDmat, _titre from campus_data ";
+						$Query .= "where _visible = 'O' AND _lang = '".$_SESSION["lang"]."' ";
+						$Query .= ( strlen($_SESSION["CampusName"]) ) ? "AND _titre = '".$_SESSION["CampusName"]."' " : "" ;
+						$Query .= "order by _titre";
+
+						$result = mysql_query($Query, $mysql_link);
+						$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+						while ( $row ) {
+							// recherche des galeries
+							$res = mysql_query("select _IDgal from gallery where _title = '$row[1]'", $mysql_link);
+							$chk = ( $IDsel == $row[0] OR $_SESSION["CampusName"] == $row[1] ) ? "selected=\"selected\"" : "" ;
+
+							if ( !mysql_numrows($res) )
+								print("<option $chk value=\"$row[0]\">$row[1]</option>");
+
+							$row = remove_magic_quotes(mysql_fetch_row($result));
+							}
+					?>
+				</select> <img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/gallery.gif" title="" alt="" />
+				</label>
+		      </td>
+		    </tr>
+		</table>
+
+		<hr style="width:80%;" />
+
+	  <table class="width100">
+	   <tr>
+	     <td style="width:10%;">&nbsp;</td>
+	     <td style="width:80%;">
+
+		  <table class="width100">
+		  <?php
+			// intitulé non renseigné
+			if ( $error )
+			  	print("
+				    <tr>
+					<td style=\"width:100%;\">
+				          <span style=\"color:#FF0000;\">". $msg->read($GALLERY_ERRIDENT) ."</span>
+					</td>
+				    </tr>
+			    	");
+			?>
+
+		    <tr style="background-color:#eeeeee;">
+		      <td style="width:100%;">
+				<?php print($msg->read($GALLERY_THEMIDENT)); ?>
+		      </td>
+		    </tr>
+
+		    <tr>
+		      <td style="width:100%;">
+			<?php
+				if ( $_SESSION["CampusName"] OR $IDsel )
+					print("$title");
+				else
+					print("<label for=\"title\"><input type=\"text\" id=\"title\" name=\"title\" size=\"45\" value=\"$title\" /></label>");
+			?>
+		      </td>
+		    </tr>
+
+		    <tr style="background-color:#eeeeee;">
+		      <td style="width:100%;">
+		        <?php print($msg->read($GALLERY_DESCRIPTION)); ?>
+		      </td>
+		    </tr>
+	    
+		    <tr>
+		      <td style="width:100%;">
+			<?php print("<label for=\"texte\"><textarea rows=\"4\" id=\"texte\" name=\"texte\" cols=\"35\">$texte</textarea></label>"); ?>
+		      </td>
+		    </tr>
+		  </table>
+
+		  </td>
+	     <td style="width:10%;"></td>
+	   </tr>
+	  </table>
+
+	<hr style="width:80%;" />
+
+         <table class="width100">
+           <tr>
+              <td style="width:10%;" class="valign-middle align-center">
+              	<?php print("<input type=\"image\" src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/valid.gif\" name=\"valid\" alt=\"".$msg->read($GALLERY_INPUTOK)."\" />"); ?>
+              </td>
+              <td class="valign-middle">
+              <?php
+              	$action = ( $IDgal ) ? $msg->read($GALLERY_MODIFY) : $msg->read($GALLERY_APPEND) ;
+
+              	print("". $msg->read($GALLERY_ACTION, $action) ."");
+              ?>
+              </td>
+           </tr>
+           <tr>
+              <td class="valign-middle align-center">
+              	<?php print("<a href=\"index.php?item=$item&amp;IDgal=$IDgal\">"); ?>
+              	<?php print("<img src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/cancel.gif\" title=\"\" alt=\"".$msg->read($GALLERY_INPUTCANCEL)."\" />"); ?></a>
+              </td>
+              <td class="valign-middle">
+              	<?php print($msg->read($GALLERY_GOBACK)); ?>
+              </td>
+           </tr>
+         </table>
+
+		</form>
+
+</div>

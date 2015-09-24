@@ -1,0 +1,420 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2003-2007 by Dominique Laporte(C-E-D@wanadoo.fr)
+   Copyright (c) 2006 by FG (persofg@gmail.com)
+   Copyright (c) 2006 by Nordine Zetoutou (nordine.zetoutou@educagri.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : wiki.htm
+ *		projet   : la page des documents collaboratifs
+ *
+ *		version  : 1.2
+ *		auteur   : laporte
+ *		creation : 13/12/03
+ *		modif    : 18/06/05 par FG
+ *                     migration -> PHP5
+ * 		           17/07/06 - par Nordine Zetoutou
+ * 	                 migration des balises HTML en XHTML 1.0 strict
+ */
+
+
+$IDgroup = ( @$_POST["IDgroup"] )
+	? (int) $_POST["IDgroup"] 
+	: (int) @$_GET["IDgroup"] ;
+$IDroot  = ( @$_POST["IDroot"] )
+	? (int) $_POST["IDroot"] 
+	: (int) (@$_GET["IDroot"] ? (int) $_GET["IDroot"] : 1) ;
+$IDpage  = ( @$_POST["IDpage"] )
+	? (int) $_POST["IDpage"] 
+	: (int) @$_GET["IDpage"] ;
+$sort    = ( @$_POST["sort"] )
+	? (int) $_POST["sort"] 
+	: (int) @$_GET["sort"] ;
+
+$wiki_page_cmde = ( @$_POST["wiki_page_cmde"] )
+	? $_POST["wiki_page_cmde"] 
+	: @$_GET["wiki_page_cmde"] ;
+$wiki_page_id   = ( @$_POST["wiki_page_id"] )
+	? (int) $_POST["wiki_page_id"] 
+	: (int) @$_GET["wiki_page_id"] ;
+$wiki_page_text = ( @$_POST["wiki_page_text"] )
+	? $_POST["wiki_page_text"] 
+	: @$_GET["wiki_page_text"] ;
+$wiki_tag       = ( @$_POST["wiki_tag"] )
+	? $_POST["wiki_tag"] 
+	: @$_GET["wiki_tag"] ;
+$wiki_banner    = ( @$_POST["wiki_banner"] )
+	? $_POST["wiki_banner"] 
+	: @$_GET["wiki_banner"] ;
+$wiki_footer    = ( @$_POST["wiki_footer"] )
+	? $_POST["wiki_footer"] 
+	: @$_GET["wiki_footer"] ;
+$wiki_title     = ( @$_POST["wiki_title"] )
+	? $_POST["wiki_title"] 
+	: @$_GET["wiki_title"] ;
+$wiki_cmde      = ( @$_POST["wiki_cmde"] )
+	? $_POST["wiki_cmde"] 
+	: @$_GET["wiki_cmde"] ;
+?>
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($WIKI_WIKI)); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+
+	<p style="margin-top:0px;">
+	<?php print($msg->read($WIKI_DISCLAIMER)); ?>
+	</p>
+
+            <table class="width100">
+	<?php
+		require_once "include/wiki.php";
+
+		//----- lecture du répertoire courant -----
+		$Query  = "select _IDparent, _ident, _IDmod, _IDgrpwr, _IDgrprd, _IDpage from wiki_page ";
+		$Query .= "where _IDgroup = '$IDgroup' AND _visible = 'O' ";
+		$Query .= "AND _lang = '".$_SESSION["lang"]."' ";
+		$Query .= "limit 1";
+
+		$result = mysql_query($Query, $mysql_link);
+		$dir    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+		// lecture du propriétaire du répertoire
+		$owner  = getUserName($dir[2], false);
+
+		// objet des répertoires wiki
+		$wkp    = new wiki_page;
+
+		// initialisation des variables de l'objet wiki
+		$wkp->idpage = $dir[5];
+		$wkp->parent = $IDroot;
+		$wkp->group  = $IDgroup;
+		$wkp->owner  = $_SESSION["CnxID"];
+		$wkp->grpwr  = $dir[3];
+		$wkp->grprd  = $dir[4];
+		$wkp->link   = myurlencode("index.php?item=$item&IDroot=$IDroot&IDgroup=$IDgroup");
+
+            switch ( $wiki_page_cmde ) {
+                case "createDir" :	// création d'un répertoire
+                    print("
+				  <tr>
+					<td>");
+    
+                    $wkp->value = ( $IDpage ) ? "update" : "insert" ;
+                    $wkp->title = "". $msg->read($WIKI_DIRNAME) ."";
+                    $wkp->edit($IDpage);
+    
+                    print("
+					</td>
+				  </tr>");
+                    break;
+    
+                default :
+                    switch ( $wiki_page_cmde ) {
+                        case "insert" :
+                            $wkp->insert($wiki_page_text);
+                            break;
+                        case "update" :
+                            $wkp->update($wiki_page_id, $wiki_page_text);
+                            break;
+                        case "delete" :
+                            $wkp->delete($IDpage);
+                            break;
+                        default :
+                            break;
+                        }
+    
+                    $home = "<a href=\"index.php?item=$item&amp;IDgroup=$IDgroup\">". $msg->read($WIKI_ROOTDIR) ."</a>";
+                    $add  = ( $dir[3] & pow(2, $_SESSION["CnxGrp"] - 1))
+                        ? "<img src=\"".$_SESSION["ROOTDIR"]."/images/folder-add.gif\" title=\"".$msg->read($WIKI_ADDIR)."\" alt=\"\" /> <a href=\"index.php?item=$item&amp;IDgroup=$IDgroup&amp;IDroot=$IDroot&amp;wiki_page_cmde=createDir\">".$msg->read($WIKI_ADDIR)."</a>."
+                        : "&nbsp;" ;
+    
+                    print("
+                              <tr>
+                                <td style=\"width:50%;\" class=\"valign-middle align-left\">$add</td>
+                                <td style=\"width:50%;\" class=\"valign-middle align-right\">[$home]</td>
+                              </tr>
+                            ");
+                break;
+	        }
+	?>
+            </table>
+
+            <table class="width100">
+	<?php
+		// initialisation tri
+		$sortbydir  = 2;
+		$sortbydate = 4;
+
+		switch ( $sort ) {
+			case '1' :
+				$sortbydir  = 2;
+				break;
+			case '2' :
+				$sortbydir  = 1;
+				break;
+			case '3' :
+				$sortbydate = 4;
+				break;
+			case '4' :
+				$sortbydate = 3;
+				break;
+			default :
+				break;
+			}
+
+		print("
+	              <tr style=\"background-color:#C0C0C0;\">
+	                <td style=\"width:4%;\" class=\"align-center\"><img src=\"".$_SESSION["ROOTDIR"]."/images/folder-opened.gif\" title=\"\" alt=\"\" /></td>
+	                <td style=\"width:1%;\"><a href=\"index.php?item=$item&amp;sort=$sortbydir&amp;IDgroup=$IDgroup&amp;IDroot=$IDroot\"><img src=\"".$_SESSION["ROOTDIR"]."/images/updown.gif\" title=\"\" alt=\"\" /></a></td>
+	                <td style=\"width:69%;\"><strong>$dir[1]</strong></td>
+	                <td style=\"width:1%;\"><a href=\"index.php?item=$item&amp;sort=$sortbydate&amp;IDgroup=$IDgroup&amp;IDroot=$IDroot\"><img src=\"".$_SESSION["ROOTDIR"]."/images/updown.gif\" title=\"\" alt=\"\" /></a></td>
+	                <td style=\"width:25%;\" class=\"align-center\">".$msg->read($WIKI_DATE)."</td>
+	              </tr>
+			");
+
+		// accès au répertoire parent
+		if ( $dir[0] )
+			print("            
+				<tr>
+					<td style=\"width:4%;\" class=\"align-center\"><img src=\"".$_SESSION["ROOTDIR"]."/images/folder-up.gif\" title=\"".$msg->read($WIKI_PARENTDIR)."\" alt=\"\" /></td>
+					<td style=\"width:70%;\" colspan=\"2\">[<a href=\"index.php?item=$item&amp;IDgroup=$IDgroup&amp;IDroot=$dir[0]\">".$msg->read($WIKI_PARENTDIR)."</a>]</td>
+					<td style=\"width:26%;\" colspan=\"2\" class=\"align-center\">&nbsp;</td>
+				</tr>
+	       		");
+
+		//----- lecture des répertoires de pages -----
+		$Query  = "select _IDpage, _ident, _date, _IDmod, _update, _visible from wiki_page ";
+		$Query .= "where _IDparent = '$IDroot' AND _IDgroup = '$IDgroup' ";
+
+		switch ( $sort ) {
+			case '1' :	// ordre alphabétique
+				$Query .= "order by _ident asc";
+				break;
+			case '2' :
+				$Query .= "order by _ident desc";
+				break;
+			case '3' :	// ordre chrono
+				$Query .= "order by _IDpage asc";
+				break;
+			case '4' :
+			default :	// ordre chrono
+				$Query .= "order by _IDpage desc";
+				break;
+			}
+
+		$result = mysql_query($Query, $mysql_link);
+		$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+		// suppression du dossier
+		$req    = $msg->read($WIKI_DELDIR);
+
+		$i = 0;
+		while ( $row AND $wiki_cmde != "createFile" ) {
+			$bgcolor = ( $i++ % 2 ) ? "item" : "menu" ;
+
+			$delete  = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $row[3] )
+        	      	? "<a href=\"".myurlencode("index.php?item=$item&IDgroup=$IDgroup&IDroot=$IDroot&IDpage=$row[0]&wiki_page_cmde=delete")."\" onclick=\"return confirmLink(this, '$req');\"><img src=\"".$_SESSION["ROOTDIR"]."/images/corb.gif\" title=\"$req\" alt=\"\" /></a>"
+              		: "" ;
+	            $update  = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $row[3] )
+        	      	? "<a href=\"".myurlencode("index.php?item=$item&IDgroup=$IDgroup&IDroot=$IDroot&IDpage=$row[0]&wiki_page_cmde=createDir")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/stats/post.gif\" title=\"". $msg->read($WIKI_UPDTDIR) ."\" alt=\"\" /></a>"
+              		: "" ;
+	            $secure  = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $row[3] )
+        	      	? "<a href=\"".myurlencode("index.php?item=$item&IDgroup=$IDgroup&IDpage=$row[0]&cmde=gestion")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/tools.gif\" title=\"". $msg->read($WIKI_MGMTDIR) ."\" alt=\"\" /></a>"
+              		: "" ;
+
+	            $date    = "<img src=\"".$_SESSION["ROOTDIR"]."/images/goto.gif\" title=\"\" alt=\"\" /> $row[2]<br/>";
+	            $date   .= ( $row[2] != $row[4] )
+        	      	? "<img src=\"".$_SESSION["ROOTDIR"]."/images/in.gif\" title=\"\" alt=\"\" /> $row[4]"
+              		: "&nbsp;" ;
+
+			// nbr de documents dans le répertoire
+			$query   = "select _IDpage from wiki where _ver ='$row[0]' AND _current = 'O'";
+
+			$return  = mysql_query($query, $mysql_link);
+			$nbfile  = ( $return ) ? mysql_affected_rows($mysql_link) : 0 ;
+
+			$msg->isPlural = (bool) ( $nbfile > 1 );
+
+			$mytext  = $msg->read($WIKI_NBDOC, strval($nbfile));
+
+			// nbr de dossiers dans le répertoire
+			$query   = "select _IDpage from wiki_page ";
+			$query  .= "where _IDparent = '$row[0]' AND _IDgroup = '$IDgroup' ";
+
+			$return  = mysql_query($query, $mysql_link);
+			$nbdir   = ( $return ) ? mysql_affected_rows($mysql_link) : 0 ;
+
+			$msg->isPlural = (bool) ( $nbdir > 1 );
+
+			$mytext .= $msg->read($WIKI_NBDIR, strval($nbdir));
+
+			$icon    = ( $row[5] == "O" ) ? "folder-closed.gif" : "lock.gif" ;
+			$link    = ( $row[5] == "O" )
+				? "<a href=\"index.php?item=$item&amp;IDgroup=$IDgroup&amp;IDroot=$row[0]\">$row[1]</a>"
+				: "$row[1]" ;
+
+			// affichage tableau
+			if ( $dir[4] & pow(2,$_SESSION["CnxGrp"] - 1))
+				print("            
+					<tr class=\"$bgcolor\">
+	      				<td style=\"width:4%;\" class=\"align-center\"><img src=\"".$_SESSION["ROOTDIR"]."/images/$icon\" title=\"\" alt=\"\" /></td>
+						<td style=\"width:70%;\" colspan=\"2\" >
+		   					$link $delete $update $secure $mytext<br/>
+							<span class=\"x-small\">". $msg->read($WIKI_BY, getUserName($row[3])) ."</span>
+						</td>
+			                  <td style=\"width:26%;\" colspan=\"2\" class=\"align-center\">
+							<span class=\"x-small\">$date</span>
+						</td>
+					</tr>
+					");
+
+			$row = remove_magic_quotes(mysql_fetch_row($result));
+			}
+
+		// objet document wiki
+		$wk = new wiki;
+
+		// initialisation des variables de l'objet wiki
+		$wk->tag     = ( $wiki_tag )
+			? $wiki_tag									// lien interne
+			: ($IDgroup
+				? "EGROUP_".$IDgroup."_". date("Y-m-d-H-i-s")		// générateur ID unique peu rigoureux mais rapide
+				: "WikiPage_" . date("Y-m-d-H-i-s") );
+//		$wk->version = "$item.$IDroot";
+		$wk->version = "$IDroot";
+		$wk->owner   = ( $owner != "??" ) ? $owner : $_SESSION["CnxName"] ;
+		$wk->admin   = (bool) ( $_SESSION["CnxAdm"] == 255 OR $dir[2] == $_SESSION["CnxID"] );
+		$wk->user    = (bool) ( $dir[3] & pow(2, $_SESSION["CnxGrp"] - 1));
+		$wk->link    = myurlencode("index.php?item=$item&IDgroup=$IDgroup&IDroot=$IDroot");
+
+		switch ( $wiki_cmde ) {
+			case "createFile" :
+				print("
+					<tr>
+			                  <td colspan=\"5\">");
+
+				$wk->rows  = 30;
+				$wk->title = $msg->read($WIKI_TITLE);
+				$wk->init(0);	// on crée le document
+
+				print("
+			                  </td>
+					</tr>");
+				break;
+
+			default :
+				switch ( $wiki_cmde ) {
+					case "insert" :
+						$wk->insert($wiki_title, "", $_SESSION["CnxName"]);
+						break;
+					case "delete" :
+						$wk->delete($IDpage);
+						break;
+					default :
+						break;
+					}
+
+				//---- lecture des documents ----
+				$Query  = "select _IDpage, _title, _date, _author, _ver, _owner ";
+				$Query .= "from wiki ";
+//				$Query .= "where _ver = '$item.$IDroot' AND _current = 'O' ";
+				$Query .= "where _ver = '$IDroot' AND _current = 'O' ";
+				$Query .= ( $IDgroup ) ? "AND _tag like 'EGROUP\_".$IDgroup."\_%' " : "AND _tag like 'WikiPage%' " ;
+
+				switch ( $sort ) {
+					case '1' :	// ordre alphabétique
+						$Query .= "order by _text asc";
+						break;
+					case '2' :
+						$Query .= "order by _text desc";
+						break;
+					case '3' :	// ordre chrono
+						$Query .= "order by _IDpage asc";
+						break;
+					case '4' :
+					default :	// ordre chrono
+						$Query .= "order by _IDpage desc";
+						break;
+					}
+
+				$result = mysql_query($Query, $mysql_link);
+				$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+				// suppression du fichier
+				$req    = $msg->read($WIKI_DELFILE);
+
+				while ( $row ) {
+					$bgcolor = ( $i++ % 2 ) ? "item" : "menu" ;
+
+					// affichage tableau
+					if ( $dir[4] & pow(2, $_SESSION["CnxGrp"] - 1))  {
+						$titre = ( strpos($row[1], "\n") )
+							? substr($row[1], 0, strpos($row[1], "\n"))
+							: $row[1] ;
+						$titre = ( strlen($titre) > 60 )
+							? substr($titre, 0, 60) . "..."
+							: $titre ;
+
+						$delete  = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxName"] == $row[5] )
+        			 		     	? "<a href=\"".myurlencode("index.php?item=$item&IDgroup=$IDgroup&IDroot=$IDroot&IDpage=$row[0]&wiki_cmde=delete")."\" onclick=\"return confirmLink(this, '$req');\"><img src=\"".$_SESSION["ROOTDIR"]."/images/corb.gif\" title=\"$req\" alt=\"\" /></a>"
+              					: "" ;
+
+						print("            
+							<tr class=\"$bgcolor\">
+	      		    				<td style=\"width:4%;\" class=\"align-center\"><img src=\"".$_SESSION["ROOTDIR"]."/images/mime/txt.gif\" title=\"\" alt=\"\"  /></td>
+				       	         	<td style=\"width:70%;\" colspan=\"2\">
+				       	         		<a href=\"".myurlencode("index.php?item=$item&IDgroup=$IDgroup&IDroot=$IDroot&IDpage=$row[0]&cmde=visu")."\">$titre</a> $delete<br/>
+				       	         		<span class=\"x-small\">".$msg->read($WIKI_BY, $row[5])."</span>
+								</td>
+			        				<td style=\"width:26%;\" colspan=\"2\" class=\"align-center\">
+									<img src=\"".$_SESSION["ROOTDIR"]."/images/in.gif\" title=\"\" alt=\"\"  />
+									<span class=\"x-small\">$row[2]<br/>$row[3]</span>
+								</td>
+				       		</tr>
+				       		");
+						}
+
+					$row = remove_magic_quotes(mysql_fetch_row($result));
+					}
+
+				// bouton ajout document
+				$add  = ( $dir[3] & pow(2, $_SESSION["CnxGrp"] - 1))
+					? "<img src=\"".$_SESSION["ROOTDIR"]."/images/item-add.gif\" title=\"".$msg->read($WIKI_ADDFILE)."\" alt=\"\" /> <a href=\"index.php?item=$item&amp;IDgroup=$IDgroup&amp;IDroot=$IDroot&amp;wiki_cmde=createFile\">".$msg->read($WIKI_ADDFILE)."</a>."
+					: "&nbsp;" ;
+
+				print("
+					<tr>
+			                  <td class=\"valign-middle\" colspan=\"5\"><hr/></td>
+					</tr>
+					<tr>
+			                  <td class=\"valign-middle\" colspan=\"5\">$add</td>
+					</tr>
+		   	           	");
+				break;
+			}
+	?>
+            </table>
+
+</div>

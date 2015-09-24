@@ -1,0 +1,641 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2003-2008 by Dominique Laporte(C-E-D@wanadoo.fr)
+   Copyright (c) 2006 by Nordine Zetoutou (nordine.zetoutou@educagri.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : resource_gestion.htm
+ *		projet   : la page de gestion des ressources
+ *
+ *		version  : 1.1
+ *		auteur   : laporte
+ *		creation : 15/06/03
+ *		modif    : 20/11/05 - par D. Laporte
+ *		           implémentation des dossiers
+ *		           17/07/06 - Nordine Zetoutou
+ * 	                 migration des balises HTML en XHTML 1.0 strict
+ */
+
+
+$IDres   = ( @$_POST["IDres"] )			// ID de la ressource
+	? (int) $_POST["IDres"]
+	: (int) @$_GET["IDres"] ;
+$IDcat   = ( @$_POST["IDcat"] )			// ID de la catégorie
+	? (int) $_POST["IDcat"]
+	: (int) @$_GET["IDcat"] ;
+
+$IDmod   = (int) @$_POST["IDmod"];			// ID du modérateur
+$cbwr    = @$_POST["cbwr"];
+$cbrd    = @$_POST["cbrd"];
+$email   = (int) @$_POST["email"];
+$rss     = ( @$_POST["rss"] ) ? "O" : "N" ;
+$share   = ( @$_POST["share"] ) ? "O" : "N" ;
+$color   = ( @$_POST["color"] ) ? "O" : "N" ;
+$visible = ( @$_POST["visible"] ) ? "N" : "O" ;
+$myroot  = (int) @$_POST["myroot"];
+$lock    = (int) @$_POST["lock"];
+$PJ      = (int) @$_POST["PJ"];
+$titre   = addslashes(trim(@$_POST["titre"]));
+$texte   = addslashes(trim(@$_POST["texte"]));
+$nom     = addslashes(trim(@$_POST["nom"]));
+$desc    = addslashes(trim(@$_POST["desc"]));
+
+$submit   = ( @$_POST["valid_x"] )			// bouton de validation
+	? $_POST["valid_x"]
+	: @$_GET["submit"] ;
+?>
+
+
+<?php
+	// initialisation
+	$status = "-";
+
+	// vérification des autorisations
+	admSessionAccess();
+
+	// l'utilisateur a validé la saisie
+	if ( $submit AND $_SESSION["CnxAdm"] == 255 )
+		switch ( $submit ) {
+			case "del" :
+				if ( $IDcat )
+					mysql_query("delete from resource_data where _IDcat = '$IDcat' AND _lang = '".$_SESSION["lang"]."' limit 1", $mysql_link);
+				else {
+					$result = mysql_query("select _IDcat from resource_data where _IDres = '$IDres' AND _lang = '".$_SESSION["lang"]."' ", $mysql_link);
+					$row    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+					while ( $row ) {
+						mysql_query("delete from resource_data where _IDcat = '$row[0]' AND _lang = '".$_SESSION["lang"]."' limit 1", $mysql_link);
+
+						$row = mysql_fetch_row($result);
+						}
+
+					mysql_query("delete from resource where _IDres = '$IDres' AND _lang = '".$_SESSION["lang"]."' limit 1", $mysql_link);
+					}
+				break;
+
+			case "addfolder" :
+			case "updtfolder" :
+				break;
+
+			case "new" :
+			case "update" :
+				break;
+
+			default :
+				$status = $msg->read($RESOURCE_MODIFICATION) ." ";
+
+				// insertion/modification des dossiers
+				if ( $IDres ) {
+					$Query  = "update resource ";
+					$Query .= "set _color = '$color'";
+					$Query .= ( strlen($titre) ) ? ", _titre = '$titre', " : ", " ;
+					$Query .= "_texte = '$texte' ";
+					$Query .= "where _IDres = '$IDres' AND _lang = '".$_SESSION["lang"]."' ";
+					$Query .= "limit 1";
+					}
+				else {
+					// date de création de la catégorie de la ressource
+					$titre  = ( $titre != "" ) ? $titre : "??" ;
+
+					$Query  = "insert into resource ";
+					$Query .= "values('".sql_getunique("resource")."', '0', '0', '0', '$titre', '$texte', '11', 'N', 'N', 'O', '".$_SESSION["lang"]."')";
+					}
+
+				mysql_query($Query, $mysql_link);
+
+				// droits des rédacteurs et des lecteurs
+				$grpwr = $grprd = 0;
+				for ($i = 0; $i < count($cbwr); $i++)
+					$grpwr += ( @$cbwr[$i] ) ? $cbwr[$i] : 0 ;
+				for ($i = 0; $i < count($cbrd); $i++)
+					$grprd += ( @$cbrd[$i] ) ? $cbrd[$i] : 0 ;
+
+				// insertion/modification de la catégorie de la ressource
+				if ( $IDcat ) {
+					$Query  = "UPDATE resource_data ";
+					$Query .= ( strlen($nom) ) ? "SET _nom = '$nom', " : "SET " ;
+					$Query .= "_IDmod = '$IDmod', _IDgrpwr = '$grpwr', _IDgrprd= '$grprd', _texte = '$desc', _email = '$email', _lock = '$lock', _rss = '$rss', _PJ = '$PJ', _share = '$share', _visible = '$visible' ";
+					$Query .= "where _IDcat = '$IDcat' ";
+					$Query .= "limit 1";
+					}
+				else {
+					// date de création de la catégorie de la ressource
+					$nom    = ( $nom != "" ) ? $nom : "??" ;
+
+					$Query  = "insert into resource_data ";
+					$Query .= "values('', '$IDres', '$IDmod', '$grpwr', '$grprd', '$nom', '$desc', '$email', '$lock', '$rss', '$PJ', '$share', '$visible', '".$_SESSION["lang"]."')";
+					}
+
+				if ( !mysql_query($Query, $mysql_link) ) {
+					$status .= "<img src=\"".$_SESSION["ROOTDIR"]."/images/bad.gif\" title=\"\" alt=\"\" />";
+					sql_error($mysql_link);
+					}
+				else
+					$status .= "<img src=\"".$_SESSION["ROOTDIR"]."/images/ok.gif\" title=\"\" alt=\"\" />";
+
+				// mise à jour des menus
+				$IDmenu = (int) @$_POST["IDmenu1"];
+
+				if ( $IDmenu ) {
+					// recherche des ressources
+					$query  = "select _titre from resource ";
+					$query .= "where _IDres = '$IDres' AND _lang = '".$_SESSION["lang"]."' ";
+					$query .= "limit 1";
+
+					$result = mysql_query($query, $mysql_link);
+					$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+					$query  = "insert into config_submenu ";
+					$query .= "values('', '$IDmenu', '$row[0]', 'item=$item&IDres=$IDres', 'O', '0', '255', 'O', 'N', '', 'O', '0', '".$_SESSION["lang"]."')";
+
+					if ( !mysql_query($query, $mysql_link) ) {
+						$query  = "update config_submenu ";
+						$query .= "set _link = 'item=$item&IDres=$IDres' ";
+						$query .= "where _IDmenu = '$IDmenu' AND _lang = '".$_SESSION["lang"]."' ";
+						$query .= "limit 1";
+
+						mysql_query($query, $mysql_link);
+						}
+					}
+
+				$IDmenu = (int) @$_POST["IDmenu2"];
+
+				if ( $IDmenu ) {
+					// recherche des ressources
+					$query  = "select _nom from resource_data ";
+					$query .= "where _IDcat = '$IDcat' AND _lang = '".$_SESSION["lang"]."' ";
+					$query .= "limit 1";
+
+					$result = mysql_query($query, $mysql_link);
+					$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+					$query  = "insert into config_submenu ";
+					$query .= "values('', '$IDmenu', '$row[0]', 'item=$item&IDres=$IDres&IDcat=$IDcat', '0', '0', '255', 'O', 'N', '', 'O', '0', '".$_SESSION["lang"]."')";
+
+					if ( !mysql_query($query, $mysql_link) ) {
+						$query  = "update config_submenu ";
+						$query .= "set _link = 'item=$item&IDres=$IDres&IDcat=$IDcat' ";
+						$query .= "where _IDmenu = '$IDmenu' AND _lang = '".$_SESSION["lang"]."' ";
+						$query .= "limit 1";
+
+						mysql_query($query, $mysql_link);
+						}
+					}
+				break;
+			}
+
+     	// recherche de la matière
+	$query   = "select _titre, _texte, _color from resource ";
+	$query  .= "where _IDres = '$IDres' AND _lang = '".$_SESSION["lang"]."' AND _visible = 'O' ";
+	$query  .= "limit 1";
+
+	$result  = mysql_query($query, $mysql_link);
+	$matiere = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+	// recherche de la catégorie de la ressource
+	$Query  = "select _IDmod, _nom, _IDgrpwr, _IDgrprd, _email, _visible, _IDcat, _lock, _rss, _texte, _PJ, _share from resource_data ";
+	$Query .= "where _lang = '".$_SESSION["lang"]."' ";
+	$Query .= "AND _IDres = '$IDres' ";
+	switch ( $submit ) {
+		case "new" :
+			$IDcat = 0;
+		case "update" :
+			$Query .= "AND _IDcat = '$IDcat' ";
+			break;
+
+		default :
+			$Query .= ( $IDcat AND $IDres == $myroot ) ? "AND _IDcat = '$IDcat' " : "" ;
+			break;
+		}
+	$Query .= "order by _nom asc limit 1";
+
+	$result = mysql_query($Query, $mysql_link);
+	$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+	// initialisation
+	$IDmod  = $row[0];
+	$title  = $row[1];
+	$grpwr  = $row[2];
+	$grprd  = $row[3];
+	$email  = $row[4];
+	$check  = ( $row[5] == "N" ) ? "checked=\"checked\"" : "" ;
+	$IDcat  = $row[6];
+	$lock   = (int) $row[7];
+	$rss    = $row[8];
+	$desc   = $row[9];
+	$PJ     = (int) $row[10];
+	$share  = $row[11];
+?>
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($RESOURCE_MANAGEMENT, $matiere[0])); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+
+	<p><?php print($msg->read($RESOURCE_STATUS) . " $status"); ?></p>
+
+	<form id="formulaire" action="index.php" method="post">
+	<?php
+		print("
+			<p class=\"hidden\"><input type=\"hidden\" name=\"item\"    value=\"$item\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"cmde\"    value=\"$cmde\" /></p>
+			");
+	?>
+
+	<div style="border:#cccccc solid 1px; padding:4px;">
+
+		  <table class="width100">
+		    <tr style="background-color:#eeeeee;">
+		      <td style="width:33%;"><?php print($msg->read($RESOURCE_DIR)); ?></td>
+		      <td style="width:33%;"><?php print($msg->read($RESOURCE_MENU)); ?></td>
+		      <td style="width:33%;"><?php print($msg->read($RESOURCE_COLORCODE)); ?></td>
+		    </tr>
+
+		    <tr>
+		      <td>
+		      <?php
+				if ( $submit == "addfolder" OR $submit == "updtfolder" ) {
+					$query  = "select _titre, _texte from resource ";
+					$query .= "where _IDres = '$IDres' ";
+					$query .= "AND _lang='".$_SESSION["lang"]."' ";
+					$query .= "limit 1";
+
+					$result = mysql_query($query, $mysql_link);
+					$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+					print("<label for=\"titre\"><input type=\"text\" id=\"titre\" name=\"titre\" size=\"20\" value=\"$row[0]\" /></label>");
+					print("<input type=\"hidden\" name=\"IDres\" value=\"$IDres\" />");
+					}
+				else {
+	      			print("<label for=\"IDres\">");
+	      			print("<select id=\"IDres\" name=\"IDres\" onchange=\"document.forms.formulaire.submit()\">");
+
+					// recherche des dossiers
+					$query  = "select _IDres, _titre from resource ";
+					$query .= "where _internal = 'N' AND _lang = '".$_SESSION["lang"]."' ";
+					$query .= "order by _titre";
+
+					$result = mysql_query($query, $mysql_link);
+					$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+					// initialisation
+					if ( !$IDres )
+						$IDres = $row[0];
+
+					// ajouter un dossier
+					$add   = "<a href=\"".myurlencode("index.php?item=$item&cmde=$cmde&submit=addfolder")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/ajouter.gif\" title=\"". $msg->read($RESOURCE_ADDIR) ."\" alt=\"". $msg->read($RESOURCE_ADDIR) ."\" /></a>";
+
+					// supprimer un dossier
+					$del   = "<a href=\"".myurlencode("index.php?item=$item&cmde=$cmde&IDres=$IDres&submit=del")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/corb.gif\" title=\"". $msg->read($RESOURCE_DELETE) ."\" alt=\"". $msg->read($RESOURCE_DELETE) ."\" /></a>";
+
+					// modifier un dossier
+					$maj   = "<a href=\"".myurlencode("index.php?item=$item&cmde=$cmde&IDres=$IDres&submit=updtfolder")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/stats/post.gif\" title=\"". $msg->read($RESOURCE_UPDATING) ."\" alt=\"". $msg->read($RESOURCE_UPDATING) ."\" /></a>";
+
+					while ( $row ) {
+						$select = ( $IDres == $row[0] ) ? "selected=\"selected\"" : "" ;
+
+						print("<option value=\"$row[0]\" $select>$row[1]</option>");
+
+						$row = remove_magic_quotes(mysql_fetch_row($result));
+						}
+
+					print("</select> $add $maj $del");
+					print("</label>");
+					}
+
+				$myroot = ( $IDres == $myroot ) ? $myroot : $IDres ;
+			?>
+		      </td>
+		      <td>
+				<label for="IDmenu1">
+			  	<select id="IDmenu1" name="IDmenu1">
+					<option value="0">&nbsp;</option>
+				<?php
+					// affichage des modules actifs 
+					$query  = "select config_menu._IDmenu from config_menu, config_submenu ";
+					$query .= "where config_menu._activate = 'O' AND config_menu._lang = '".$_SESSION["lang"]."' ";
+					$query .= "AND config_submenu._link = 'item=$item&IDres=$IDres' ";
+					$query .= "AND config_menu._IDmenu = config_submenu._IDmenu ";
+					$query .= "limit 1";
+
+					$result = mysql_query($query, $mysql_link);
+					$myrow  = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+					// affichage des modules actifs 
+					$query  = "select _IDmenu, _ident from config_menu ";
+					$query .= "where _activate = 'O' AND _lang = '".$_SESSION["lang"]."' ";
+					$query .= "order by _ident";
+
+					$result = mysql_query($query, $mysql_link);
+					$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+					while ( $row ) {
+						$select = ( $myrow[0] == $row[0] ) ? "selected=\"selected\"" : "" ;
+
+						print("<option value=\"$row[0]\" $select>". str_replace($keywords_search, $keywords_replace, $row[1]) ."</option>");
+
+						$row = remove_magic_quotes(mysql_fetch_row($result));
+						}	// endwhile config
+					?>
+				</select>
+				</label>
+			</td>
+		      <td>
+				<?php $ischeck  = ( $matiere[2] == "O" ) ? "checked=\"checked\"" : "" ; ?>
+             		<label for="color"><input type="checkbox" id="color" name="color" value="O" <?php print("$ischeck"); ?> /></label>
+		      </td>
+		    </tr>
+
+		    <tr>
+		      <td colspan="3" style="border:#cccccc solid 1px; padding:4px;">
+			      <label for="texte"><textarea rows="1" id="texte" name="texte" cols="50"><?php print($matiere[1]); ?></textarea></label>
+			</td>
+		    </tr>
+
+		    <tr>
+		      <td style="height:10px;"></td>
+		    </tr>
+
+		    <tr style="background-color:#eeeeee;">
+		      <td><?php print($msg->read($RESOURCE_RESOURCE)); ?></td>
+		      <td><?php print($msg->read($RESOURCE_MENU)); ?></td>
+		      <td><?php print($msg->read($RESOURCE_CLOSE)); ?></td>
+		    </tr>
+	    
+		    <tr>
+		      <td>
+		      <?php
+				if ( $submit == "new" OR $submit == "update" ) {
+					$query  = "select _nom from resource_data ";
+					$query .= "where _IDcat = '$IDcat' ";
+					$query .= "AND _lang='".$_SESSION["lang"]."' ";
+					$query .= "limit 1";
+
+					$result = mysql_query($query, $mysql_link);
+					$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+					print("<label for=\"nom\"><input type=\"text\" id=\"nom\" name=\"nom\" size=\"20\" value=\"$row[0]\" /></label>");
+					print("<input type=\"hidden\" name=\"IDcat\" value=\"$IDcat\" />");
+					}
+				else {
+	      			print("<label for=\"IDcat\">");
+	      			print("<select id=\"IDcat\" name=\"IDcat\" onchange=\"document.forms.formulaire.submit()\">");
+
+					// recherche des ressources
+					$query  = "select _IDcat, _nom from resource_data ";
+					$query .= "where _IDres = '$IDres' AND _visible = 'O' ";
+					$query .= "AND _lang = '".$_SESSION["lang"]."' ";
+					$query .= "order by _nom asc";
+
+					$result = mysql_query($query, $mysql_link);
+					$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+					// initialisation
+					if ( !$IDcat )
+						$IDcat = $row[0];
+
+					// ajouter une resource
+					$add   = "<a href=\"".myurlencode("index.php?item=$item&cmde=$cmde&IDres=$IDres&submit=new")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/ajouter.gif\" title=\"". $msg->read($RESOURCE_NEWRESOURCE) ."\" alt=\"". $msg->read($RESOURCE_NEWRESOURCE) ."\" /></a>";
+
+					// supprimer une resource
+					$del   = "<a href=\"".myurlencode("index.php?item=$item&cmde=$cmde&IDres=$IDres&IDcat=$IDcat&submit=del")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/corb.gif\" title=\"". $msg->read($RESOURCE_ERASE) ."\" alt=\"". $msg->read($RESOURCE_ERASE) ."\" /></a>";
+
+					// modifier une resource
+					$maj   = "<a href=\"".myurlencode("index.php?item=$item&cmde=$cmde&IDres=$IDres&IDcat=$IDcat&submit=update")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/stats/post.gif\" title=\"". $msg->read($RESOURCE_UPDTRESOURCE) ."\" alt=\"". $msg->read($RESOURCE_UPDTRESOURCE) ."\" /></a>";
+
+					while ( $row ) {
+						$select = ( $IDcat == $row[0] ) ? "selected=\"selected\"" : "" ;
+
+						print("<option value=\"$row[0]\" $select>$row[1]</option>");
+
+						$row = remove_magic_quotes(mysql_fetch_row($result));
+						}
+
+					print("</select> $add $maj $del");
+					print("</label>");
+					}
+		      ?>
+		      </td>
+		      <td>
+				<label for="IDmenu2">
+			  	<select id="IDmenu2" name="IDmenu2">
+					<option value="0">&nbsp;</option>
+				<?php
+					// affichage des modules actifs 
+					$query  = "select config_menu._IDmenu from config_menu, config_submenu ";
+					$query .= "where config_menu._activate = 'O' AND config_menu._lang = '".$_SESSION["lang"]."' ";
+					$query .= "AND config_submenu._link = 'item=$item&IDres=$IDres&IDcat=$IDcat' ";
+					$query .= "AND config_menu._IDmenu = config_submenu._IDmenu ";
+					$query .= "limit 1";
+
+					$result = mysql_query($query, $mysql_link);
+					$myrow  = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+					// affichage des modules actifs 
+					$query  = "select _IDmenu, _ident from config_menu ";
+					$query .= "where _activate = 'O' AND _lang = '".$_SESSION["lang"]."' ";
+					$query .= "order by _ident";
+
+					$result = mysql_query($query, $mysql_link);
+					$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+					while ( $row ) {
+						$select = ( $myrow[0] == $row[0] ) ? "selected=\"selected\"" : "" ;
+
+						print("<option value=\"$row[0]\" $select>". str_replace($keywords_search, $keywords_replace, $row[1]) ."</option>");
+
+						$row = remove_magic_quotes(mysql_fetch_row($result));
+						}	// endwhile config
+					?>
+				</select>
+				</label>
+			</td>
+		      <td>
+             		<label for="visible"><input type="checkbox" id="visible" name="visible" value="O" <?php print("$check"); ?> /></label>
+		      </td>
+		    </tr>
+
+		    <tr>
+		      <td colspan="3" style="border:#cccccc solid 1px; padding:4px;">
+			      <label for="desc"><textarea rows="2" id="desc" name="desc" cols="50"><?php print($desc); ?></textarea></label>
+			</td>
+		    </tr>
+
+		    <tr>
+		      <td style="height:10px;"></td>
+		    </tr>
+
+		    <tr style="background-color:#eeeeee;">
+		      <td><?php print($msg->read($RESOURCE_MODO)); ?>*</td>
+		      <td><?php print($msg->read($RESOURCE_WRITER)); ?></td>
+		      <td><?php print($msg->read($RESOURCE_READER)); ?></td>
+		    </tr>
+
+		    <tr>
+		      <td class="valign-top">
+				<label for="IDmod">
+				<select id="IDmod" name="IDmod">
+					<option value="0"><?php print($msg->read($RESOURCE_NONE)); ?></option>
+					<?php
+						// recherche des modérateurs
+						$result = mysql_query("select _ID, _name, _fname from user_id where _adm & 4 order by _name asc", $mysql_link);
+						$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+						while ( $row ) {
+							$select = ( $IDmod == $row[0] ) ? "selected=\"selected\"" : "" ;
+
+							print("<option value=\"$row[0]\" $select>".formatUserName($row[1], $row[2])."</option>");
+
+							$row = remove_magic_quotes(mysql_fetch_row($result));
+							}
+					?>
+				</select>
+				</label>
+		      </td>
+		      <td class="valign-top">
+	      		<?php
+					// recherche des groupes
+					$query  = "select _IDgrp, _ident from user_group ";
+					$query .= "where _visible = 'O' AND _lang = '".$_SESSION["lang"]."' ";
+					$query .= "order by _IDgrp asc";
+
+					$result = mysql_query($query, $mysql_link);
+					$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+					while ( $row ) {
+						$check = ( $grpwr & pow(2, $row[0] - 1) ) ? "checked=\"checked\"" : "" ;
+
+						print("<label for=\"cbwr_$row[0]\"><input type=\"checkbox\" id=\"cbwr_$row[0]\" name=\"cbwr[]\" value=\"". pow(2, $row[0] - 1) ."\" $check /> $row[1]</label><br/>");
+
+						$row   = remove_magic_quotes(mysql_fetch_row($result));
+						}
+	             	?>
+		      </td>
+		      <td class="valign-top">
+	      		<?php
+					// recherche des groupes
+					mysql_data_seek($result, 0);
+					$row = remove_magic_quotes(mysql_fetch_row($result));
+
+					while ( $row ) {
+						$check = ( $grprd & pow(2, $row[0] - 1) ) ? "checked=\"checked\"" : "" ;
+
+						print("<label for=\"cbrd_$row[0]\"><input type=\"checkbox\" id=\"cbrd_$row[0]\" name=\"cbrd[]\" value=\"". pow(2, $row[0] - 1) ."\" $check /> $row[1]</label><br/>");
+
+						$row = remove_magic_quotes(mysql_fetch_row($result));
+						}
+	             	?>
+		      </td>
+		    </tr>
+
+		    <tr>
+		      <td style="height:10px;"></td>
+		    </tr>
+
+		    <tr style="background-color:#eeeeee;">
+		      <td><?php print($msg->read($RESOURCE_INFORM)); ?></td>
+		      <td><?php print($msg->read($RESOURCE_MYLOCK)); ?></td>
+		      <td><?php print($msg->read($RESOURCE_AUTHORIZATION)); ?></td>
+		    </tr>
+
+
+		    <tr>
+		      <td class="valign-top">
+	      		<?php
+					// recherche des groupes
+					$list = explode(",", $msg->read($RESOURCE_INFORMSETUP));
+
+					for ($i = 0; $i < count($list); $i++) {
+						$check = ( $email == $i ) ? "checked=\"checked\"" : "" ;
+
+						print("<label for=\"email_$i\"><input type=\"radio\" id=\"email_$i\" name=\"email\" value=\"$i\" $check /> $list[$i]</label><br/>");
+						}
+	             	?>
+		      </td>
+		      <td class="valign-top">
+				<label for="lock">
+				<select id="lock" name="lock" style="font-size:9px;">
+				<?php
+					for ($i = 1; $i < 6; $i++) {
+						$select = ( $lock == $i ) ? "selected=\"selected\"" : "" ;
+
+						print("<option value=\"$i\" $select>$i</option>");
+						}
+				?>
+				</select> <?php print($msg->read($RESOURCE_HOURS)); ?>
+				</label>
+		      </td>
+		      <td class="valign-top">
+	      		<?php
+					$check = ( $rss == "O" ) ? "checked=\"checked\"" : "" ;
+					print("<label for=\"rss\"><input type=\"checkbox\" id=\"rss\" name=\"rss\" value=\"O\" $check /> ". $msg->read($RESOURCE_RSS) ."</label><br/>");
+
+					$check = ( $share == "O" ) ? "checked=\"checked\"" : "" ;
+					print("<label for=\"share\"><input type=\"checkbox\" id=\"share\" name=\"share\" value=\"O\" $check /> ". $msg->read($RESOURCE_MULTICENTER) ."</label><br/>");
+	             	?>
+	           		<label for="noPJ"><input type="checkbox" id="noPJ" name="noPJ" disabled="disabled" /> <?php print($msg->read($RESOURCE_ATTACHMENT)); ?></label>
+				<label for="PJ">
+				<select id="PJ" name="PJ" style="font-size:9px;">
+				<?php
+					for ($i = 1; $i <= 10; $i++) {
+						$select = ( $PJ == $i ) ? "selected=\"selected\"" : "" ;
+
+						print("<option value=\"$i\" $select>$i</option>");
+						}
+				?>
+				</select>
+				</label>
+		      </td>
+		    </tr>
+		  </table>
+
+	</div>
+
+	<div class="x-small">* <?php print($msg->read($RESOURCE_DECLARE)); ?></div>
+
+	<hr style="width:80%;" />
+
+         <table class="width100">
+           <tr>
+              <td style="width:10%;" class="valign-middle align-center">
+              	<?php print("<input type=\"image\" src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/valid.gif\" name=\"valid\" alt=\"".$msg->read($RESOURCE_INPUTOK)."\" />"); ?>
+              </td>
+              <td class="valign-middle">
+              	<?php print($msg->read($RESOURCE_UPDTRES)); ?>
+              </td>
+           </tr>
+           <tr>
+              <td class="valign-middle align-center">
+              	<?php print("<a href=\"index.php?item=0\"><img src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/cancel.gif\" title=\"\" alt=\"".$msg->read($RESOURCE_INPUTCANCEL)."\" />"); ?></a>
+              </td>
+              <td class="valign-middle">
+              	<?php print($msg->read($RESOURCE_QUIT)); ?>
+              </td>
+           </tr>
+         </table>
+
+		<p class="hidden"><input type="hidden" name="myroot" value="<?php print("$myroot"); ?>" /></p>
+	</form>
+
+</div>

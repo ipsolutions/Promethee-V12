@@ -1,0 +1,457 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2004-2008 by Dominique Laporte(C-E-D@wanadoo.fr)
+   Copyright (c) 2006 by frédéric poyet(frederic.poyet@free.fr)
+   Copyright (c) 2006 by Nordine Zetoutou (nordine.zetoutou@educagri.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : quizz_show.htm
+ *		projet   : la page de résultats des exercices en ligne du campus virtuel
+ *
+ *		version  : 1.0
+ *		auteur   : laporte
+ *		creation : 8/09/04
+ *		modif    : 19/06/06 - par Fred POYET
+ *                     migration php5
+ *		           17/07/06 - Nordine Zetoutou
+ * 	                 migration des balises HTML en XHTML 1.0 strict
+ */
+
+
+$IDquizz = ( @$_POST["IDquizz"] )		// ID du quizz
+	? (int) $_POST["IDquizz"]
+	: (int) @$_GET["IDquizz"] ;
+$IDmat   = ( @$_POST["IDmat"] )		// ID de la matière/formation
+	? (int) $_POST["IDmat"]
+	: (int) @$_GET["IDmat"] ;
+$IDdata  = ( @$_POST["IDdata"] )		// Identifiant de la matière
+	? (int) $_POST["IDdata"]
+	: (int) @$_GET["IDdata"] ;
+$IDsel   = ( @$_POST["IDsel"] )		// ID de la classe
+	? (int) $_POST["IDsel"] 
+	: (int) @$_GET["IDsel"] ;
+
+$showpts = (int) @$_GET["showpts"];
+?>
+
+
+<?php
+	require_once "include/quizz.php";
+
+	// lecture de la base de données des campus
+	$Query  = "select _titre, _IDmod, _IDgrprd, _texte, _IDgrpwr from campus_data ";
+	$Query .= "where _IDmat = '$IDmat' ";
+	$Query .= "AND _visible = 'O' AND _lang = '".$_SESSION["lang"]."' ";
+	$Query .= "limit 1";
+
+	$result = mysql_query($Query, $mysql_link);
+	$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+	// lecture du modérateur
+	if ( $row[1] ) {
+		$result = mysql_query("select _sexe, _ID from user_id where _ID = '$row[1]' limit 1", $mysql_link);
+		$who    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+		$mod    = ( $who[0] == "F" )
+			? $msg->read($QUIZZ_MODOF)
+			: $msg->read($QUIZZ_MODOM) ;
+		$mod   .= " : " . getUserName($row[1]);
+		}
+	else
+		$mod = $msg->read($QUIZZ_NOMODO);
+?>
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat; height: 25px;\">
+	<div style="text-align: center;"><?php print($msg->read($QUIZZ_EXERCICERESULT, $row[0])); ?></div>
+	<div class="x-small" style="float: left;"><em><?php echo $mod; ?></em></div>
+</div>
+
+<div class="maincontent">
+
+	<?php
+		// lecture de la base de données
+		$Query  = "select _date, _titre, _level, _ID, _IP, _anonyme from quizz ";
+		$Query .= "where _IDquizz = '$IDquizz' " ;
+		$Query .= ( $IDsel ) ? "AND _IDgrprd like '% $IDsel %' " : "" ;
+		$Query .= ( $_SESSION["CnxAdm"] == 255 ) ? "" : "AND (_visible = 'O' OR _ID = '".$_SESSION["CnxID"]."') " ;
+		$Query .= "limit 1";
+
+		$result = mysql_query($Query, $mysql_link);
+		$quizz  = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+		// commandes utilisateur
+		if ( @$_POST["del_x"] )
+			if ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $quizz[3] ) {
+				$cb = @$_POST["rm"];
+
+				for ($i = 0; $i < count($cb); $i++)
+					if ( @$cb[$i] ) {
+						$query  = "delete from quizz_vote ";
+						$query .= "where _IDquizz = '$IDquizz' AND _ID = '$cb[$i]' ";
+
+						$result = mysql_query($query, $mysql_link);
+						}
+				}
+
+		// niveau de difficulté des exercices
+		$level  = ( $quizz[2] )
+			? "<img src=\"".$_SESSION["ROOTDIR"]."/images/stats/etoile$quizz[2].gif\" title=\"\" alt=\"\" />"
+			: "" ;
+
+		// lecture du nombre de questions
+		$query  = "select _IDdata from quizz_data ";
+		$query .= "where _IDquizz = '$IDquizz' ";
+
+		$result = mysql_query($query, $mysql_link);
+		$count  = ( $result ) ? mysql_affected_rows($mysql_link) : 0 ;
+
+		// lecture des points des questions/réponses
+		$query  = "select quizz_items._IDdata, quizz_items._IDitem, quizz_items._pts ";
+		$query .= "from quizz_items, quizz_data ";
+		$query .= "where quizz_data._IDquizz = '$IDquizz' ";
+		$query .= "AND quizz_items._IDdata = quizz_data._IDdata ";
+		$query .= "AND quizz_items._pts > 0 ";
+		$query .= "order by quizz_items._IDdata";
+
+		$result = mysql_query($query, $mysql_link);
+		$row    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+		$max    = array();	// les pts max/question
+
+		$i      = -1;
+		$iddata = 0;
+
+		while ( $row ) {
+			if ( $iddata != $row[0] ) {
+				$i++;
+				$iddata   = $row[0];
+				$max[$i]  = strval($row[2]);
+				}
+			else
+				$max[$i] += strval($row[2]);
+
+			$row = mysql_fetch_row($result);
+			}
+
+		// lecture de l'auteur de la ressource
+		// lecture de la station
+		$auteur = getUserName($quizz[3]) . " " . _getHostName($quizz[4]);
+
+		$visu   = "<a href=\"" . myurlencode("index.php?item=$item&cmde=$cmde&IDmat=$IDmat&IDdata=$IDdata&IDsel=$IDsel&IDquizz=$IDquizz&");
+		$visu  .= ( $showpts == 1 )
+			? "showpts=0\">". $msg->read($QUIZZ_PICTO) ."</a>"
+			: "showpts=1\">". $msg->read($QUIZZ_SHOWPOINTS) ."</a>" ;
+
+		print("
+			<div style=\"border:#cccccc solid 1px; padding:2px;\">
+				<strong>$quizz[1]</strong> $level<br/>
+				<span class=\"x-small\">". $msg->read($QUIZZ_CREATEBY, Array(date2longfmt($quizz[0]), $auteur)) ."</span>
+			</div>
+
+	            <div style=\"text-align: right;\">[$visu]</div>
+			");
+
+		print("
+			<form id=\"formulaire\" action=\"index.php\" method=\"post\">
+            		<p class=\"hidden\"><input type=\"hidden\" name=\"item\"    value=\"$item\"/></p>
+				<p class=\"hidden\"><input type=\"hidden\" name=\"cmde\"    value=\"$cmde\" /></p>
+				<p class=\"hidden\"><input type=\"hidden\" name=\"IDquizz\" value=\"$IDquizz\" /></p> 
+				<p class=\"hidden\"><input type=\"hidden\" name=\"IDmat\"   value=\"$IDmat\" /></p>
+				<p class=\"hidden\"><input type=\"hidden\" name=\"IDdata\"  value=\"$IDdata\" /></p> 
+				<p class=\"hidden\"><input type=\"hidden\" name=\"IDsel\"   value=\"$IDsel\" /></p> 
+			");
+
+		// suppression test
+		$delete = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $quizz[3] )
+			? "<input type=\"image\" src=\"".$_SESSION["ROOTDIR"]."/images/corb.gif\" name=\"del\" title=\"". $msg->read($QUIZZ_DELTEST) ."\" alt=\"". $msg->read($QUIZZ_DELTEST) ."\" />"
+			: "<img src=\"".$_SESSION["ROOTDIR"]."/images/corb.gif\" title=\"\" alt=\"*\" />" ;
+
+		// reset test
+		$reset  = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $quizz[3] )
+			? "<input type=\"image\" src=\"".$_SESSION["ROOTDIR"]."/images/version.gif\" name=\"reset\" title=\"". $msg->read($QUIZZ_RESET) ."\" alt=\"". $msg->read($QUIZZ_RESET) ."\" />"
+			: "<img src=\"".$_SESSION["ROOTDIR"]."/images/version.gif\" title=\"\" alt=\"*\" />" ;
+
+		print("            
+	            <table class=\"width100\">
+	              <tr style=\"background-color:#C0C0C0;\">
+	                <td class=\"align-center\" style=\"width:1%\">$delete</td>
+	                <td></td>");
+
+		for ($i = 1; $i <= $count; $i++)
+			print("
+	                <td class=\"align-center\" style=\"width:1%\"><strong>$i</strong></td>");
+
+		print("
+	                <td class=\"align-center\" style=\"width:1%\">". $msg->read($QUIZZ_TOTALPTS) ."</td>
+	              </tr>");
+
+		// lecture de la base de données
+		$query  = ( $quizz[5] == "N" ) ? "select distinctrow _IP " : "select distinctrow _ID " ;
+		$query .= "from quizz_vote ";
+		$query .= "where _IDquizz = '$IDquizz' ";
+		$query .= ( $quizz[5] == "N" ) ? "order by _IP" : "order by _ID" ;
+
+		$result = mysql_query($query, $mysql_link);
+		$user   = mysql_fetch_row($result);
+		$nbusr  = ( $result ) ? mysql_affected_rows($mysql_link) : 0 ;
+
+		$totpts = Array();	// les pts/questions
+		$total  = Array();	// le pts/utilisateur
+		$mean   = Array();	// moyenne
+
+		$j  = 0;
+
+		while ( $user ) {
+			$bgcol = ( $j % 2 ) ? "item" : "menu" ;
+
+			// lecture de la station
+			$ident = ( $quizz[5] == "N" )
+				? _getHostName($user[0])
+				: getUserName($user[0]) ;
+
+			$ident = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $quizz[3] OR $_SESSION["CnxID"] == $user[0] )
+				? "<a href=\"".myurlencode("index.php?item=$item&cmde=visu&IDmat=$IDmat&IDdata=$IDdata&IDsel=$IDsel&IDquizz=$IDquizz&IDuser=$user[0]&IDtext=1&nbcount=$count&norec=1")."\">$ident</a>"
+				: $ident ;
+
+			// suppression test
+			$isrm  = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $quizz[3] )
+				? ""
+				: "disabled=\"disabled\"" ;
+
+			// accès protégé en lecture
+			print("
+				<tr class=\"$bgcol\">
+			       	<td class=\"align-center\"><label for=\"rm_$user[0]\"><input type=\"checkbox\" id=\"rm_$user[0]\" name=\"rm[]\" value=\"$user[0]\" $isrm /></label></td>
+					<td>$ident</td>");
+
+			// lecture des réponses des utilisateurs
+			$query  = "select quizz_vote._IDdata, quizz_vote._ID, quizz_vote._IP, quizz_vote._Iditem, quizz_vote._text, quizz_vote._index, " ;
+			$query .= "quizz_data._type " ;
+			$query .= "from quizz_vote, quizz_data ";
+			$query .= "where quizz_vote._IDquizz = '$IDquizz' ";
+			$query .= "AND quizz_vote._IDdata = quizz_data._IDdata ";
+			$query .= ( $quizz[5] == "N" ) ? "AND quizz_vote._IP = '$user[0]' " : "AND quizz_vote._ID = '$user[0]' " ;
+			$query .= "order by quizz_vote._IDdata asc, quizz_vote._index desc";
+
+			$res    = mysql_query($query, $mysql_link);
+			$row    = ( $res ) ? remove_magic_quotes(mysql_fetch_row($res)) : 0 ;
+
+			$iddata    = $row[0] ;
+			$ecart[$j] = $i = 0;
+
+			// les points de la question
+			$totpts[$j][$i] = "";
+
+			while ( $row ) {
+				// nouvelle question
+				if ( $iddata != $row[0] ) {
+					$iddata = $row[0];
+
+					$img  = ( $showpts == 1 )
+						? "<a href=\"".myurlencode($link)."\">".@$totpts[$j][$i]."/".@$max[$i]."</a>"
+						: (@$totpts[$j][$i] == @$max[$i]
+							? "<a href=\"".myurlencode($link)."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/ok.gif\" title=\"\"  alt=\"+\" /></a>"
+							: "<a href=\"".myurlencode($link)."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/bad.gif\" title=\"\" alt=\"-\" /></a>");
+
+					print("<td class=\"align-center\">$img</td>");
+
+					$i++;
+
+					// les points de la question
+					$totpts[$j][$i] = "";
+					}
+
+				$link = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $quizz[3] OR $_SESSION["CnxID"] == $row[1] )
+					? "index.php?item=$item&cmde=visu&IDmat=$IDmat&IDdata=$IDdata&IDsel=$IDsel&IDquizz=$IDquizz&IDuser=$row[1]&IDtext=$row[0]&nbcount=$count&norec=1"
+					: "#" ;
+
+				// calcul des points gagnés
+				switch ( $row[6] ) {
+					case 0 :
+					case 1 :
+						$totpts[$j][$i] = (int) $totpts[$j][$i] + compute_quizz($row[0], $row[3], $row[6]);
+						break;
+
+					default :
+						$totpts[$j][$i] = (int) $totpts[$j][$i] + compute_quizz($row[0], $row[5], $row[6], $row[4]);
+						break;
+					}
+
+				$row = remove_magic_quotes(mysql_fetch_row($res));
+				}	// endwhile réponse
+
+			$img  = ( $showpts == 1 )
+				? "<a href=\"".myurlencode($link)."\">".@$totpts[$j][$i]."/".@$max[$i]."</a>"
+				: (@$totpts[$j][$i] == @$max[$i]
+					? "<a href=\"".myurlencode($link)."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/ok.gif\" title=\"\"  alt=\"+\" /></a>"
+					: "<a href=\"".myurlencode($link)."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/bad.gif\" title=\"\" alt=\"-\" /></a>");
+
+			print("<td class=\"align-center\">$img</td>");
+
+			$i++;
+
+			// on complète les questions non répondues
+			for (; $i < $count; $i++)
+				print("<td></td>");
+
+			// calcul de la somme des pts possibles
+			$somme = $total[$j] = 0;
+			for ($i = 0; $i < $count; $i++) {
+				$somme     += @$max[$i]; 
+				$total[$j] += (int) @$totpts[$j][$i];
+				}
+
+			print("
+					<td class=\"align-center\">". $msg->read($QUIZZ_RATIO, Array("$total[$j]", "$somme")) ."</td>
+	       		  </tr>");
+
+			$ecart[$j] += pow($total[$j], 2);
+
+			$j++;
+			$user   = mysql_fetch_row($result);
+			}	// endwhile user
+
+		$pts_tot = 0;
+		$pts_min = $pts_max = @$total[0];
+		for ($j = 0; $j < $nbusr; $j++) {
+			$pts_tot += $total[$j];
+
+			$pts_min  = ( $pts_min > $total[$j] ) ? $total[$j] : $pts_min ;
+			$pts_max  = ( $pts_max < $total[$j] ) ? $total[$j] : $pts_max ;
+			}
+
+		print("
+	              <tr>
+	                <td class=\"align-right\" colspan=\"2\">". $msg->read($QUIZZ_MIN) ."</td>");
+
+		for ($i = 0; $i < $count; $i++) {
+			$usrmin = "";
+
+			for ($j = 0; $j < $nbusr; $j++)
+				if ( strlen(@$totpts[$j][$i]) )
+					$usrmin = !strlen($usrmin)
+						? @$totpts[$j][$i]
+						: ($usrmin > strlen(@$totpts[$j][$i]) ? @$totpts[$j][$i] : $usrmin) ;
+
+			print("<td class=\"align-center\" style=\"border: 1px solid #c0c0c0;\" >$usrmin</td>");
+			}
+
+		print("
+	                <td class=\"align-center\" style=\"border: 1px solid #c0c0c0;\" >$pts_min</td>
+	              </tr>
+	              <tr>
+	                <td class=\"align-right\" colspan=\"2\">". $msg->read($QUIZZ_MAX) ."</td>");
+
+		for ($i = 0; $i < $count; $i++) {
+			$usrmax = "";
+
+			for ($j = 0; $j < $nbusr; $j++)
+				if ( strlen(@$totpts[$j][$i]) )
+					$usrmax = !strlen($usrmax)
+						? @$totpts[$j][$i]
+						: ($usrmax < strlen(@$totpts[$j][$i]) ? @$totpts[$j][$i] : $usrmax) ;
+
+			print("<td class=\"align-center\" style=\"border: 1px solid #c0c0c0;\" >$usrmax</td>");
+			}
+
+		print("
+	                <td class=\"align-center\" style=\"border: 1px solid #c0c0c0;\" >$pts_max</td>
+	              </tr>
+	              <tr>
+	                <td class=\"align-right\" colspan=\"2\">". $msg->read($QUIZZ_AVERAGE) ."</td>");
+
+		for ($i = 0; $i < $count; $i++) {
+			$value = $nbvide = 0;
+
+			for ($j = 0; $j < $nbusr; $j++)
+				if ( strlen(@$totpts[$j][$i]) )
+					$value += (int) $totpts[$j][$i];
+				else
+					$nbvide++;
+
+			$mean[$i] = ( $nbvide == $nbusr )
+				? "-"
+				: number_format((double) ($value / ($nbusr - $nbvide)), 1) ;
+
+			print("<td class=\"align-center\" style=\"border: 1px solid #c0c0c0;\">$mean[$i]</td>");
+			}
+
+		$value  = ( $nbusr ) ? number_format($pts_tot/$nbusr, 1) : "" ;
+
+		print("
+	                <td class=\"align-center\" style=\"border: 1px solid #c0c0c0;\" >$value</td>
+	              </tr>
+	              <tr>
+	                <td class=\"align-right\" colspan=\"2\">". $msg->read($QUIZZ_ECTYPE) ."</td>");
+
+		$ectype = 0;
+
+		for ($i = 0; $i < $count; $i++) {
+			$n = 0;
+
+			for ($j = 0; $j < $nbusr; $j++)
+				if ( strlen(@$totpts[$j][$i]) AND $mean[$i] != "-" ) {
+					$ectype += pow($totpts[$j][$i] - $mean[$i], 2);
+					$n++;
+					}
+
+			$ectype = ( $n > 1 )
+				? number_format(sqrt($ectype / ($n - 1)), 1)
+				: "-" ;
+
+			print("<td class=\"align-center\" style=\"border: 1px solid #c0c0c0;\">$ectype</td>");
+			}
+
+		$ecart = $m = 0;
+
+		for ($j = 0; $j < $nbusr; $j++)
+			if ( strlen(@$total[$j]) ) {
+				$ecart += pow($total[$j] - ($pts_tot/$nbusr), 2);
+				$m++;
+				}
+
+		$ecart = ( $m > 1 )
+			? number_format(sqrt($ecart / ($m - 1)), 1)
+			: "-" ;
+
+		print("
+	                <td class=\"align-center\" style=\"border: 1px solid #c0c0c0;\" >$ecart</td>
+	              </tr>
+	            </table>");
+
+		print("</form>");
+	?>
+
+	<hr />
+
+         <table class="width100">
+           <tr>
+              <td style="width:10%;" class="valign-middle align-center">
+              	<?php print("<a href=\"".myurlencode("index.php?item=$item&IDmat=$IDmat&IDdata=$IDdata")."\">"); ?>
+              	<?php print("<img src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/cancel.gif\" title=\"\" alt=\"".$msg->read($QUIZZ_INPUTCANCEL)."\" />"); ?></a>
+              </td>
+              <td class="valign-middle">
+              	<?php print($msg->read($QUIZZ_BACK)); ?>
+              </td>
+           </tr>
+         </table>
+
+</div>

@@ -1,0 +1,69 @@
+hr {
+				border-color: #FFA500 #ffffff #ffffff #ffffff;
+}
+a:link {
+				color: #FFA500;
+				text-decoration: none;
+}
+a:hover {
+				color: #FFA500;
+				text-decoration: underline;
+}
+.bannertitle {
+	padding: 0px 2px 0px 2px;
+	color: #000000;
+	float: left;
+	}
+.boxcontent {
+	padding: 0px;
+	border: 1px solid #FFA500;
+}
+.boxtitle {
+				padding: 0px;
+				background: url("../images/h3.png") no-repeat scroll 0 0 orange;
+				color: #ffffff;
+				font-weight: bold;
+}
+.boxtitle a {
+				color: #ffffff;
+				font-weight: bold;
+				text-decoration: none;
+}
+.boxtitle a:hover {
+				color: #ffffff;
+				font-weight: bold;
+				text-decoration: none;
+}
+.boxtitle a:visited {
+				color: #ffffff;
+				font-weight: bold;
+				text-decoration: none;
+}
+.boxtitle .backoffice {
+				border: none;
+}	
+.boxtitle .backoffice .config {
+				display: none;
+				position: absolute;
+				margin: 0px 0px 0px -80px;
+				width: 80px;
+				height: 18px;
+				text-align: right;
+				}	
+.boxtitle .backoffice:hover .config {
+				display: inline;
+				background-color: #FFA500;
+				}
+.maintitle {
+				background-color: #EEEEEE;
+				border-radius: 6px 6px 6px 6px;
+				padding: 4px;
+}
+.maincontent {
+				background-color: #F7F7F7;
+				border-radius: 6px 6px 6px 6px;
+				padding: 10px;
+				margin-top: 22px;
+				border: 1px solid #CCCCCC;
+}
+

@@ -1,0 +1,344 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2002-2008 by Dominique Laporte(C-E-D@wanadoo.fr)
+   Copyright (c) 2006 by Hugues Lecocq(hugues.lecocq@laposte.net)
+   Copyright (c) 2006 by Nordine Zetoutou (nordine.zetoutou@educagri.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : cursus.htm
+ *		projet   : la page des cursus
+ *
+ *		version  : 1.0
+ *		auteur   : laporte
+ *		creation : 24/04/04
+ *		modif    : 15/06/06 - par hugues lecocq
+ *                     migration PHP5 
+ *		           17/07/06 - Nordine Zetoutou
+ * 	                 migration des balises HTML en XHTML 1.0 strict
+ */
+
+
+$IDsel  = ( @$_POST["IDsel"] )		// Identifiant de la classe sélectionnée
+	? (int) $_POST["IDsel"]
+	: (int) (@$_GET["IDsel"] ? $_GET["IDsel"] : $_SESSION["CnxClass"]) ;
+$IDmat   = ( @$_POST["IDmat"] )		// Identifiant de la matière/formation
+	? (int) $_POST["IDmat"]
+	: (int) @$_GET["IDmat"] ;
+$IDdata  = ( @$_POST["IDdata"] )		// Identifiant de la matière
+	? (int) $_POST["IDdata"]
+	: (int) @$_GET["IDdata"] ;
+$IDitem = ( @$_POST["IDitem"] )		// Identifiant d'un module de cursus
+	? (int) $_POST["IDitem"]
+	: (int) @$_GET["IDitem"] ;
+$path   = ( @$_POST["path"] )			// chemin d'accès aux fichiers
+	? $_POST["path"]
+	: @$_GET["path"] ;
+
+$submit = ( @$_POST["submit"] )		// bouton de validation
+	? $_POST["submit"]
+	: @$_GET["submit"] ;
+
+// réinitialisation
+if ( @$_GET["salon"] == "" )
+	$_SESSION["CampusName"] = "";
+?>
+
+
+<?php
+	// recherche du cursus
+	// NB : pour l'instant seule la formation initiale est acessible !!
+	$query  = "select _IDcursus, _titre, _texte from cursus ";
+	$query .= "where _visible = 'O' AND _lang = '".$_SESSION["lang"]."' ";
+	$query .= "order by _IDcursus asc ";
+	$query .= "limit 1";
+
+	$result = mysql_query($query, $mysql_link);
+	$cursus = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+	// recherche des paramètres de la matière
+	$query  = "select cursus_data._IDmod, cursus_data._IDgrpwr, cursus_data._IDgrprd, campus_data._titre ";
+	$query .= "from cursus_data, campus_data ";
+	$query .= "where cursus_data._IDmat = campus_data._IDmat ";
+	$query .= "AND cursus_data._IDcursus = '$cursus[0]' ";
+	$query .= ( $_SESSION["CampusName"] ) ? "AND campus_data._titre = '".$_SESSION["CampusName"]."' " : "cursus_data._IDmat = '$IDmat' " ;
+	$query .= "limit 1";
+
+	$result = mysql_query($query, $mysql_link);
+	$row    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+	// initialisation
+	$IDmod  = $row[0];
+	$grpwr  = $row[1];
+	$grprd  = $row[2];
+	$module = $row[3];
+
+        	// seul le big chef ou le modérateur peuvent supprimer un référentiel
+	if ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $IDmod )
+		switch ( $submit ) {
+			case "del" :	// on efface la ressource
+				$result  = mysql_query("select _file from cursus_items where _IDitem = '$IDitem'", $mysql_link);
+				$file    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+				if ( !mysql_query("delete from cursus_items where _IDitem = '$IDitem'", $mysql_link) )
+					mysql_error($mysql_link);
+				else {
+					// fichier à effacer
+					$path = "$DOWNLOAD/cursus/$cursus[1]/$module/$file[0]";
+
+					@unlink( stripaccent($path) );
+					}
+				break;
+
+			default :
+				break;
+			}
+?>
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($CURSUS_CURSUS, $cursus[1])); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+
+	<?php
+		if ( strlen($cursus[2]) )
+			print("<p>$cursus[2]</p>");
+	?>
+
+	<form id="formulaire" action="index.php?item=35"  method="post">
+
+		<hr style="width:80%;" />
+
+		<table class="width100">
+		  <tr>
+		    <td style="width:50%;"  class="align-right">
+		    	<?php print($msg->read($CURSUS_CHOOSEMATTER)); ?> 
+		    </td>
+		    <td style="width:50%;">
+			<label for="IDdata">
+	  		<select id="IDdata" name="IDdata" onchange="document.forms.formulaire.submit()">
+			  <option value="0">&nbsp;</option>
+				<?php
+					// recherche des modules
+					$query  = "select _IDmat, _titre from campus_data ";
+					$query .= "where _visible = 'O' AND _lang = '".$_SESSION["lang"]."' ";
+					$query .= ( $_SESSION["CnxAdm"] == 255 ) ? "" : "AND (_IDgrprd & ". pow(2, $_SESSION["CnxGrp"] - 1) .") " ;
+					$query .= ( $IDmat > 0 ) ? "AND _IDmat = '$IDmat' " : "" ;
+					$query .= "order by _titre asc";
+
+					$result = mysql_query($query, $mysql_link);
+					$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+					while ( $row ) {
+						$select = ( $IDdata == $row[0] OR $_SESSION["CampusName"] == $row[1] ) ? "selected=\"selected\"" : "" ;
+
+						if ( $IDdata == $row[0] )
+							$module = $row[1];
+
+						print("<option value=\"$row[0]\" $select>$row[1]</option>");
+
+						$row = remove_magic_quotes(mysql_fetch_row($result));
+						}
+				?>
+			</select> <img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/donneravis.gif" title="" alt="" />
+			</label>
+		    </td>
+		  </tr>
+
+		  <tr>
+		    <td class="align-right">
+			<?php print($msg->read($CURSUS_CHOOSECLASS)); ?>
+		    </td>
+		    <td>
+			<label for="IDsel">
+	  		<select id="IDsel" name="IDsel" onchange="document.forms.formulaire.submit()">
+			  <option value="0">&nbsp;</option>
+				<?php
+					// affichage des centres
+					$query  = "select _IDcentre, _ident from config_centre ";
+					$query .= "where _visible = 'O' ";
+					$query .= "AND _lang = '".$_SESSION["lang"]."' ";
+					$query .= "order by _ident";
+
+					$return = mysql_query($query, $mysql_link);
+					$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($return)) : 0 ;
+
+					while ( $row ) {
+						print("<optgroup label=\"$row[1]\">");
+
+						// affichage des classes
+						$query  = "select _IDclass, _ident from campus_classe ";
+						$query .= "where _visible = 'O' ";
+						$query .= "AND _IDcentre = '$row[0]' ";
+						$query .= ( strlen($_SESSION["CampusName"]) AND $IDmat < 0 ) ? "AND _ident = '".$_SESSION["CampusName"]."' " : "" ;
+						$query .= "order by _ident";
+
+						$result = mysql_query($query, $mysql_link);
+						$grp    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+						while ( $grp ) {
+							$Query  = "select distinctrow _IDitem ";
+							$Query .= "from cursus_items, cursus_data ";
+							$Query .= "where _IDmat = '$IDdata' ";
+							$Query .= "AND cursus_items._IDgrprd like '% $grp[0] %' ";
+							$Query .= "AND cursus_items._IDdata = cursus_data._IDdata ";
+
+							// détermination du nombre de pages
+							$myret  = mysql_query($Query, $mysql_link);
+							$nrows  = mysql_num_rows($myret);
+		
+							if ( $IDsel == $grp[0] OR $_SESSION["CampusName"] == $grp[1] )
+								print("<option selected=\"selected\" value=\"$grp[0]\">$grp[1] ($nrows)</option>");
+							else
+								print("<option value=\"$grp[0]\">$grp[1] ($nrows)</option>");
+
+							$grp = remove_magic_quotes(mysql_fetch_row($result));
+							}
+							
+						print("</optgroup>");
+
+						$row = remove_magic_quotes(mysql_fetch_row($return));
+						}
+				?>
+			</select> <img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/group.gif" title="" alt="" />
+			</label>
+		    </td>
+		  </tr>
+		</table>
+
+	<hr style="width:80%;" />
+
+	</form>
+
+	<?php
+		// bouton ajouter
+		if ( $IDdata AND $IDsel ) {
+			// vérification de l'accès en écriture
+			$link = ( $_SESSION["CnxAdm"] == 255 OR $IDmod == $_SESSION["CnxID"] OR ($grpwr & pow(2, $_SESSION["CnxGrp"] - 1)) )
+				? "<a href=\"".myurlencode("index.php?item=$item&cmde=new&IDsel=$IDsel&IDmat=$IDmat&IDdata=$IDdata")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/post.gif\" title=\"". $msg->read($CURSUS_NEWCURSUS) ."\" alt=\"". $msg->read($CURSUS_NEWCURSUS) ."\" /></a>"
+	       		: "" ;
+
+			$text = ( $_SESSION["CnxAdm"] == 255 OR $IDmod == $_SESSION["CnxID"] OR ($grpwr & pow(2, $_SESSION["CnxGrp"] - 1)) )
+				? $msg->read($CURSUS_ADDCURSUS)
+				: "" ;
+			}
+		else
+			$link = $text = "";
+
+		print("
+	            <table class=\"width100\">
+	              <tr>
+	                <td style=\"width:12%;\" class=\"align-center valign-middle\">$link &nbsp;</td>
+	                <td class=\"align-left valign-middle\">$text &nbsp;</td>
+	              </tr>
+	            </table>
+			");
+
+		// lecture de la base de données
+		$Query  = "select distinctrow _IDitem, _titre, _texte, _file, _size, _date, _ID, _IP, _IDmat ";
+		$Query .= "from cursus_items, cursus_data ";
+		$Query .= ( $IDdata ) ? "where _IDmat = '$IDdata' " : "where _IDmat <> '0' " ;
+		$Query .= ( $IDsel ) ? "AND cursus_items._IDgrprd like '% $IDsel %' " : "AND 0 ";
+		$Query .= "AND cursus_items._IDdata = cursus_data._IDdata ";
+//		$Query .= ( $_SESSION["CnxAdm"] == 255 ) ? "" : "AND (cursus_data._IDgrprd & ".pow(2, $_SESSION["CnxGrp"] - 1).") " ;
+		$Query .= "order by _IDitem asc";
+
+		// détermination du nombre de pages
+		$result = mysql_query($Query, $mysql_link);
+		$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+		if ( $row ) {
+			print("<table class=\"width100\">");
+
+			while ( $row ) {
+				// extraction de l'icone
+				$ext    = extension($row[3]);
+
+				// lecture de l'icone associée à l'extension
+				if ( mysql_query("select _ext from config_mime where _ext = '$ext'", $mysql_link) )
+					if ( !mysql_affected_rows($mysql_link) )
+						$ext = "-";
+
+				// on filtre les caractères accentués
+				$path   = stripaccent("$DOWNLOAD/cursus/$cursus[1]/$module/$row[3]");
+
+				// lien des ressources
+				$target = "onclick=\"window.open(this.href, '_blank'); return false;\"";
+				$lien   = myurlencode("index.php?file=$path");
+
+				// lecture de l'auteur de la ressource
+				$who    = $msg->read($CURSUS_POSTEDBY, Array($row[5], getUserName($row[6])));
+
+				// lecture de l'adresse IP
+				$who   .= " " . _getHostName($row[7]);
+
+				// suppression des ressources
+				$req    = $msg->read($CURSUS_DELCURSUS, $row[1]);
+				$del    = ( $_SESSION["CnxAdm"] == 255 )
+					? "<a href=\"".myurlencode("index.php?item=$item&IDitem=$row[0]&IDmat=$IDmat&IDsel=$IDsel&IDdata=$IDdata&submit=del")."\" onclick=\"return confirmLink(this, '$req');\"><img src=\"".$_SESSION["ROOTDIR"]."/images/corb.gif\" title=\"$req\" alt=\"$req\" /></a>"
+					: "" ;
+
+				// modification des ressources
+				$maj    = ( $_SESSION["CnxAdm"] == 255 OR $row[6] == $_SESSION["CnxID"] )
+					? "<a href=\"".myurlencode("index.php?item=$item&IDitem=$row[0]&IDmat=$IDmat&IDsel=$IDsel&IDdata=$IDdata&cmde=new")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/stats/post.gif\" title=\"". $msg->read($CURSUS_UPDTCURSUS) ."\" alt=\"". $msg->read($CURSUS_UPDTCURSUS) ."\" /></a>"
+					: "" ;
+
+				// lecture du compteur des téléchargements
+				$res    = mysql_query("select _IDdown, _count from download_data where _file = '$path'", $mysql_link);
+				$down   = ( $res ) ? mysql_fetch_row($res) : 0 ;
+
+				$link   = ( $down[0] )
+					? "<a href=\"#\" onclick=\"popWin('".$_SESSION["ROOTDIR"]."/user_list.php?sid=".$_SESSION["sessID"]."&amp;IDdown=$down[0]&amp;cmde=dwload&amp;lang=".$_SESSION["lang"]."', '450', '200'); return false;\">$down[1]</a>"
+					: "0" ;
+
+				// accès protégé en lecture
+				print("
+			              <tr>
+			                <td style=\"background-color:#cccccc; width:100%;\">
+						<strong>$row[1]</strong> $del $maj<br/>
+						<span class=\"x-small\">$who</span>
+			                </td>
+			              </tr>
+			              <tr>
+			                <td>$row[2]</td>
+			              </tr>
+					");
+
+				if ( $row[3] )
+					print("
+				              <tr>
+				                <td>
+							<img src=\"".$_SESSION["ROOTDIR"]."/images/mime/$ext.gif\" title=\"\" alt=\"*\" />
+							<a href=\"$lien\" $target>$row[3]</a> ".$msg->read($CURSUS_BYTE, number_format($row[4], 0, ",", " "))." $link
+				                </td>
+				              </tr>
+						");
+
+				$row = remove_magic_quotes(mysql_fetch_row($result));
+				}	// endwhile ressource
+
+			print("</table>");
+			}
+	?>
+
+</div>

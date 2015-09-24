@@ -1,0 +1,259 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2007 by Dominique Laporte(C-E-D@wanadoo.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : retenu_visu.htm
+ *		projet   : la page de visualisation des détails des consignes
+ *
+ *		version  : 1.0
+ *		auteur   : laporte
+ *		creation : 10/02/07
+ *		modif    : 
+ */
+
+
+$IDcentre = ( @$_POST["IDcentre"] )		// Identifiant du centre
+	? (int) $_POST["IDcentre"]
+	: (int) @$_GET["IDcentre"] ;
+$IDeleve  = ( @$_POST["IDeleve"] )		// Identifiant de l'élève
+	? (int) $_POST["IDeleve"]
+	: (int) @$_GET["IDeleve"] ;
+$IDclass  = ( @$_POST["IDclass"] )		// Identifiant de la classe
+	? (int) $_POST["IDclass"]
+	: (int) @$_GET["IDclass"] ;
+$year     = ( @$_POST["year"] )		// année
+	? (int) $_POST["year"]
+	: (int) @$_GET["year"] ;
+$month    = ( @$_POST["month"] )		// mois
+	? (int) $_POST["month"]
+	: (int) @$_GET["month"] ;
+$name     = ( @$_POST["name"]	)		// nom alpha
+	? $_POST["name"]
+	: @$_GET["name"] ;
+
+$IDitem   = (int) @$_POST["IDitem"];
+
+$submit   = @$_POST["submit"];		// bouton de validation
+?>
+
+
+<?php
+	// lecture des droits
+	$Query  = "select _IDmod, _IDgrprd from retenu ";
+	$Query .= "where _IDcentre = '".$_SESSION["CnxCentre"]."' ";
+	$Query .= "limit 1";
+
+	$result = mysql_query($Query, $mysql_link);
+	$auth   = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+	// test du droit de lecture
+	verifySessionAccess($auth[0], $auth[1]);
+
+	// commande de l'utilisateur
+	if ( $submit ) {
+		$comment = @$_POST["comment"];
+
+		$Query   = "update retenu_items ";
+		$Query  .= "set _comment = '$comment' ";
+		$Query  .= "where _IDitem = '$IDitem' ";
+
+		mysql_query($Query, $mysql_link);
+		}
+
+	// initialisation
+	$href = "index.php?item=$item&IDcentre=$IDcentre&name=$name&IDclass=$IDclass&year=$year&month=$month";
+?>
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($RETENU_TITLE)); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+
+		<table class="width100">
+		  <tr>
+			<td style="width:10%;" class="align-right">
+				<?php print($msg->read($RETENU_NAME)); ?>
+			</td>
+			<td class="align-left">
+			<?php
+				// affichage de l'élève
+				$Query  = "select _name, _fname, _IDclass from user_id ";
+				$Query .= "where _ID = '$IDeleve' AND _IDgrp = '1' ";
+				$Query .= "limit 1";
+
+				$result = mysql_query($Query, $mysql_link);
+				$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+				print("$row[0] $row[1]");
+			?>
+			</td>
+		  </tr>
+
+		  <tr>
+			<td class="align-right">
+				<?php print($msg->read($RETENU_CLASS)); ?>
+			</td>
+			<td class="align-left">
+			<?php
+				// affichage de la classe
+				$Query  = "select _ident from campus_classe ";
+				$Query .= "where _IDclass = '$row[2]' ";
+				$Query .= "limit 1";
+
+				$result = mysql_query($Query, $mysql_link);
+				$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+				print("$row[0]");
+			?>
+			</td>
+		  </tr>
+		</table>
+
+	<?php
+		print("
+			<table class=\"width100\">
+			  <tr class=\"align-center\" style=\"background-color:#C0C0C0;\">
+	                <td style=\"width:20%;\">
+				". $msg->read($RETENU_DATE) ."
+	                </td>
+	                <td style=\"width:40%;\">
+				<strong>Motif</strong>
+	                </td>
+	                <td style=\"width:40%;\">
+				". $msg->read($RETENU_WORK) ."
+	                </td>
+			  </tr>
+			");
+
+		// lecture de la consigne
+		$query  = "select _ID, _IP, _date, _motif, _devoir, _delay, _IDdata from retenu_data ";
+		$query .= "where _IDeleve = '$IDeleve' ";
+		$query .= "order by _date desc";
+
+		$result = mysql_query($query, $mysql_link);
+		$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+		// infos complémentaires
+		$desc   = $msg->read($RETENU_BY) ." ". getUserName($row[0], false);
+		$desc  .= _getHostName($row[1], false) . "<br/>" ;
+		$desc  .= $msg->read($RETENU_FOR) . " $row[2]<br/>";
+		$desc  .= $msg->read($RETENU_GETDELAY, strval($row[5]));
+
+ 		$about  = "<a href=\"#\" class=\"overlib\">";
+		$about .= "<img src=\"".$_SESSION["ROOTDIR"]."/images/spip/aide.gif\" title=\"\" alt=\"\" />";
+		$about .= "<span>$desc</span>";
+		$about .= "</a>";
+
+		$i = 0;
+		while ( $row ) {
+			$bgcol  = ( $i++ % 2 ) ? "item" : "menu" ;
+
+			// recherche statut de la consigne
+			$query  = "select _ID, _IP, _date, _comment, _email, _status, _IDitem ";
+			$query .= "from retenu_items ";
+			$query .= "where _IDdata = '$row[6]' ";
+			$query .= "order by _IDitem asc";
+
+			$return = mysql_query($query, $mysql_link);
+			$myrow  = ( $return ) ? remove_magic_quotes(mysql_fetch_row($return)) : 0 ;
+
+			$status = explode(",", $msg->read($RETENU_INFO));
+			$texte  = $comment = "";
+
+			while ( $myrow ) {
+				if ( $myrow[5] ) {
+					$texte .= "<strong>".$status[$myrow[5]]."</strong>";
+					$texte .= ( $myrow[0] ) ? " ".$msg->read($RETENU_WHO, getUserName($myrow[0])) : "" ;
+					$texte .= ( $myrow[1] ) ? " "._getHostName($myrow[1]) : "" ;
+					$texte .= ( $myrow[1] ) ? " le ".date2longfmt($myrow[2]) : "" ;
+					$texte .= ( $myrow[4] == "0000-00-00 00:00:00" ) ? "" : "<img src=\"".$_SESSION["ROOTDIR"]."/images/email.gif\" title=\"". $msg->read($RETENU_SENT, $myrow[4]) ."\" alt=\"". $msg->read($RETENU_SENT, $myrow[4]) ."\" />" ;
+					$texte .= ( $myrow[3] ) ? "<br/><em>$myrow[3]</em>" : "" ;
+					$texte .= "<br/>";
+					}
+
+				$IDitem  = $myrow[6];
+				$comment = $myrow[3];
+
+				$myrow   = remove_magic_quotes(mysql_fetch_row($return));
+				}
+
+			if ( $texte == "" )
+				$texte = "&nbsp;";
+
+			print("
+				<tr class=\"$bgcol\">
+		                <td class=\"align-center valign-top\">".str_replace(" ", "<br/>", $row[2])." $about</td>
+		                <td class=\"valign-top\">$row[3]</td>
+		                <td class=\"valign-top\">$row[4]</td>
+				</tr>
+				");
+
+			print("
+				<tr>
+		                <td></td>
+		                <td class=\"valign-top\" colspan=\"2\">
+					<div style=\"border-style: dashed; padding: 2px;\">
+					$texte
+ 
+					<form id=\"formulaire\" action=\"index.php\" method=\"post\">
+						<p class=\"hidden\"><input type=\"hidden\" name=\"item\"     value=\"$item\" /></p>
+						<p class=\"hidden\"><input type=\"hidden\" name=\"cmde\"     value=\"$cmde\" /></p>
+						<p class=\"hidden\"><input type=\"hidden\" name=\"IDcentre\" value=\"$IDcentre\" /></p>
+						<p class=\"hidden\"><input type=\"hidden\" name=\"IDeleve\"  value=\"$IDeleve\" /></p>
+						<p class=\"hidden\"><input type=\"hidden\" name=\"IDclass\"  value=\"$IDclass\" /></p>
+						<p class=\"hidden\"><input type=\"hidden\" name=\"year\"     value=\"$year\" /></p>
+						<p class=\"hidden\"><input type=\"hidden\" name=\"month\"    value=\"$month\" /></p>
+						<p class=\"hidden\"><input type=\"hidden\" name=\"name\"     value=\"$name\" /></p>
+						<p class=\"hidden\"><input type=\"hidden\" name=\"IDitem\"   value=\"$IDitem\" /></p>
+
+					  <input type=\"submit\" value=\"". $msg->read($RETENU_COMMENT) ."\" name=\"submit\" />
+					  <label for=\"comment\"><textarea id=\"comment\" name=\"comment\" rows=\"3\" cols=\"50\">$comment</textarea></label>
+					</form>
+					</div>
+				    </td>
+				</tr>
+				");
+
+			$row = remove_magic_quotes(mysql_fetch_row($result));
+			}
+
+		print("
+			  <tr>
+				<td colspan=\"3\"><hr/></td>
+			  </tr>
+
+			  <tr>
+				<td class=\"align-center valign-middle\">
+				  <a href=\"".myurlencode("$href")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/cancel.gif\" title=\"\" alt=\"".$msg->read($RETENU_INPUTCANCEL)."\" /></a>
+				</td>
+				<td colspan=\"2\" class=\"valign-middle\">
+				  ". $msg->read($RETENU_GOBACK) ."
+				</td>
+			  </tr>
+	            </table>
+			");
+	      ?>
+
+</div>

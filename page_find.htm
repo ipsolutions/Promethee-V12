@@ -1,0 +1,504 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2002-2007 by Dominique Laporte(C-E-D@wanadoo.fr)
+   Copyright (c) 2006 by Nordine Zetoutou (nordine.zetoutou@educagri.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : page_find.htm
+ *		projet   : la page des résultats de la recherche
+ *
+ *		version  : 1.0
+ *		auteur   : laporte
+ *		creation : 10/11/02
+ *		modif    : 17/07/06 - Nordine Zetoutou
+ * 	                 migration des balises HTML en XHTML 1.0 strict
+ */
+
+
+$IDflash = ( @$_POST["IDflash"] )		// ID du flash info
+	? (int) $_POST["IDflash"]
+	: (int) @$_GET["IDflash"] ;
+$IDcat   = ( @$_POST["IDcat"] )		// ID de la catégorie
+	? (int) $_POST["IDcat"]
+	: (int) @$_GET["IDcat"] ;
+$IDres   = ( @$_POST["IDres"] )		// ID de la ressource
+	? (int) $_POST["IDres"]
+	: (int) @$_GET["IDres"] ;
+$IDmat   = ( @$_POST["IDmat"] )		// ID de la matière/formation
+	? (int) $_POST["IDmat"]
+	: (int) @$_GET["IDmat"] ;
+$IDdata  = ( @$_POST["IDdata"] )		// ID de la matière
+	? (int) $_POST["IDdata"]
+	: (int) @$_GET["IDdata"] ;
+$IDforum = ( @$_POST["IDforum"] )		// ID du forum
+	? (int) $_POST["IDforum"]
+	: (int) @$_GET["IDforum"] ;
+$IDgal   = ( @$_POST["IDgal"] )		// ID de la galerie
+	? (int) $_POST["IDgal"]
+	: (int) @$_GET["IDgal"] ;
+$IDpost  = ( @$_POST["IDpost"] )		// ID du post-it
+	? (int) $_POST["IDpost"]
+	: (int) @$_GET["IDpost"] ;
+$IDgroup = ( @$_POST["IDgroup"] )		// ID du e-groupe
+	? (int) $_POST["IDgroup"]
+	: (int) @$_GET["IDgroup"] ;
+
+$words   = ( @$_POST["words"] )		// texte à chercher...
+	? $_POST["words"]
+	: @$_GET["words"] ;
+$subject = ( @$_POST["subject"] )		// dans le sujet
+	? $_POST["subject"]
+	: @$_GET["subject"] ;
+$texte   = ( @$_POST["texte"] )		// dans le message
+	? $_POST["texte"]
+	: @$_GET["texte"] ;
+$rb      = ( @$_POST["rb"] )			// tri par date
+	? $_POST["rb"]
+	: @$_GET["rb"] ;
+$xrb     = ( @$_POST["xrb"] )			// mot exact ou non
+	? $_POST["xrb"]
+	: @$_GET["xrb"] ;
+$nbmsg   = ( @$_POST["nbmsg"] )		// limite de la recherche
+	? (int) $_POST["nbmsg"]
+	: (int) @$_GET["nbmsg"] ;
+$rub     = ( @$_POST["rub"] )			// n° de rubrique
+	? (int) $_POST["rub"]
+	: (int) @$_GET["rub"] ;
+
+$skpage  = ( @$_GET["skpage"] )		// n° de la page affichée
+	? (int) $_GET["skpage"]
+	: 1 ;
+$skshow  = ( @$_GET["skshow"] )		// n° de l'article
+	? (int) $_GET["skshow"]
+	: 1 ;
+?>
+
+
+<?php
+	// initialisation
+	$s1 = $s2 = "" ;
+
+	// rubriques
+	switch ( $rub ) {
+		case 0 :	// tout le site
+			// à faire...
+			$order  = "";
+			$field1 = $field2 = "";
+			$back   = "";
+			break;
+
+		case 1 :	// flash infos
+		case 5 :	// publications
+			$field1 = $message->read($PAGE_ARTICLE);
+			$field2 = $message->read($PAGE_INFOFLASH);
+			$back   = "index.php?item=$item&IDflash=$IDflash&cmde=search&rub=$rub";
+				
+			$Query  = "select flash_data._IDflash, flash_data._date, flash_data._title, flash_data._IDinfos, flash_data._ID, flash_data._IP ";
+			$Query .= "from flash_data, flash ";
+			$Query .= "where flash_data._visible = 'O' AND (flash._IDgrprd & ".pow(2, $_SESSION["CnxGrp"] - 1).") AND ";
+
+			if ( $IDflash )
+				$Query .= "flash_data._IDflash = '$IDflash' AND ";
+			$Query .= "flash._IDflash = flash_data._IDflash AND ";
+
+			// recherche sentence exacte
+			$s1 = ( $xrb == 1 ) ? "flash_data._title like '%$words%' " : "(flash_data._title like '%$words %' OR flash_data._title like '% $words%') " ;
+			$s2 = ( $xrb == 1 ) ? "flash_data._texte like '%$words%' " : "(flash_data._texte like '%$words %' OR flash_data._texte like '% $words%') " ;
+
+			// ordre d'affichage
+			$order = "order by flash_data._IDinfos ";
+			break;
+
+		case 2 :	// ressources
+			$field1 = $message->read($PAGE_RESOURCE);
+			$field2 = $message->read($PAGE_CATEGORY);
+			$back   = "index.php?item=$item&IDres=$IDres&IDmat=$IDmat&cmde=search&rub=$rub";
+
+			$Query  = "select resource_items._IDitem, resource_items._date, resource_items._title, resource_items._IDcat, resource_items._file, resource_items._ver, resource_items._ID, resource_items._IP, resource_data._IDres ";
+			$Query .= "from resource_items, resource_data ";
+			$Query .= "where resource_items._lock <= '0' ";
+			$Query .= "AND resource_items._visible = 'O' AND resource_items._IDgrprd like '% ".$_SESSION["CnxGrp"]." %' AND ";
+
+			if ( $IDmat )
+				$Query .= "resource_data._IDcat = '$IDmat' AND ";
+			$Query .= ( $IDres ) ? "resource_data._IDres = '$IDres' AND " : "" ;
+			$Query .= "resource_items._IDcat = resource_data._IDcat AND ";
+
+			// recherche sentence exacte
+			$s1 = ( $xrb == 1 ) ? "resource_items._title like '%$words%' " : "(resource_items._title like '%$words %' OR resource_items._title like '% $words%') " ;
+			$s2 = ( $xrb == 1 ) ? "resource_items._texte like '%$words%' " : "(resource_items._texte like '%$words %' OR resource_items._texte like '% $words%') " ;
+
+			// ordre d'affichage
+			$order = "order by resource_items._IDitem ";
+			break;
+
+		case 3 :	// forums
+			$field1 = $message->read($PAGE_SUBJECT);
+			$field2 = $message->read($PAGE_FORUM);
+			$back   = "index.php?item=$item&IDgroup=$IDgroup&IDforum=$IDforum&cmde=search&rub=$rub";
+
+			$Query  = "select forum_items._IDforum, forum_items._date, forum_items._title, forum_items._IDmsg, forum_items._ID, forum_items._IP, forum_data._IDgrprd, forum_data._IDroot ";
+			$Query .= "from forum_items, forum_data ";
+			$Query .= "where forum_items._visible = 'O' AND (forum_data._IDgrprd & ".pow(2, $_SESSION["CnxGrp"] - 1).") AND ";
+			$Query .= ( $IDforum ) ? "forum_items._IDforum = '$IDforum' AND " : "forum_data._private = 'N' AND " ;
+			$Query .= "forum_data._IDforum = forum_items._IDforum AND ";
+
+			// recherche sentence exacte
+			$s1 = ( $xrb == 1 ) ? "forum_items._title like '%$words%' " : "(forum_items._title like '%$words %' OR forum_items._title like '% $words%') " ;
+			$s2 = ( $xrb == 1 ) ? "forum_items._texte like '%$words%' " : "(forum_items._texte like '%$words %' OR forum_items._texte like '% $words%') " ;
+
+			// ordre d'affichage
+			$order = "order by forum_items._IDmsg ";
+			break;
+
+		case 4 :	// galeries
+			$field1 = $message->read($PAGE_GALLERY);
+			$field2 = $message->read($PAGE_THEME);
+			$back   = "index.php?item=$item&IDgal=$IDgal&cmde=search&rub=$rub";
+
+			$Query  = "select _IDdata, _date, _title, _IDgal, _IDmod, _IP from gallery_data ";
+			$Query .= "where _visible = 'O' AND (_IDgrprd & ".pow(2, $_SESSION["CnxGrp"] - 1).") AND ";
+			$Query .= ( $IDgal ) ? "_IDgal = '$IDgal' AND " : "" ;
+
+			// recherche sentence exacte
+			$s1 = ( $xrb == 1 ) ? "_title like '%$words%' " : "(_title like '%$words %' OR _title like '% $words%') " ;
+			$s2 = ( $xrb == 1 ) ? "_texte like '%$words%' " : "(_texte like '%$words %' OR _texte like '% $words%') " ;
+
+			// ordre d'affichage
+			$order = "order by _IDdata ";
+			break;
+
+		case 6 :	// post-it
+			$field1 = $message->read($PAGE_POSTIT);
+			$field2 = $message->read($PAGE_EXP);
+			$back   = "index.php?item=$item&IDpost=$IDpost&cmde=search&rub=$rub";
+
+			$Query  = "select _IDpost, _date, _titre, _IDexp, _IDdst, _IP from postit_items ";
+			$Query .= "where (_IDexp = '".$_SESSION["CnxID"]."' OR _IDdst = '".$_SESSION["CnxID"]."') AND  ";
+
+			// recherche sentence exacte
+			$s1 = ( $xrb == 1 ) ? "_titre like '%$words%' " : "(_titre like '%$words %' OR _titre like '% $words%') " ;
+			$s2 = ( $xrb == 1 ) ? "_texte like '%$words%' " : "(_texte like '%$words %' OR _texte like '% $words%') " ;
+
+			// ordre d'affichage
+			$order = "order by _IDpost ";
+			break;
+
+		case 7 :	// réservation
+			$field1 = $message->read($PAGE_BOOKING);
+			$field2 = $message->read($PAGE_BY);
+			$back   = "index.php?item=$item&IDres=$IDres&cmde=search&rub=$rub";
+
+			$Query  = "select reservation_items._IDitem, reservation_items._date, reservation_data._titre, reservation_items._ID, reservation_items._IP ";
+			$Query .= "from reservation_items, reservation_data ";
+			$Query .= "where reservation_items._visible = 'O' ";
+
+			$Query .= ( $IDres ) ? "AND reservation_data._IDres = '$IDres' " : "" ;
+			$Query .= "AND ";
+
+			// recherche sentence exacte
+			$s1 = ( $xrb == 1 ) ? "_titre like '%$words%' " : "(_titre like '%$words %' OR _titre like '% $words%') " ;
+			$s2 = ( $xrb == 1 ) ? "_comment like '%$words%' " : "(_comment like '%$words %' OR _comment like '% $words%') " ;
+
+			// ordre d'affichage
+			$order = "order by reservation_items._IDitem ";
+			break;
+
+		case 8 :	// agendas
+			$field1 = $message->read($PAGE_SUBJECT);
+			$field2 = $message->read($PAGE_EXP);
+			$back   = "index.php?item=$item&IDres=$IDres&cmde=search&rub=$rub";
+
+			$Query  = "select _IDitem, agenda_items._date, agenda_items._titre, agenda_items._texte, agenda_items._ID, agenda_items._IP ";
+			$Query .= "from agenda_items, agenda ";
+			$Query .= "where agenda_items._IDdata = '$IDdata' AND agenda._IDdata = '$IDdata' ";
+			$Query .= ( $_SESSION["CnxAdm"] == 255 ) ? "" : "AND (_IDgrprd & ".pow(2, $_SESSION["CnxGrp"] - 1).") ";
+			$Query .= "AND _visible = 'O' AND ";
+
+			// recherche sentence exacte
+			$s1 = ( $xrb == 1 ) ? "agenda_items._titre like '%$words%' " : "(agenda_items._titre like '%$words %' OR agenda_items._titre like '% $words%') " ;
+			$s2 = ( $xrb == 1 ) ? "agenda_items._texte like '%$words%' " : "(agenda_items._texte like '%$words %' OR agenda_items._texte like '% $words%') " ;
+
+			// ordre d'affichage
+			$order = "order by _IDitem desc ";
+			break;
+
+		case 9 :	// cours
+			$field1 = $message->read($PAGE_COURSE);
+			$field2 = $message->read($PAGE_CATEGORY);
+			$back   = "index.php?item=$item&IDres=$IDres&IDmat=$IDmat&IDdata=$IDdata&cmde=search&rub=$rub";
+
+			$Query  = "select _IDcours, _date, _titre, _IDmat, _IDmod, _IP ";
+			$Query .= "from cours ";
+			$Query .= "where _visible = 'O' AND _private = 'N' ";
+			$Query .= ( $_SESSION["CnxAdm"] == 255 ) ? "" : "AND (_IDgrprd & ".pow(2, $_SESSION["CnxGrp"] - 1).") ";
+			$Query .= ( $IDcat ) ? "AND _IDgrp = '$IDcat' AND " : "AND ";
+
+			// recherche sentence exacte
+			$s1 = ( $xrb == 1 ) ? "_titre like '%$words%' " : "(_titre like '%$words %' OR _titre like '% $words%') " ;
+			$s2 = ( $xrb == 1 ) ? "_texte like '%$words%' " : "(_texte like '%$words %' OR _texte like '% $words%') " ;
+
+			// ordre d'affichage
+			$order = "order by _date ";
+			break;
+
+		default :
+			break;
+		}
+
+	// construction de la	 requête
+	$Query .= ( $subject == "ON" ) ? "($s1" : "(" ;
+	$Query .= ( $subject == "ON" AND $texte == "ON" ) ? "OR " : "" ;
+	$Query .= ( $texte == "ON" ) ? "$s2) " : ") " ;
+	$Query .= "$order ";
+	$Query .= ( $rb == 1 ) ? "desc " : "asc " ;
+	$Query .= "limit $nbmsg";
+
+	// lecture de la base de données
+	$result = mysql_query($Query, $mysql_link);
+	$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+	$nbelem = ( $result ) ? mysql_numrows($result) : 0 ;
+?>
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<strong><?php print($msg->read($PAGE_RESULT)); ?></strong>
+	</div>
+</div>
+
+<div class="maincontent">
+
+	<p><?php print($message->read($PAGE_FOUND, strval($nbelem))); ?></p>
+
+	<table class="width100">
+	  <tr style="background-color:#c0c0c0;">
+		<td class="align-center" style="width:50%;" colspan="2"><strong><?php print("$field1"); ?>&nbsp;</strong></td>
+		<td class="align-center" style="width:30%;"><strong><?php print("$field2"); ?></strong></td>
+		<td class="align-center" style="width:20%;"><?php print($message->read($PAGE_DATE)); ?></td>
+	  </tr>
+
+	<?php
+	 	$mydoc  = "";
+	 	$button = "";
+
+		$show   = 0;
+		$page   = $nbelem;
+
+		if ( $nbelem ) {
+			$page  = ( $page % $MAXPAGE )
+				? (int) ($page / $MAXPAGE) + 1
+				: (int) ($page / $MAXPAGE) ;
+
+			$show  = ( $page % $MAXSHOW )
+				? (int) ($page / $MAXSHOW) + 1
+	 			: (int) ($page / $MAXSHOW) ;
+
+			// initialisation
+			$i     = 1;
+			$first = 1 + (($skpage - 1) * $MAXPAGE);
+				
+			// se positionne sur la page ad hoc
+			mysql_data_seek($result, $first - 1);
+	 		$row   = remove_magic_quotes(mysql_fetch_row($result));
+
+           		// affichage de la recherche
+			while ( $row AND $i <= $MAXPAGE ) {
+				$bgcol = ( $i++ % 2 ) ? "item" : "menu" ;
+
+	 			// intitulé des rubriques
+				switch ( $rub ) {
+	 				case 0 :	// tout le site
+						break;
+
+	 				case 1 :	// flash-infos
+	 				case 5 :	// publication
+	 					$Query  = "select _title from flash where _IDflash = '$row[0]' limit 1";
+	 					break;
+	 			
+					case 2 :	// ressources
+						$Query  = "select _nom from resource_data where _IDcat = '$row[3]' limit 1";
+	  					break;
+	 			
+					case 3 :	// forums
+						$Query  = "select _title from forum_data where _IDforum = '$row[0]' limit 1";
+						break;
+
+					case 4 :	// galeries
+						$Query  = "select _title from gallery where _IDgal = '$row[3]' limit 1";
+						break;
+
+					case 6 :	// post-it
+						$Query  = ( $row[3] == $_SESSION["CnxID"] )
+	                            		? "select _name from user_id where _ID = '$row[4]' limit 1"
+							: "select _name from user_id where _ID = '$row[3]' limit 1" ;
+						break;
+
+					case 7 :	// réservation
+						$Query  = "select _name from user_id where _ID = '$row[3]' limit 1";
+						break;
+
+					case 9 :	// cours
+						$Query  = "select _titre from campus_data where _IDmat = '$row[3]' AND _lang = '".$_SESSION["lang"]."' limit 1";
+						break;
+
+					default :
+						break;
+					}
+
+				$res = mysql_query($Query, $mysql_link);
+				$cat = ( $res ) ? remove_magic_quotes(mysql_fetch_row($res)) : 0 ;
+
+				// liens par rubriques
+				switch ( $rub ) {
+					case 0 :	// tout le site
+						$button = "index.php?item=0";
+						break;
+
+					case 1 :	// flash-infos
+					case 5 :	// publication
+				           	// recherche du flash
+						$res    = mysql_query("select _IDflash from flash_data where _IDinfos = '$row[3]'", $mysql_link);
+						$flash  = ( $res ) ? mysql_fetch_row($res) : 0 ;
+
+						$lien   = "index.php?item=0&IDflash=$flash[0]";
+						$button = "index.php?item=$item&cmde=$cmde&rub=$rub&words=$words&subject=$subject&rb=$rb&xrb=$xrb&nbmsg=$nbmsg";
+
+						$from   = getUserName($row[4], "E") ." ". _getHostName($row[5]);
+						break;
+				
+					case 2 :	// ressources
+          				  	$lien   = "index.php?item=31&IDres=$row[8]";
+						$button = "index.php?item=$item&cmde=$cmde&rub=$rub&words=$words&IDres=$IDres&subject=$subject&rb=$rb&xrb=$xrb&nbmsg=$nbmsg";
+
+						// recherche du dossier
+						$query  = "select _titre from resource ";
+						$query .= "where _IDres = '$row[8]' AND _lang = '".$_SESSION["lang"]."' AND _visible = 'O' ";
+						$query .= "limit 1";
+
+						$return = mysql_query($query, $mysql_link);
+						$mat    = ( $return ) ? remove_magic_quotes(mysql_fetch_row($return)) : 0 ;
+
+			             	// lien des ressources
+						$target = "onclick=\"window.open(this.href, '_blank'); return false;\"";
+						$path   = stripaccent("$DOWNLOAD/ressources/$mat[0]/$cat[0]/v$row[5]-$row[4]");
+						$mydoc  = "<a href=\"".myurlencode("index.php?file=$path")."\" $target><img src=\"".$_SESSION["ROOTDIR"]."/images/link.png\" title=\"\" alt=\"\" /></a>";
+
+						$from   = getUserName($row[6], "E") ." ". _getHostName($row[7]);
+						break;
+
+					case 3 :	// forums
+          		    		  	$lien   = "index.php?item=3&IDgroup=$IDgroup&IDforum=$row[0]&IDmsg=$row[3]&parent=$row[3]&IDroot=$row[5]&nbelem=1&pos=1&cmde=show";
+						$button = "index.php?item=$item&cmde=$cmde&rub=$rub&words=$words&IDforum=$IDforum&subject=$subject&rb=$rb&xrb=$xrb&nbmsg=$nbmsg";
+
+						$from   = getUserName($row[4], "E") ." ". _getHostName($row[5]);
+						break;
+
+					case 4 :	// galeries
+          		    		  	$lien   = "index.php?item=5&IDgal=$row[3]&IDdata=$row[0]&cmde=visu";
+						$button = "index.php?item=$item&cmde=$cmde&rub=$rub&words=$words&IDgal=$IDgal&subject=$subject&rb=$rb&xrb=$xrb&nbmsg=$nbmsg";
+
+						$from   = getUserName($row[4], "E") ." ". _getHostName($row[5]);
+						break;
+
+					case 6 :	// post-it
+          		    	  		$lien   = "index.php?item=4&IDpost=$row[0]&cmde=visu";
+						$button = "index.php?item=$item&cmde=$cmde&rub=$rub&words=$words&IDpost=$IDpost&subject=$subject&rb=$rb&xrb=$xrb&nbmsg=$nbmsg";
+
+						$from   = getUserName($row[3], "E") ." ". _getHostName($row[5]);
+						break;
+
+					case 7 :	// réservation
+          		    	  		$lien   = "#";
+						$button = "index.php?item=$item&cmde=$cmde&rub=$rub&words=$words&IDres=$IDres&subject=$subject&rb=$rb&xrb=$xrb&nbmsg=$nbmsg";
+
+						$from   = getUserName($row[3], "E") ." ". _getHostName($row[4]);
+						break;
+
+					case 9 :	// cours
+          		    	  		$lien   = "index.php?item=33&IDmat=$row[3]&IDdata=$row[3]&IDcours=$row[0]&cmde=visu";
+						$button = "index.php?item=$item&cmde=$cmde&rub=$rub&words=$words&IDres=$IDres&subject=$subject&rb=$rb&xrb=$xrb&nbmsg=$nbmsg";
+
+						$from   = getUserName($row[4], "E") ." ". _getHostName($row[5]);
+						break;
+
+					default :
+						break;
+					}
+
+				print("            
+					<tr class=\"$bgcol\">
+       					<td style=\"width:1%;\"><img src=\"".$_SESSION["ROOTDIR"]."/images/folder.gif\" title=\"\" alt=\"\" /></td>
+	          				<td style=\"width:49%;\">
+							<a href=\"".myurlencode($lien)."\">$row[2]</a> $mydoc<br/>
+							<span class=\"x-small\">$from</span>
+						</td>
+			      		<td style=\"width:30%;\" class=\"align-center\">$cat[0]</td>
+						<td style=\"width:20%;\" class=\"align-center\">". date2longfmt($row[1]) ."</td>
+	       			</tr>
+	       			");
+
+				$row = remove_magic_quotes(mysql_fetch_row($result));
+				}
+			}	// endif nbelem
+	?>
+	</table>
+
+	<?php
+		// bouton précédent
+		$where = $skshow - 1;
+		if ( $skshow == 1 )
+			$prev = "";
+		else {
+			$skpg = 1 + (($skshow - 2) * $MAXSHOW);
+			$prev = "[<a href=\"".myurlencode("$button&skpage=$skpg&skshow=$where")."\">".$message->read($PAGE_PREV)."</a>]";
+			}
+
+		// liens directs sur n° de page
+		$start = 1 + (($skshow - 1) * $MAXSHOW);
+		$end   = $skshow * $MAXSHOW;
+
+		$choix = ( $skpage == $start )
+			? "<img src=\"".$_SESSION["ROOTDIR"]."/images/nav_left.gif\" title=\"«\" alt=\"«\" /><strong>$start</strong><img src=\"".$_SESSION["ROOTDIR"]."/images/nav_right.gif\" title=\"»\" alt=\"»\" />"
+			: "<a href=\"".myurlencode("$button&skpage=$start&skshow=$skshow")."\">$start</a>" ;
+
+		for ($j = $start + 1; $j <= $end AND $j <= $page; $j++)
+			$choix .= ( $skpage == $j )
+				? "|<img src=\"".$_SESSION["ROOTDIR"]."/images/nav_left.gif\" title=\"«\" alt=\"«\" /><strong>$j</strong><img src=\"".$_SESSION["ROOTDIR"]."/images/nav_right.gif\" title=\"»\" alt=\"»\" />"
+				: "|<a href=\"".myurlencode("$button&skpage=$j&skshow=$skshow")."\">$j</a>" ;
+
+		// bouton suivant
+		$where = $skshow + 1;
+		$next  = ( $skshow == $show )
+			? ""
+			: "[<a href=\"".myurlencode("$button&skpage=$j&skshow=$where")."\">".$message->read($PAGE_NEXT)."</a>]" ;
+	?>
+
+      <hr/>
+		<?php if ( $nbelem ) print("<div style=\"text-align:center;\">$prev $choix $next</div>"); ?>
+	<hr/>
+	      
+	<?php
+	    	if ( $back != "" )
+			print("[<a href=\"".myurlencode($back)."\">".$message->read($PAGE_BACK)."</a>]");
+	?>
+
+</div>

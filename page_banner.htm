@@ -1,0 +1,123 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2013 by IP-Solutions(contact@ip-solutions.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+/*
+ *		module   : page_banner.htm
+ *		projet   : entête document html
+ *
+ *		version  : 2.0
+ *		auteur   : laporte
+ *		creation : 20/10/02
+ *		modif    : 12/01/03 - par D. Laporte
+ *		           lecture du fichier de configuration de l'intranet
+ *		           17/07/06 - Nordine Zetoutou
+ * 	                 migration des balises HTML en XHTML 1.0 strict
+ */
+
+
+//---------------------------------------------------------------------------
+require_once "page_session.php";
+//---------------------------------------------------------------------------
+?>
+
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="<?php echo $_SESSION["lang"]; ?>" lang="<?php echo $_SESSION["lang"]; ?>">
+<head>
+	<title><?php print($_SESSION["CfgTitle"] ." [". $_SESSION["CfgIdent"] ."]"); ?></title>
+
+	<!-- début meta -->
+	<meta http-equiv="content-type" content="text/html; charset=<?php echo $CHARSET; ?>" />
+	<meta name="revisit-after" content="10 days" />
+	<meta name="robots" content="index,follow" />
+	<meta name="rating" content="education" />
+	<meta name="author" content="Dominique Laporte" />
+	<meta name="description" content="<?php print($_SESSION["CfgTitle"]); ?>" />
+	<meta name="keywords" content="<?php print($row[20]); ?>" />
+	<!-- fin meta -->
+
+	<!-- début link -->
+	<link rel="stylesheet" type="text/css" media="screen" href="<?php echo $_SESSION["ROOTDIR"]; ?>/css/themes/globals.css" />
+	<link rel="stylesheet" type="text/css" media="screen" href="<?php echo $_SESSION["ROOTDIR"]; ?>/css/defil.css" />
+	<link rel="stylesheet" type="text/css" media="screen" href="<?php echo $_SESSION["ROOTDIR"]; ?>/css/ldap2mysql.css" />
+	<link rel="stylesheet" type="text/css" media="screen" href="<?php echo $_SESSION["ROOTDIR"]; ?>/css/style/dialdirect.css" />
+	<link rel="stylesheet" type="text/css" media="screen" href="<?php echo $_SESSION["ROOTDIR"]; ?>/css/style2/dialdirect.css" />
+	<link rel="stylesheet" type="text/css" media="screen" href="<?php echo $_SESSION["ROOTDIR"]; ?>/css/vignette.css" />
+	<link rel="alternate" type="application/rss+xml" href="<?php echo $_SESSION["ROOTDIR"]; ?>/rss.php" />
+	<link rel="icon" type="image/png" href="<?php echo $_SESSION["ROOTDIR"]; ?>/favicon.png" />
+	<!-- fin link -->
+	<link rel="stylesheet" type="text/css" media="screen" href="<?php echo $_SESSION["ROOTDIR"]; ?>/css/themes/<?php echo $_SESSION["CfgTheme"]; ?>/styles/verdana.css" />
+	<link href="<?php echo $_SESSION["ROOTDIR"]; ?>/css/themes/<?php echo $_SESSION["CfgTheme"]; ?>/styles/bootstrap.css" rel="stylesheet" />
+
+	
+	<script type="text/javascript" src="<?php echo $_SESSION["ROOTDIR"]; ?>/script/jquery.js"></script>
+	<script type="text/javascript" src="<?php echo $_SESSION["ROOTDIR"]; ?>/script/bootstrap.min.js"></script>
+	<script type="text/javascript" src="<?php echo $_SESSION["ROOTDIR"]; ?>/script/bootstrap-hover-dropdown.js"></script>
+	<script type="text/javascript" src="script/jquery.colorPicker.min.js"></script>
+	<link rel="stylesheet" type="text/css" media="screen" href="<?php echo $_SESSION["ROOTDIR"]; ?>/css/colorPicker.css" />
+
+	<!-- scripts divers -->
+	<script type="text/javascript" src="<?php echo $_SESSION["ROOTDIR"]; ?>/script/menu.js"></script>
+	<script type="text/javascript" src="<?php echo $_SESSION["ROOTDIR"]; ?>/script/popup.js"></script>
+	<script type="text/javascript" src="<?php echo $_SESSION["ROOTDIR"]; ?>/script/wikibits.js"></script>
+	<script type="text/javascript" src="<?php echo $_SESSION["ROOTDIR"]; ?>/script/ldap2mysql.js"></script>
+	<script type="text/javascript" src="<?php echo $_SESSION["ROOTDIR"]; ?>/script/confirm.js"></script>
+	<script type="text/javascript" src="<?php echo $_SESSION["ROOTDIR"]; ?>/script/slider.js"></script>
+	
+	<!-- Feuille impression -->
+	<link rel="stylesheet" type="text/css" media="print" href="css/print.css" />
+	
+	<!--[if IE 7]>
+	<style>
+	.ie-icon-top {
+		margin-top: 13px;
+	}
+	
+	.nav > li > a
+	{
+		display: inline-block;
+	}
+	</style>
+	<![endif]-->
+	
+	<style type="text/css">
+	.form-signin {
+	max-width: 300px;
+	padding: 19px 29px 29px;
+	margin: 0 auto 20px;
+	background-color: #fff;
+	border: 1px solid #e5e5e5;
+	-webkit-border-radius: 5px;
+	   -moz-border-radius: 5px;
+			border-radius: 5px;
+	-webkit-box-shadow: 0 1px 2px rgba(0,0,0,.05);
+	   -moz-box-shadow: 0 1px 2px rgba(0,0,0,.05);
+			box-shadow: 0 1px 2px rgba(0,0,0,.05);
+	}
+	.form-signin .form-signin-heading,
+	.form-signin .checkbox {
+	margin-bottom: 10px;
+	}
+	.form-signin input[type="text"],
+	.form-signin input[type="password"] {
+	font-size: 16px;
+	height: auto;
+	margin-bottom: 15px;
+	padding: 7px 9px;
+	}
+	</style>
+</head>

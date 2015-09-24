@@ -1,0 +1,698 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2005-2008 by Dominique Laporte(C-E-D@wanadoo.fr)
+   Copyright (c) 2006 by Nordine Zetoutou (nordine.zetoutou@educagri.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : student_account.htm
+ *		projet   : la page de création/modification d'un compte élève
+ *
+ *		version  : 1.0
+ *		auteur   : laporte
+ *		creation : 16/10/05
+ *		modif    : 17/07/06 - Nordine Zetoutou
+ * 	                 migration des balises HTML en XHTML 1.0 strict
+ */
+
+
+$IDcentre = ( @$_POST["IDcentre"] )		// Identifiant du centre
+	? (int) $_POST["IDcentre"]
+	: (int) $_SESSION["CnxCentre"] ;
+$visu     = ( @$_POST["visu"] )		// mode de visualisation
+	? (int) $_POST["visu"]
+	: (int) @$_GET["visu"] ;
+$ID       = ( @$_POST["ID"] )			// Identifiant de l'élève
+	? (int) $_POST["ID"]
+	: (int) @$_GET["ID"] ;
+$account  = ( @$_POST["account"] )		// Identifiant du compte utilisateur
+	? (int) $_POST["account"]
+	: (int) @$_GET["account"] ;
+$authuser = ( @$_POST["authuser"] )		// validation des utilisateurs
+	? (int) $_POST["authuser"]
+	: (int) @$_GET["authuser"] ;
+$IDsel    = ( @$_POST["IDsel"] )		// Identifiant de la catégorie
+	? (int) $_POST["IDsel"]
+	: (int) @$_GET["IDsel"] ;
+$sort     = ( @$_POST["sort"] )		// mode de visualisation
+	? (int) $_POST["sort"]
+	: (int) @$_GET["sort"] ;
+$IDalpha  = ( @$_POST["IDalpha"] )		// lettre alpha du nom
+	? $_POST["IDalpha"]
+	: @$_GET["IDalpha"] ;
+
+$IDclass  = (int) @$_POST["IDclass"];
+$nom      = ucwords(strtolower(addslashes(trim(@$_POST["nom"]))));
+$prenom   = ucwords(strtolower(addslashes(trim(@$_POST["prenom"]))));
+$numen    = trim(@$_POST["numen"]);
+$IDtut1   = (int) @$_POST["IDtut1"];
+$IDtut2   = (int) @$_POST["IDtut2"];
+$sexe     = @$_POST["sexe"];
+$born     = @$_POST["born"];
+$adr1     = addslashes(trim(@$_POST["adr1"]));
+$adr2     = addslashes(trim(@$_POST["adr2"]));
+$cp       = trim(@$_POST["cp"]);
+$ville    = addslashes(trim(@$_POST["ville"]));
+$tel      = trim(@$_POST["tel"]);
+$email    = trim(@$_POST["email"]);
+$status   = @$_POST["status"];
+$regime   = @$_POST["regime"];
+$bourse   = @$_POST["bourse"];
+$delegue  = @$_POST["delegue"];
+$mylang   = ( @$_POST["mylang"] ) ? $_POST["mylang"] : $_SESSION["lang"] ;
+
+$submit   = @$_POST["valid_x"];		// bouton de validation
+?>
+
+
+<?php
+//---------------------------------------------------------------------------
+function getTutor($id, $record)
+{
+	require $_SESSION["ROOTDIR"]."/globals.php";
+
+	// lecture utilisateur
+	$query   = "select _IDtutor from user_tutors ";
+	$query  .= "where _ID = '$id' ";
+	$query  .= "order by _index asc";
+
+	$return  = mysql_query($query, $mysql_link);
+	$myrow   = ( @mysql_data_seek($return, $record - 1) ) ? mysql_fetch_row($return) : 0 ;
+
+	return ( $myrow ) ? $myrow[0] : 0 ;
+}
+//---------------------------------------------------------------------------
+
+	// vérification des autorisations
+	admSessionAccess(8);
+
+	// initialisation
+	$error1  = $error2 = $error3 = false;
+	$statut  = ( $ID ) ? $msg->read($STUDENT_MODIFICATION) : $msg->read($STUDENT_NEWRECORD) ;
+
+	if ( $submit ) {
+		// vérification saisie
+		$error1 = (bool) ($nom == "");
+		$error2 = (bool) ($prenom == "");
+		$error3 = ( strlen($email) ) ? (bool) (strstr($email, "@") == "" OR strstr($email, ".") == "") : false ;
+
+		if ( !$error1 AND !$error2 AND !$error3 ) {
+			if ( $ID ) {
+				// mise à jour de la table des connexions
+				$Query  = "update user_id ";
+				$Query .= "set _numen = '$numen', _name = '$nom', _fname = '$prenom', _sexe = '$sexe', _IDclass = '$IDclass', _born= '$born', ";
+				$Query .= "_adr1 = '$adr1', _adr2 = '$adr2', _cp = '$cp', _city = '$ville', _tel = '$tel', _email = '$email', _regime = '$regime', _bourse = '$bourse', _delegue = '$delegue', _visible = '$status' ";
+				$Query .= "where _ID = '$ID' ";
+				$Query .= "limit 1";
+				}
+			else {
+				$Query  = "insert into user_id ";
+				$Query .= "values('', '1', '$IDcentre', '$IDclass', '$numen', '".date("Y-m-d H:i:s")."', '', '', '1', '".SessionID()."', '".SessionID()."', '$nom', '$prenom', '$sexe', '', '', '$email', '', '$tel', '', '$born', '$adr1', '$adr2', '$cp', '$ville', '', '0', '0', '0', '0', '0', 'N', 'N', '$regime', '$bourse', '$delegue', '$status', '', '0', '', '$mylang', '$IDtut1', '$IDtut2')";
+				}
+
+			$retcode = mysql_query($Query, $mysql_link);
+
+			$statut .= ( $retcode )
+				? " <img src=\"".$_SESSION["ROOTDIR"]."/images/ok.gif\" title=\"\" alt=\"\" />"
+				: " <img src=\"".$_SESSION["ROOTDIR"]."/images/bad.gif\" title=\"\" alt=\"\" />" ;
+
+			// attribution de l'ID pour nouvel enregistrement
+			$id = ( $ID == 0 AND $retcode ) ? mysql_insert_id() : $ID ;
+
+			// mise à jour des tuteurs
+			if ( mysql_query("delete from user_tutors where _ID = '$id'", $mysql_link) ) {
+				if ( $IDtut1 )
+					mysql_query("insert into user_tutors values('', '$id', '$IDtut1')", $mysql_link);
+
+				if ( $IDtut2 )
+					mysql_query("insert into user_tutors values('', '$id', '$IDtut2')", $mysql_link);
+				}
+
+			// fichier à transférer
+			$file = @$_FILES["UploadedFile"]["tmp_name"];
+
+			if ( $retcode AND $file AND authfile(@$_FILES["UploadedFile"]["name"]) ) {
+				require_once "include/gallery.php";
+
+				$dest   = "$DOWNLOAD/photo/eleves/";
+
+				// création de la vignette
+				vignette("$file|".@$_FILES["UploadedFile"]["name"], $dest, "$id.gif", $srcWidth, $srcHeight);
+				}
+
+			// raz champs de saisie
+			if ( $ID == 0 AND $retcode )
+				$numen = $nom = $prenom = $IDtut1 = $IDtut2 = $born = $adr1 = $adr2 = $cp = $ville = $tel = $email = "";
+			}
+		}
+
+	// lecture du compte utilisateur
+	if ( $account ) {
+		$query  = "select _name, _fname, _sexe, _email ";
+		$query .= "from user_id ";
+		$query .= "where _ID = '$account' ";
+		$query .= "limit 1";
+
+		$result = mysql_query($query, $mysql_link);
+		$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+		$nom    = $row[0];
+		$prenom = $row[1];
+		$sexe   = $row[2];
+		$email  = $row[3];
+		}
+
+	// lecture du compte élève
+	$query  = "select _IDclass, _name, _fname, _sexe, _born, _adr1, _adr2, _cp, _city, _tel, _email, _regime, _bourse, _delegue, _ID, _visible, _numen ";
+	$query .= "from user_id ";
+	$query .= ( $account ) ? "where _ID = '$account' " : "where _ID = '$ID' " ;
+	$query .= "limit 1";
+
+	$result = mysql_query($query, $mysql_link);
+	$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+	// lectures de données à modifier
+	$IDclass = $row[0];
+	$nom     = ( $nom ) ? $nom : $row[1] ;
+	$prenom  = ( $prenom ) ? $prenom : $row[2];
+	$sexe    = ( $sexe ) ? $sexe : $row[3] ;
+	$born    = $row[4];
+	$adr1    = $row[5];
+	$adr2    = $row[6];
+	$cp      = $row[7];
+	$ville   = $row[8];
+	$tel     = $row[9];
+	$email   = ( $email ) ? $email : $row[10] ;
+	$regime  = $row[11];
+	$bourse  = ( $row ) ? $row[12] : "N" ;
+	$delegue = ( $row ) ? $row[13] : "N" ;
+	$ID      = ( $row ) ? $row[14] : 0 ;
+	$status  = $row[15];
+	$numen   = $row[16];
+	$IDtut1  = getTutor($account ? $account : $ID, 1);
+	$IDtut2  = getTutor($account ? $account : $ID, 2);
+
+	// lecture du centre de l'élève
+	$Query    = "select _IDcentre from campus_classe ";
+	$Query   .= ( $IDclass ) ? "where _IDclass = '$IDclass'" : "where _IDcentre = '$IDcentre'";
+
+	$result   = mysql_query($Query, $mysql_link);
+	$row      = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+	$IDcentre = $row[0];
+
+	// on vérifie si la photo existe
+	$photo   = ( file_exists("$DOWNLOAD/photo/eleves/$ID.gif") ) 
+		? "$DOWNLOAD/photo/eleves/$ID.gif" 
+		: $_SESSION["ROOTDIR"]."/css/themes/".$_SESSION["CfgTheme"]."/images/0.gif" ;
+?>
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($STUDENT_STUDENTACCOUNT)); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+
+	<form id="formulaire" action="index.php" method="post" enctype="multipart/form-data">
+	<?php
+		print("
+			<p class=\"hidden\"><input type=\"hidden\" name=\"item\"     value=\"$item\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"cmde\"     value=\"$cmde\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"visu\"     value=\"$visu\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"ID\"       value=\"$ID\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"account\"  value=\"$account\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"authuser\" value=\"$authuser\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"IDsel\"    value=\"$IDsel\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"IDalpha\"  value=\"$IDalpha\" /></p>
+			");
+	?>
+
+            <table class="width100">
+              <tr>
+                <td style="width:17%;" class="valign-top align-right">
+			<?php print($msg->read($STUDENT_STATUS)); ?>
+                </td>
+                <td style="width:83%;" class="valign-top">
+			<?php print("$statut"); ?>
+                </td>
+              </tr>
+
+              <tr>
+                <td style="height:10px;"></td>
+              </tr>
+
+              <tr>
+                <td class="align-center valign-top">
+			<?php print("<img src=\"$photo\" title=\"\" alt=\"\" />"); ?>
+                </td>
+                <td class="valign-top">
+
+			<div style="border:#cccccc solid 1px;">
+
+				<table class="width100">
+
+				<?php
+      	            	if ( $error1 )
+                  			print("
+				                    <tr>
+		          					<td style=\"width:100%;\" class=\"align-justify valign-middle\" colspan=\"2\">
+									<span style=\"color:#FF0000;\">". $msg->read($STUDENT_ERRINPUT) ."</span>
+	          						</td>
+			                  	  </tr>
+							");
+				?>
+
+	                    <tr>
+	                      <td style="width:25%;" class="align-right valign-middle">
+	                        <?php print($msg->read($STUDENT_MYNAME)); ?>
+	                      </td>
+	                      <td style="width:75%;" class="valign-middle">
+	                          <?php print("<label for=\"nom\"><input type=\"text\" id=\"nom\" name=\"nom\" size=\"40\" value=\"$nom\" /></label>"); ?>
+					  <?php print("<span style=\"color:#FF0000;\">". $msg->read($STUDENT_MANDATORY) ."</span>"); ?>
+	                      </td>
+	                    </tr>
+
+				<?php
+      	            	if ( $error2 )
+                  			print("
+				                    <tr>
+		          					<td style=\"width:100%;\" class=\"align-justify valign-middle\" colspan=\"2\">
+									<span style=\"color:#FF0000;\">". $msg->read($STUDENT_ERRINPUT) ."</span>
+	          						</td>
+			                  	  </tr>
+							");
+				?>
+
+	                    <tr>
+	                      <td class="align-right valign-middle">
+	                        <?php print($msg->read($STUDENT_FNAME)); ?>
+	                      </td>
+	                      <td class="valign-middle">
+	                          <?php print("<label for=\"prenom\"><input type=\"text\" id=\"prenom\" name=\"prenom\" size=\"40\" value=\"$prenom\" /></label>"); ?>
+					  <?php print("<span style=\"color:#FF0000;\">". $msg->read($STUDENT_MANDATORY) ."</span>"); ?>
+	                      </td>
+	                    </tr>
+
+	                    <tr>
+                        <td class="align-right valign-middle"><?php print($msg->read($STUDENT_NUMEN)); ?></td>
+                        <td>
+                          <?php print("<label for=\"numen\"><input type=\"text\" id=\"numen\" name=\"numen\" size=\"20\" value=\"$numen\" /></label>"); ?>
+                        </td>
+                      </tr>
+
+					  <tr>
+	                      <td class="align-right valign-middle">
+	                        <?php print($msg->read($STUDENT_SEX)); ?>
+	                      </td>
+	                      <td class="valign-middle">
+					<label for="sexe">
+					<select id="sexe" name="sexe">
+					<?php
+						$sex[0][0] = "H"; $sex[1][0] = $msg->read($STUDENT_MALE);
+						$sex[0][1] = "F"; $sex[1][1] = $msg->read($STUDENT_FEMALE);
+
+						for ($i = 0; $i < count($sex[0]); $i++)
+							if ( $sexe == $sex[0][$i] )
+								print("<option selected=\"selected\" value=\"".$sex[0][$i]."\">".$sex[1][$i]."</option>");
+							else
+								print("<option value=\"".$sex[0][$i]."\">".$sex[1][$i]."</option>");
+					?>
+					</select> <img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/hand.gif" title="" alt="" />
+					</label>
+	                      </td>
+	                    </tr>
+
+	                    <tr>
+	                      <td class="align-right valign-middle">
+	                        <?php print($msg->read($STUDENT_CENTER)); ?>
+	                      </td>
+	                      <td class="valign-middle">
+					<label for="IDcentre">
+				  	<select id="IDcentre" name="IDcentre" onchange="document.forms.formulaire.submit()">
+					<?php
+						// lecture des centres constitutifs
+						$query  = "select _IDcentre, _ident from config_centre ";
+						$query .= "where _visible = 'O' AND _lang = '".$_SESSION["lang"]."' ";
+						$query .= "order by _IDcentre";
+
+						$result = mysql_query($query, $mysql_link);
+						$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+						while ( $row ) {			
+							if ( $IDcentre == $row[0] )
+								print("<option selected=\"selected\" value=\"$row[0]\">$row[1]</option>");
+							else
+								print("<option value=\"$row[0]\">$row[1]</option>");
+
+							$row = remove_magic_quotes(mysql_fetch_row($result));
+							}				
+					?>
+					</select> <img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/home.gif" title="" alt="" />
+					</label>
+	                      </td>
+	                    </tr>
+
+	                    <tr>
+	                      <td class="align-right valign-middle">
+	                        <?php print($msg->read($STUDENT_MYCLASS)); ?>
+	                      </td>
+	                      <td class="valign-middle">
+					<label for="IDclass">
+					<select id="IDclass" name="IDclass">
+					<?php
+						// intialisation
+						$Query  = "select _IDclass, _ident from campus_classe ";
+						$Query .= "where _IDcentre = '$IDcentre' AND _visible = 'O' ";
+						$Query .= "order by _text";
+
+						// affichage des classes
+						$result = mysql_query($Query, $mysql_link);
+						$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+						while ( $row ) {
+							if ( $IDclass == $row[0] )
+								print("<option selected=\"selected\" value=\"$row[0]\">$row[1]</option>");
+							else
+								print("<option value=\"$row[0]\">$row[1]</option>");
+
+							$row = remove_magic_quotes(mysql_fetch_row($result));
+							}	// endwhile
+					  ?>
+					  </select> <img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/group.gif" title="" alt="" />
+					  </label>
+	                      </td>
+	                    </tr>
+
+	                    <tr>
+	                      <td class="align-right valign-middle">
+	                        <?php print($msg->read($STUDENT_TUTORS)); ?>
+	                      </td>
+	                      <td class="valign-middle">
+					<label for="IDtut1">
+					<select id="IDtut1" name="IDtut1">
+					<?php
+						print("<option value=\"0\">&nbsp;</option>");
+
+						// intialisation
+						$query  = "select _IDgrp, _ident from user_group ";
+						$query .= "where _visible = 'O' AND _lang = '".$_SESSION["lang"]."' ";
+						$query .= "order by _IDgrp asc";
+
+						$result = mysql_query($query, $mysql_link);
+						$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+						while ( $row ) {
+							// on n'affiche pas les élèves
+							if ( getAccess($row[0]) != 1 ) {
+								// recherche des noms
+								$query  = "select _ID from user_id ";
+								$query .= "where _visible = 'O' AND _IDgrp = '$row[0]' ";
+								$query .= "order by _name, _fname asc";
+
+								$return = mysql_query($query, $mysql_link);
+								$myrow  = ( $return ) ? mysql_fetch_row($return) : 0 ;
+
+								// affichage par catégorie
+								if ( mysql_numrows($return) ) {
+									print("<optgroup label=\"$row[1]\">");
+
+									while ( $myrow ) {
+										$select = ( $IDtut1 == $myrow[0] ) ? "selected=\"selected\"" : "" ;
+
+										print("<option value=\"$myrow[0]\" $select>". getUserName($myrow[0], false) ."</option>");
+
+										$myrow = mysql_fetch_row($return);
+										}	// endwhile
+
+									print("</optgroup>");
+									}
+								}
+
+							$row = remove_magic_quotes(mysql_fetch_row($result));
+							}	// endwhile
+					?>
+					</select>
+					</label> <img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/egroup.png" title="" alt="" />
+					<br/>
+					<label for="IDtut2">
+					<select id="IDtut2" name="IDtut2">
+					<?php
+						print("<option value=\"0\">&nbsp;</option>");
+
+						$query  = "select _IDgrp, _ident from user_group ";
+						$query .= "where _visible = 'O' AND _lang = '".$_SESSION["lang"]."' ";
+						$query .= "order by _IDgrp asc";
+
+						$result = mysql_query($query, $mysql_link);
+						$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+						while ( $row ) {
+							// on n'affiche pas les élèves
+							if ( getAccess($row[0]) != 1 ) {
+								// recherche des noms
+								$query  = "select _ID from user_id ";
+								$query .= "where _visible = 'O' AND _IDgrp = '$row[0]' ";
+								$query .= "order by _name, _fname asc";
+
+								$return = mysql_query($query, $mysql_link);
+								$myrow  = ( $return ) ? mysql_fetch_row($return) : 0 ;
+
+								// affichage par catégorie
+								if ( mysql_numrows($return) ) {
+									print("<optgroup label=\"$row[1]\">");
+
+									while ( $myrow ) {
+										$select = ( $IDtut2 == $myrow[0] ) ? "selected=\"selected\"" : "" ;
+
+										print("<option value=\"$myrow[0]\" $select>". getUserName($myrow[0], false) ."</option>");
+
+										$myrow = mysql_fetch_row($return);
+										}	// endwhile
+
+									print("</optgroup>");
+									}
+								}
+
+							$row = remove_magic_quotes(mysql_fetch_row($result));
+							}	// endwhile
+					?>
+					</select>
+					</label> <img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/egroup.png" title="" alt="" />
+	                      </td>
+	                    </tr>
+
+			<?php
+				$rbox  = "";
+				$list  = Array();
+
+				// ouverture du répertoire des langues
+				$myDir = @opendir("msg");
+
+				// lecture des répertoires
+				while ( $entry = @readdir($myDir) )
+					if ( is_dir("msg/$entry") AND strlen($entry) == 2 AND $entry != ".." )
+						array_push($list, $entry);
+
+				// fermeture du répertoire
+				@closedir($myDir);
+
+				for ($i = 0; $i < count($list); $i++) {
+					$check = ( $list[$i] == $mylang ) ? "checked=\"checked\"" : "" ;
+
+					$rbox .= "<label for=\"mylang_$i\"><input type=\"radio\" id=\"mylang_$i\" name=\"mylang\" value=\"$list[$i]\" $check /></label> ";
+					$rbox .= "<img src=\"".$_SESSION["ROOTDIR"]."/images/lang/ico-".$list[$i].".png\" title=\"".$list[$i]."\" alt=\"".$list[$i]."\" /> ";
+					}
+			?>
+
+	                    <tr>
+	                      <td class="align-right valign-middle">
+	                        <?php print($msg->read($STUDENT_LANG)); ?>
+	                      </td>
+	                      <td class="valign-middle"><?php print($rbox); ?></td>
+	                    </tr>                      
+
+	                    <tr>
+	                      <td class="align-right valign-middle">
+	                        <?php print($msg->read($STUDENT_BORN)); ?>
+	                      </td>
+	                      <td class="valign-middle">
+	                          <?php print("<label for=\"born\"><input type=\"text\" id=\"born\" name=\"born\" size=\"10\" value=\"$born\" /></label>"); ?>
+					  <?php print($msg->read($STUDENT_DATE)); ?>
+	                      </td>
+	                    </tr>                      
+
+                      <tr>
+                        <td class="align-right valign-middle"><?php print($msg->read($STUDENT_ADDRESS)); ?></td>
+                        <td>
+                          <?php print("<label for=\"adr1\"><input type=\"text\" id=\"adr1\" name=\"adr1\" size=\"40\" value=\"$adr1\" /></label>"); ?>
+                        </td>
+                      </tr>
+
+                      <tr>
+                        <td></td>
+                        <td>
+                          <?php print("<label for=\"adr2\"><input type=\"text\" id=\"adr2\" name=\"adr2\" size=\"40\" value=\"$adr2\" /></label>"); ?>
+                        </td>
+                      </tr>
+
+                      <tr>
+                        <td class="align-right valign-middle"><?php print($msg->read($STUDENT_CITY)); ?></td>
+                        <td>
+                          <?php print("<label for=\"cp\"><input type=\"text\" id=\"cp\" name=\"cp\" size=\"5\" value=\"$cp\" /></label>"); ?> -
+                          <?php print("<label for=\"ville\"><input type=\"text\" id=\"ville\" name=\"ville\" size=\"27\" value=\"$ville\" /></label>"); ?>
+                        </td>
+                      </tr>
+
+                      <tr>
+                        <td class="align-right valign-middle"><?php print($msg->read($STUDENT_PHONE)); ?></td>
+                        <td>
+                          <?php print("<label for=\"tel\"><input type=\"text\" id=\"tel\" name=\"tel\" size=\"20\" value=\"$tel\" /></label>"); ?>
+                        </td>
+                      </tr>
+
+				<?php
+      	            	if ( $error3 )
+                  			print("
+				                    <tr>
+		          					<td style=\"width:100%;\" class=\"align-justify valign-middle\" colspan=\"2\">
+									<span style=\"color:#FF0000;\">". $msg->read($STUDENT_BADEMAIL) ."</span>
+	          						</td>
+			                  	  </tr>
+							");
+				?>
+
+                      <tr>
+                        <td class="align-right valign-middle"><?php print($msg->read($STUDENT_EMAIL)); ?></td>
+                        <td>
+                          <?php print("<label for=\"email\"><input type=\"text\" id=\"email\" name=\"email\" size=\"40\" value=\"$email\" /></label>"); ?>
+                        </td>
+                      </tr>
+
+                      <tr>
+                        <td class="align-right valign-top"><?php print($msg->read($STUDENT_STATUS)); ?></td>
+                        <td>
+					<label for="status">
+					<select id="status" name="status">
+					<?php
+						$statlist = explode(",",  $msg->read($STUDENT_STATLIST));
+
+						for ($j = 0; $j < count($statlist); $j++) {
+							list($value, $ident) = explode(":", $statlist[$j]);
+
+							if ( $status == $value )
+								print("<option value=\"$value\" selected=\"selected\">$ident</option>");
+							else
+								print("<option value=\"$value\">$ident</option>");
+							}
+					?>
+					</select>
+					</label>
+                        </td>
+                      </tr>
+
+                      <tr>
+                        <td class="align-right valign-top"><?php print($msg->read($STUDENT_REGIME)); ?></td>
+                        <td>
+					<label for="regime">
+					<select id="regime" name="regime">
+					<?php
+						$reg[0] = Array('E', 'I', 'D', 'C');
+						$reg[1] = explode(",",  $msg->read($STUDENT_STUDENTSTATUS));
+
+						for ($i = 0; $i < count($reg[0]); $i++)
+							if ( $regime == $reg[0][$i] )
+								print("<option selected=\"selected\" value=\"".$reg[0][$i]."\">".$reg[1][$i]."</option>");
+							else
+								print("<option value=\"".$reg[0][$i]."\">".$reg[1][$i]."</option>");
+					?>
+					</select>
+					</label>
+                        </td>
+                      </tr>
+
+                      <tr>
+                        <td class="align-right valign-middle"><?php print($msg->read($STUDENT_BOURSE)); ?></td>
+                        <td>
+					<label for="bourse_O"><input type="radio" id="bourse_O" name="bourse" value="O" <?php print($bourse == "O" ? "checked=\"checked\"" : ""); ?> /> <?php print($msg->read($STUDENT_YES)); ?></label>
+            			<label for="bourse_N"><input type="radio" id="bourse_N" name="bourse" value="N" <?php print($bourse == "N" ? "checked=\"checked\"" : ""); ?> /> <?php print($msg->read($STUDENT_NO)); ?></label>
+                        </td>
+                      </tr>
+
+                      <tr>
+                        <td class="align-right valign-middle"><?php print($msg->read($STUDENT_DELEGUE)); ?></td>
+                        <td>
+					<label for="delegue_O"><input type="radio" id="delegue_O" name="delegue" value="O" <?php print($delegue == "O" ? "checked=\"checked\"" : ""); ?> /> <?php print($msg->read($STUDENT_YES)); ?></label>
+            			<label for="delegue_N"><input type="radio" id="delegue_N" name="delegue" value="N" <?php print($delegue == "N" ? "checked=\"checked\"" : ""); ?> /> <?php print($msg->read($STUDENT_NO)); ?></label>
+                        </td>
+                      </tr>
+
+                      <tr>
+                        <td class="align-right valign-middle"><?php print($msg->read($STUDENT_PICTURE) ." ($MAXIMGWDTH x $MAXIMGHGTH)"); ?></td>
+                        <td>
+					<p class="hidden"><input type="hidden" name="MAX_FILE_SIZE" value="<?php print("$FILESIZE"); ?>" /></p>
+			      	<input type="file" name="UploadedFile" />
+                        </td>
+                      </tr>
+                    </table>
+
+			</div>
+                </td>
+              </tr>
+
+              <tr>
+                <td colspan="2">
+		         <table class="width100">
+		           <tr>
+				<td class="align-center" colspan="2"><hr style="width:80%;" /></td>
+		           </tr>
+		           <tr>
+		              <td style="width:17%;" class="valign-middle align-right">
+		              	<?php print("<input type=\"image\" src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/valid.gif\" name=\"valid\" alt=\"".$msg->read($STUDENT_INPUTOK)."\" />"); ?>
+		              </td>
+		              <td class="valign-middle">
+		              	<?php print($msg->read($STUDENT_VALIDATE)); ?>
+		              </td>
+		           </tr>
+
+		           <tr>
+		              <td class="valign-middle align-right">
+				<?php
+					$href = ( $account )
+						? "index.php?item=$item&authuser=$authuser&IDsel=$IDsel&IDcentre=$IDcentre&IDalpha=$IDalpha&sort=$sort"
+						: "index.php?item=$item&cmde=show&visu=$visu&IDsel=$IDsel&IDalpha=$IDalpha" ;
+
+					print("<a href=\"".myurlencode($href)."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/cancel.gif\" title=\"\" alt=\"".$msg->read($STUDENT_INPUTCANCEL)."\" /></a>");
+				?>
+		              </td>
+		              <td class="valign-middle">
+		              	<?php print($msg->read($STUDENT_BAKTOLIST)); ?>
+		              </td>
+		           </tr>
+		         </table>
+                  
+                </td>
+              </tr>
+            </table>
+
+	</form>
+
+</div>

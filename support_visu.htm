@@ -1,0 +1,267 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2009 by Dominique Laporte(C-E-D@wanadoo.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : support_visu.htm
+ *		projet   : la page de visualisation et de réponse du RIT
+ *
+ *		version  : 1.0
+ *		auteur   : laporte
+ *		creation : 25/01/09
+ *		modif    : 
+ */
+
+
+$IDcentre = ( @$_POST["IDcentre"] ) 		// ID du centre
+	? (int) $_POST["IDcentre"]
+	: (int) $_SESSION["CnxCentre"] ;
+$IDitem   = ( @$_POST["IDitem"] ) 			// ID du commentaire dans le RIT
+	? (int) $_POST["IDitem"]
+	: (int) @$_GET["IDitem"] ;
+$texte    = trim(@$_POST["texte"]); 		// la réponse
+$todo     = @$_POST["todo"];	 			// date de réalisation
+
+$submit   = @$_GET["submit"];	 			// bouton de validation
+?>
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($SUPPORT_TITLE)); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+
+	<?php
+		require_once "include/spip.php";
+
+		// lecture des droits
+		$Query  = "select _IDgrpwr, _IDgrprd, _IDmod, _warnuser from support ";
+		$Query .= "where _IDcentre = '$IDcentre' ";
+		$Query .= "limit 1";
+
+		$result = mysql_query($Query, $mysql_link);
+		$auth   = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+		// vérification des autorisations
+		verifySessionAccess($auth[2], $auth[1]);
+
+		$date   = date("Y-m-d H:i:s");
+
+		// le modérateur a validé son message
+		if ( strlen(@$_POST["valid_x"]) AND $auth[2] == $_SESSION["CnxID"] AND strlen($texte) ) {
+			$Query  = "update support_items ";
+			$Query .= "set _ID2 = '$auth[2]', _IP2 = '".$_SESSION["CnxIP"]."', _date2 = '$date', _note2 = concat(_note2,'\n".addslashes($texte)."'), _todo = '$todo' ";
+			$Query .= "where _IDitems = '$IDitem' ";
+			$Query .= "limit 1";
+
+			if ( !mysql_query($Query, $mysql_link) )
+				$text = sql_error($mysql_link);
+			else {
+				$text = $msg->read($SUPPORT_THANX);
+
+				// on avertit l'utilisateur de la réponse du modérateur
+				if ( $auth[3] == "O" ) {
+					$Query  = "select distinctrow ";
+					$Query .= "support_items._ID1, user_id._email, support_items._titre, support_items._note1, support_items._note2 ";
+					$Query .= "from support_items, user_id ";
+					$Query .= "where support_items._IDitems = '$IDitem' ";
+					$Query .= "AND support_items._ID1 = user_id._ID ";
+					$Query .= "limit 1";
+
+					$result = mysql_query($Query, $mysql_link);
+					$row    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+					// le post-it est prioritaire
+					if ( canRead($row[0]) )
+						sendMessage($row[0], $row[2], "$row[3]\n--\n$row[4]");
+					else
+						// sinon le mél
+						if ( strlen($row[1]) ) {
+							$mymail = new Mail(); 			// create the mail
+
+							$mymail->From(getUserName($auth[2], false));
+							$mymail->To($row[1]);
+							$mymail->Subject("[". $msg->read($SUPPORT_RHS) ."] $row[2]");
+							$mymail->Body("$row[3]\n--\n$row[4]", $CHARSET);
+
+							$mymail->Send();				// send the mail
+							}
+					}
+				}
+
+			print("
+				<p class=\"center\">
+     					$text<br/>
+					[<a href=\"index.php?item=$item\">".$msg->read($SUPPORT_GOBACK)."</a>]
+				</p>
+				");
+			}
+		else {
+			// lecture du nbr de messages
+			$Query  = "select _ID1, _IP1, _date1, _titre, _note1, _note2, _ID2, _IP2, _date2, _IDitems, _todo, _priority ";
+			$Query .= "from support_items ";
+			$Query .= "where _IDcentre = '$IDcentre' ";
+
+			$result = mysql_query($Query, $mysql_link);
+			$nbelem = ( $result ) ? mysql_affected_rows($mysql_link) : 0 ;
+
+			// lecture du message
+			switch ( $submit ) {
+				case "next" :
+					$Query .= "AND _IDitems > '$IDitem' order by _IDitems asc";
+					break;
+							
+				case "prev" :
+					$Query .= "AND _IDitems < '$IDitem' order by _IDitems desc";
+					break;
+							
+				default :
+					$Query .= "AND _IDitems <= '$IDitem' order by _IDitems desc";
+					break;
+				}
+
+			$result = mysql_query($Query, $mysql_link);
+			$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+			$pos    = ( $result ) ? mysql_affected_rows($mysql_link) : 0 ;
+
+			// lecture de l'expéditeur
+			$who    = getUserName($row[0]);
+
+			// lecture de la station émettrice
+			$by     = " " . _getHostName($row[1]);
+
+			// navigation
+                	$test   = ( $submit == "next" ) ? (bool) ( $pos > 1 ) : (bool) ( $nbelem > 1 AND $pos < $nbelem ) ;
+
+                	$next   = ( $test )
+                		? "<a href=\"".myurlencode("index.php?item=$item&IDitem=$row[9]&IDcentre=$IDcentre&cmde=visu&submit=next")."\">".$msg->read($SUPPORT_NEXT)."</a>"
+                		: $msg->read($SUPPORT_NEXT) ;
+
+                	$test   = ( $submit == "next" ) ? (bool) ( $nbelem > 1 AND $pos < $nbelem ) : (bool) ( $pos > 1 ) ;
+
+                	$prev   = ( $test )
+                		? "<a href=\"".myurlencode("index.php?item=$item&IDitem=$row[9]&IDcentre=$IDcentre&cmde=visu&submit=prev")."\">".$msg->read($SUPPORT_PREV)."</a>"
+                		: $msg->read($SUPPORT_PREV) ;
+
+			$color  = ( $row[11] == "O" )
+				? "background-color:#FF0000;"
+				: "" ;
+
+			$IDitem = $row[9];
+
+	    	print("
+			<form id=\"formulaire\" name=\"formulaire\" action=\"index.php\" method=\"post\">
+				<p class=\"hidden\"><input type=\"hidden\" name=\"item\"     value=\"$item\" /></p>
+				<p class=\"hidden\"><input type=\"hidden\" name=\"IDitem\"   value=\"$IDitem\" /></p>
+				<p class=\"hidden\"><input type=\"hidden\" name=\"cmde\"     value=\"$cmde\" /></p>
+
+	            <table class=\"width100\">
+	              <tr>
+	                <td colspan=\"2\" class=\"align-right\">[$prev]<strong>.</strong>[$next]</td>
+	              </tr>
+	              <tr>
+	                <td class=\"align-right\" style=\"width:25%; background-color:#C0C0C0;\">
+	                  ".$msg->read($SUPPORT_SUBJECT)."<br/>
+	                  ".$msg->read($SUPPORT_SENDER)."<br/>
+	                  ".$msg->read($SUPPORT_POSTBY)."
+	                </td>
+	                <td class=\"align-left\" style=\"width:75%; background-color:#C0C0C0;\">
+	                  $row[3]<br/>
+	                  $who<br/>
+	                  ".date2longfmt($row[2])."$by
+	                </td>
+	              </tr>
+
+			  <tr>
+				<td style=\"border: 1px solid #c0c0c0;$color\" class=\"valign-top\">".$msg->read($SUPPORT_SUGGEST)."</td>
+				<td style=\"border: 1px solid #c0c0c0;\" class=\"valign-top\">". find_typo($row[4], $note) ."</td>
+			  </tr>
+	            </table>");
+
+			if ( $row[6] ) {
+				// lecture de l'expéditeur
+				$who    = getUserName($row[6]);
+
+				// lecture de la station émettrice
+				$by     = " " . _getHostName($row[7]);
+
+				$mydate = date2longfmt($row[8]);
+				}
+			else {
+				$by     = "";
+				$who    = ( $auth[2] == $_SESSION["CnxID"] ) ? $_SESSION["CnxName"] : "" ;
+				$mydate = ( $auth[2] == $_SESSION["CnxID"] ) ? date2longfmt(date("Y-m-d H:i:s")) : "" ;
+				}
+
+		print("
+	            <table class=\"width100\">
+	              <tr>
+	                <td class=\"align-right\" style=\"width:25%; background-color:#C0C0C0;\">
+	                  ".$msg->read($SUPPORT_CHIEF)."<br/>
+	                  ".$msg->read($SUPPORT_POSTBY)."
+	                </td>
+	                <td class=\"align-left\" style=\"width:75%; background-color:#C0C0C0;\">
+	                  $who<br/>
+	                  $mydate$by
+	                </td>
+	              </tr>
+
+			  <tr>");
+
+			// seul le modérateur doit répondre
+			if ( $auth[2] == $_SESSION["CnxID"] ) {
+				print("
+		                <td style=\"border: 1px solid #c0c0c0;\" class=\"valign-top\">
+		                  ".$msg->read($SUPPORT_TODO)."<br/>
+					<label for=\"is_todo\"><input type=\"text\" id=\"is_todo\" name=\"todo\" size=\"10\" value=\"$row[10]\" /></label>");
+
+				// calendrier surgissant
+				CalendarPopup("todo", "document.formulaire.todo");
+
+				print("
+		                </td>
+		                <td style=\"border: 1px solid #c0c0c0;\" class=\"valign-top\">". find_typo($row[5], $note) ."&nbsp;
+					<label for=\"texte\"><textarea id=\"texte\" name=\"texte\" rows=\"10\" cols=\"39\"></textarea></label>
+		              	<input type=\"image\" src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/reply.gif\" name=\"valid\" alt=\"".$msg->read($SUPPORT_INPUTREPLY)."\" />
+		                </td>");
+				}
+			else
+				if ( $row[6] ) {
+					print("
+			                <td style=\"border: 1px solid #c0c0c0;\" class=\"valign-top\">".$msg->read($SUPPORT_TODO)."<br/>".date2longfmt($row[10])."</td>
+			                <td style=\"border: 1px solid #c0c0c0;\" class=\"valign-top\">". find_typo($row[5], $note) ."</td>
+						");
+					}
+
+		print("
+			  </tr>
+			</table>
+
+			</form>
+
+			<div>[<a href=\"index.php?item=$item\">".$msg->read($SUPPORT_GOBACK)."</a>]</div>
+			");
+		}
+	?>
+
+</div>

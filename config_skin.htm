@@ -1,0 +1,695 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2002-2007 by Dominique Laporte(C-E-D@wanadoo.fr)
+   Copyright (c) 2006 by Nordine Zetoutou (nordine.zetoutou@educagri.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : config_skin.htm
+ *		projet   : paramétrage de l'interface intranet
+ *
+ *		version  : 1.0
+ *		auteur   : laporte
+ *		creation : 25/01/03
+ *		modif    : 17/07/06 - Nordine Zetoutou
+ * 	                 migration des balises HTML en XHTML 1.0 strict
+ */
+
+
+$IDconf  = ( @$_POST["IDconf"] )	// ID de la configuration
+	? (int) $_POST["IDconf"]
+	: (int) @$_GET["IDconf"] ;
+
+$IDtheme = (int) @$_POST["IDtheme"];
+$rblang  = @$_POST["rblang"] ? $_POST["rblang"] : $_SESSION["lang"] ;
+$login   = addslashes(trim(@$_POST["login"]));
+$nologin = addslashes(trim(@$_POST["nologin"]));
+$ident   = addslashes(trim(@$_POST["ident"]));
+$title   = addslashes(trim(@$_POST["title"]));
+$texte   = addslashes(trim(@$_POST["texte"]));
+$adresse = addslashes(trim(@$_POST["adresse"]));
+$cp      = addslashes(trim(@$_POST["cp"]));
+$ville   = addslashes(trim(@$_POST["ville"]));
+$tel     = addslashes(trim(@$_POST["tel"]));
+$fax     = addslashes(trim(@$_POST["fax"]));
+$web     = addslashes(trim(@$_POST["web"]));
+$email   = addslashes(trim(@$_POST["email"]));
+$puce    = addslashes(trim(@$_POST["puce"]));
+$fond    = addslashes(trim(@$_POST["fond"]));
+$header  = addslashes(trim(@$_POST["header"]));
+$tdcolor = addslashes(trim(@$_POST["tdcolor"]));
+$bandeau = addslashes(trim(@$_POST["bandeau"]));
+$modetheme = addslashes(trim(@$_POST["modetheme"]));
+$btnleft = (int) @$_POST["btnleft"];
+$bgcolor = @$_POST["bgcolor"];
+$page    = @$_POST["page"];
+$align   = @$_POST["align"] ? $_POST["align"] : "C" ;
+$logo1   = @$_POST["logo1"];
+$logo2   = @$_POST["logo2"];
+$admin   = addslashes(trim(@$_POST["admin"]));
+
+$submit  = (int) @$_POST["valid_x"];		// bouton de validation
+?>
+
+
+<?php
+	// vérification des autorisations
+	admSessionAccess();
+
+	// l'utilisateur a validé
+	if ( $submit ) {
+		mysql_query("update config set _visible = 'N' where _lang = '$rblang'", $mysql_link);
+
+		if ( $IDconf ) {
+			// mise à jour de la config
+			$Query  = "update config ";
+			$Query .= "set _IDtheme = '$IDtheme', _puce = '$puce', _fond = '$fond', _header = '$header', _texte = '$texte', _login = '$login', _nologin = '$nologin', _tdcolor = '$tdcolor', _align = '$align', ";
+			$Query .= "_title = '$title', _adresse = '$adresse', _cp = '$cp', _ville = '$ville', _tel = '$tel', _fax = '$fax', _web = '$web', _email = '$email', _webmaster = '$admin', _bandeau = '$bandeau', ";
+			$Query .= ( strlen($ident) ) ? "_ident = '$ident', " : "" ;
+			$Query .= ( $bgcolor == "O" ) ? "_bgcolor = 'O', " : "_bgcolor = 'N', " ;
+			$Query .= ( $page == "O" ) ? "_page = 'O', " : "_page = 'N', " ;
+			$Query .= ( $logo1 == "O" ) ? "_logo1 = 'O', " : "_logo1 = 'N', " ;
+			$Query .= ( $logo2 == "O" ) ? "_logo2 = 'O', " : "_logo2 = 'N', " ;
+			$Query .= "_visible = 'O' ";
+			$Query .= "where _IDconf = '$IDconf' ";
+			$Query .= "limit 1";
+			}
+		else {
+			// ajout config
+			$Query  = "insert into config ";
+			$Query .= ( strlen($ident) )
+				? "values('', '$ident', '$title', '$texte', '', '$tdcolor', '$align', '$login', '$nologin', '$IDtheme', '$bgcolor', '$puce', '$fond', '$page', '$header', '$adresse', '$cp', '$ville', '$tel', '$fax', '$web', '$email', '$logo1', '$logo2', '$admin', 'O', '$rblang', '$bandeau')"
+				: "" ;
+			}
+
+		if ( mysql_query($Query, $mysql_link) ) {
+			$IDconf = ( $IDconf ) ? $IDconf : mysql_insert_id() ;
+
+			// sélection de la nouvelle config
+			$result = mysql_query("select _ident from config where _IDconf = '$IDconf' limit 1", $mysql_link);
+			$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+			// fichiers à transférer : logo principal + logo région
+			$file1  = @$_FILES["UploadedFile1"]["tmp_name"];
+			$file2  = @$_FILES["UploadedFile2"]["tmp_name"];
+
+			// logo principal (copie pour les slide !)
+			if ( $file1 )
+				if ( move_uploaded_file($file1, "download/logos/$row[0]/logo01.jpg") )
+					copy("download/logos/$row[0]/logo01.jpg", "download/logos/logo01.jpg");
+
+			// logo région
+			if ( $file2 )
+				move_uploaded_file($file2, "download/logos/$row[0]/logo02.jpg");
+			}
+
+		$lines = file("config.php");
+		foreach ($lines as $line_num => $line) {
+			if($modetheme == "portal" && strpos($line, '$MODETHEME')){
+				$lines[$line_num] = 'static  $MODETHEME	  = "portal";	// portal ou intranet'.PHP_EOL;
+			}
+			if($modetheme == "intranet" && strpos($line, '$MODETHEME')){
+				$lines[$line_num] = 'static  $MODETHEME	  = "intranet";	// portal ou intranet'.PHP_EOL;
+			}
+			
+			if($btnleft == 1 && strpos($line, '$BTNLEFT')){
+				$lines[$line_num] = 'static  $BTNLEFT	  = 1;	// affichage boutons gauche'.PHP_EOL;
+			}
+			if($btnleft == 0 && strpos($line, '$BTNLEFT')){
+				$lines[$line_num] = 'static  $BTNLEFT	  = 0;	// affichage boutons gauche'.PHP_EOL;
+			}
+		}
+		
+		$txt = "";
+		foreach($lines as $cle => $val)
+		{
+			$txt .= $val;
+		}
+
+		file_put_contents('config.php', $txt);
+		
+		// forçage de la lecture du fichier de paramétrage intranet
+		unset($_SESSION["CfgIdent"]);
+
+		// rafraichissement
+		print("<script type=\"text/javascript\"> window.location.replace('index.php?item=$item&cmde=$cmde&IDconf=$IDconf', '_self'); </script>");
+		}
+?>
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($CONFIG_TUNING)); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+
+	<form id="formulaire" action="index.php?item=21&amp;cmde=skin&amp;<?php echo $IDconf; ?>" method="post" enctype="multipart/form-data">
+		<p class="hidden"><input type="hidden" name="mylang" value="<?php print("$rblang"); ?>" /></p>
+
+        <table class="width100">
+          <tr>
+            <td class="align-center" colspan="2">
+			<span class="menucfg">
+			<img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/options.png" title="" alt="" />
+			<?php print("<a href=\"index.php?item=$item&amp;IDconf=$IDconf\">". $msg->read($CONFIG_OPTION) ."</a>"); ?>
+			</span>
+
+			<span style="margin:5px; padding:2px; border-style:solid; border-color:#000000; border-width:1px; background-color:#eeeeee;">
+			<img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/config.png" title="" alt="" /> <?php print($msg->read($CONFIG_TUNE)) ?>
+			</span>
+
+			<span class="menucfg">
+			<img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/database.gif" title="" alt="" />
+			<?php print("<a href=\"index.php?item=$item&amp;cmde=dba&amp;IDconf=$IDconf\">". $msg->read($CONFIG_DATABASE) ."</a>"); ?>
+			</span>
+
+			<span class="menucfg">
+			<img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/personnaliser.gif" title="" alt="" />
+			<?php print("<a href=\"index.php?item=$item&amp;cmde=kwords&amp;IDconf=$IDconf\">". $msg->read($CONFIG_KEYWORDS) ."</a>"); ?>
+			</span>
+
+			<span class="menucfg">
+			<img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/liste.png" title="" alt="" />
+			<?php print("<a href=\"index.php?item=$item&amp;cmde=menu&amp;IDconf=$IDconf\">". $msg->read($CONFIG_MENU) ."</a>"); ?>
+			</span>
+
+			<span class="menucfg">
+			<img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/p2p.png" title="" alt="" />
+			<?php print("<a href=\"index.php?item=$item&amp;cmde=p2p&amp;IDconf=$IDconf\">". $msg->read($CONFIG_P2P) ."</a>"); ?>
+			</span>
+			
+			<span class="menucfg">
+			<?php print("<a href=\"index.php?item=$item&amp;cmde=edt&amp;IDconf=$IDconf\">". $msg->read($CONFIG_EDT) ."</a>"); ?>
+			</span>
+            </td>
+          </tr>
+
+          <tr>
+            <td class="align-center" colspan="2"><hr/></td>
+          </tr>
+
+          <tr>
+            <td class="align-right" style="width:50%;"><?php print($msg->read($CONFIG_CHOOSECONFIG)); ?></td>
+            <td class="align-left">
+		<?php
+			switch ( @$_GET["submit"] ) {
+				case "update" :
+					// recherche de la config
+					$sql  = "select _texte, _login, _adresse, _tel, _fax, _web, _email, _IDtheme, _puce, _bgcolor, _fond, _header, _tdcolor, _align, _logo1, _logo2, _title, _page, _webmaster, _nologin, _ident, _cp, _ville ";
+					$sql .= "from config ";
+					$sql .= "where _IDconf = '$IDconf' ";
+					$sql .= "limit 1";
+
+					$res  = mysql_query($sql, $mysql_link);
+					$cfg  = ( $res ) ? remove_magic_quotes(mysql_fetch_row($res)) : 0 ;
+							
+					if ( $cfg ) {
+						$texte   = $cfg[0];
+						$login   = $cfg[1];
+						$adresse = $cfg[2];
+						$tel     = $cfg[3];
+						$fax     = $cfg[4];
+						$web     = $cfg[5];
+						$email   = $cfg[6];
+						$IDtheme = $cfg[7];
+						$puce    = $cfg[8];
+						$bgcolor = $cfg[9];
+						$fond    = $cfg[10];
+						$header  = $cfg[11];
+						$tdcolor = $cfg[12];
+						$align   = $cfg[13];
+						$logo1   = $cfg[14];
+						$logo2   = $cfg[15];
+						$title   = $cfg[16];
+						$page    = $cfg[17];
+						$admin   = $cfg[18];
+						$nologin = $cfg[19];
+						$cp      = $cfg[20];
+						$ville   = $cfg[21];
+						}
+
+				case "new" :
+					$ident = @$cfg[20];
+					print("<label for=\"ident\"><input type=\"text\" id=\"ident\" name=\"ident\" value=\"$ident\" size=\"20\" /></label>");
+					break;
+
+				default :
+					// affichage des config
+					$query  = "select _IDconf, _ident, _visible from config ";
+					$query .= "where _ident != '' AND _lang = '$rblang'";
+
+					$result = mysql_query($query, $mysql_link);
+					$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+					// initialiation
+					$IDconf = ( @$_POST["mylang"] AND @$_POST["mylang"] != $rblang ) ? $row[0] : $IDconf ;
+
+					print("<label for=\"IDconf\">");
+					print("<select id=\"IDconf\" name=\"IDconf\" onchange=\"document.forms.formulaire.submit()\">");
+
+					while ( $row ) {
+						$check  = ( $row[2] == "O" ) ? "*" : "" ;
+						$select = ( $IDconf == $row[0] ) ? "selected=\"selected\"" : "" ;
+
+						if ( $IDconf == $row[0] ) {						
+							// recherche de la config
+							$sql  = "select _texte, _login, _adresse, _tel, _fax, _web, _email, _IDtheme, _puce, _bgcolor, _fond, _header, _tdcolor, _align, _logo1, _logo2, _title, _page, _webmaster, _nologin, _cp, _ville, _bandeau ";
+							$sql .= "from config ";
+							$sql .= "where _IDconf = '$IDconf' ";
+							$sql .= "limit 1";
+
+							$res  = mysql_query($sql, $mysql_link);
+							$cfg  = ( $res ) ? remove_magic_quotes(mysql_fetch_row($res)) : 0 ;
+							
+							if ( $cfg ) {
+								$texte   = $cfg[0];
+								$login   = $cfg[1];
+								$adresse = $cfg[2];
+								$tel     = $cfg[3];
+								$fax     = $cfg[4];
+								$web     = $cfg[5];
+								$email   = $cfg[6];
+								$IDtheme = $cfg[7];
+								$puce    = $cfg[8];
+								$bgcolor = $cfg[9];
+								$fond    = $cfg[10];
+								$header  = $cfg[11];
+								$tdcolor = $cfg[12];
+								$align   = $cfg[13];
+								$logo1   = $cfg[14];
+								$logo2   = $cfg[15];
+								$title   = $cfg[16];
+								$page    = $cfg[17];
+								$admin   = $cfg[18];
+								$nologin = $cfg[19];
+								$cp      = $cfg[20];
+								$ville   = $cfg[21];
+								$bandeau = $cfg[22];
+								}
+							}
+
+						print("<option value=\"$row[0]\" $select>$row[1] $check</option>");
+
+						$row = remove_magic_quotes(mysql_fetch_row($result));
+						}	// endwhile config
+
+					print("</select>");
+					print("</label>");
+					break;
+				}	// end switch
+		?>
+			<a href="<?php print(myurlencode("index.php?item=$item&cmde=skin&submit=new")); ?>"><img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/add.gif" title="" alt="" /></a>
+			<a href="<?php print(myurlencode("index.php?item=$item&cmde=skin&IDconf=$IDconf&submit=update")); ?>"><img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/modify.gif" title="" alt="" /></a>
+            </td>
+          </tr>
+
+          <tr>
+            <td class="align-right"><?php print($msg->read($CONFIG_LANGLIST)); ?></td>
+            <td class="align-left">
+		<?php
+			$list = Array();
+
+			// ouverture du répertoire des langues
+			$myDir = @opendir("msg");
+
+			// lecture des répertoires
+			while ( $entry = @readdir($myDir) )
+				if ( is_dir("msg/$entry") AND strlen($entry) == 2 AND $entry != ".." )
+					array_push($list, $entry);
+
+			// fermeture du répertoire
+			@closedir($myDir);
+
+			for ($i = 0; $i < count($list); $i++) {
+				$check = ( $list[$i] == $rblang ) ? "checked=\"checked\"" : "" ;
+
+				$input = "<label for=\"rblang_$i\"><input type=\"radio\" id=\"rblang_$i\" name=\"rblang\" value=\"$list[$i]\" onchange=\"document.forms.formulaire.submit()\" $check /></label>" ;
+
+				print("$input <img src=\"".$_SESSION["ROOTDIR"]."/images/lang/ico-$list[$i].png\" title=\"$list[$i]\" alt=\"$list[$i]\" /> ");
+				}
+		?>
+            </td>
+          </tr>
+        </table>
+
+        <table class="width100">
+          <tr>
+            <td class="align-center" colspan="2"><hr style="width:80%;" /></td>
+          </tr>
+
+          <tr>
+            <td style="width:30%;" class="align-right"><?php print($msg->read($CONFIG_THEME)); ?></td>
+            <td style="width:70%;">
+			<label for="IDtheme">
+			<select id="IDtheme" name="IDtheme">
+			<?php
+				// initialisation du menu déroulant
+				$result = mysql_query("select _IDtheme, _theme from config_theme", $mysql_link);
+				$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+						
+				while ( $row ) {
+					if ( $IDtheme == $row[0] )
+						print("<option selected=\"selected\" value=\"$row[0]\">$row[1]</option>");
+					else
+						print("<option value=\"$row[0]\">$row[1]</option>");
+
+					$row = remove_magic_quotes(mysql_fetch_row($result));
+					}
+			?>
+			</select>
+			</label>
+		</td>
+          </tr>
+
+          <tr>
+            <td class="align-right"><?php print($msg->read($CONFIG_PUCE)); ?></td>
+            <td>
+			<label for="puce">
+			<select id="puce" name="puce">
+			<?php
+				// recherche des images
+				$myDir = @opendir($_SESSION["ROOTDIR"]."/css/themes/puce");
+
+				// lecture du répertoire
+				while ( $entry = readdir($myDir) ) {
+					switch ( extension($entry) ) {
+						case "png" :
+						case "jpg" :
+						case "gif" :
+							if ( $puce == $entry )
+								print("<option selected=\"selected\" value=\"$entry\">$entry</option>");
+							else
+								print("<option value=\"$entry\">$entry</option>");
+							break;
+
+						default :
+							break;
+						}
+			              }
+
+				closedir($myDir);
+			?>
+			</select>
+			</label>
+		</td>
+          </tr>
+
+          <tr>
+            <td class="align-right" style="display: none"><?php print($msg->read($CONFIG_BKG)); ?></td>
+            <td>
+			<label for="fond" style="display: none">
+			<select id="fond" name="fond">
+			<?php
+				// recherche des images
+				$myDir = @opendir($_SESSION["ROOTDIR"]."/css/themes/fond");
+
+				// lecture du répertoire
+				while ( $entry = readdir($myDir) ) {
+					switch ( extension($entry) ) {
+						case "png" :
+						case "jpg" :
+						case "gif" :
+							if ( $fond == $entry )
+								print("<option selected=\"selected\" value=\"$entry\">$entry</option>");
+							else
+								print("<option value=\"$entry\">$entry</option>");
+							break;
+
+						default :
+							break;
+						}
+			              }
+
+				closedir($myDir);
+			?>
+			</select>
+			</label>
+
+			<label for="page" style="display: none">
+			<?php printf("<input type=\"checkbox\" id=\"page\" name=\"page\" value=\"O\" %s />", ($page == "O") ? "checked=\"checked\"" : ""); ?>
+			<?php print($msg->read($CONFIG_APPLYPAGE)); ?>
+			</label>
+		</td>
+          </tr>
+
+          <tr>
+            <td class="align-right"><?php print($msg->read($CONFIG_MYTITLE)); ?></td>
+            <td>
+			<label for="header">
+			<select id="header" name="header">
+			<?php
+				// recherche des images
+				$myDir = @opendir($_SESSION["ROOTDIR"]."/css/themes/header");
+
+				// lecture du répertoire
+				while ( $entry = readdir($myDir) ) {
+					switch ( extension($entry) ) {
+						case "png" :
+						case "jpg" :
+						case "gif" :
+							if ( $header == $entry )
+								print("<option selected=\"selected\" value=\"$entry\">$entry</option>");
+							else
+								print("<option value=\"$entry\">$entry</option>");
+							break;
+
+						default :
+							break;
+						}
+			              }
+
+				closedir($myDir);
+			?>
+			</select>
+			</label>
+		</td>
+          </tr>
+
+          <tr>
+            <td class="align-right"><?php print($msg->read($CONFIG_MYCOLOR)); ?></td>
+            <td>
+		  <label for="tdcolor"><input type="text" id="tdcolor" name="tdcolor" value="<?php print("$tdcolor"); ?>" size="6" /></label>
+            </td>
+          </tr>
+		  
+		  <tr>
+            <td class="align-right"><?php print($msg->read($CONFIG_MYCOLORBAND)); ?></td>
+            <td>
+			  <label for="bandeau">
+				<select name="bandeau" id="bandeau">
+					<option value="0" <?php if($bandeau=="0"){echo "selected";} ?>>Noir</option>
+					<option value="1" <?php if($bandeau=="1"){echo "selected";} ?>>Blanc</option>
+				</select>
+			  </label>
+            </td>
+          </tr>
+
+		  <tr>
+            <td class="align-right"><strong>Boutons gauche :</strong></td>
+            <td>
+				<?php
+				$lines = file("config.php");
+				foreach ($lines as $line_num => $line) {
+					if(strpos($line, '$BTNLEFT'))
+					{
+						if(strpos($line, "1"))
+						{
+							$btnleft = 1;
+						}
+						else
+						{
+							$btnleft = 0;
+						}
+					}
+				}
+				?>
+			  <label for="btnleft">
+				<select name="btnleft" id="btnleft">
+					<option value="1" <?php if($btnleft==1){echo "selected";} ?>>Activés</option>
+					<option value="0" <?php if($btnleft==0){echo "selected";} ?>>Désactivés</option>
+				</select>
+			  </label>
+            </td>
+          </tr>
+		  
+		  <tr>
+            <td class="align-right"><strong>Theme mode :</strong></td>
+            <td>
+			  	<?php
+				$lines = file("config.php");
+				foreach ($lines as $line_num => $line) {
+					if(strpos($line, "\"portal\"")){
+						$modetheme = "portal";
+					}
+					if(strpos($line, "\"intranet\"")){
+						$modetheme = "intranet";
+					}
+				}
+				?>
+				<table border="0">
+					<tr>
+						<td>
+							<label for="mode_intranet">
+								<input type="radio" name="modetheme" value="intranet" id="mode_intranet" <?php if($modetheme=="intranet"){echo "checked";} ?> /> Intranet<br />
+								<img src="images/theme_intranet.png" alt="Intranet" border="0" style="border: 1px solid #CCCCCC" />
+							</label>
+						</td>
+						<td>
+							<label for="mode_portal">
+								<input type="radio" name="modetheme" value="portal" id="mode_portal" <?php if($modetheme=="portal"){echo "checked";} ?> /> Portail<br />
+								<img src="images/theme_portal.png" alt="Portail" border="0" style="border: 1px solid #CCCCCC" />
+							</label>
+						</td>
+					</tr>
+				</table><br />
+            </td>
+          </tr>
+
+          <tr>
+            <td class="align-right"><?php print($msg->read($CONFIG_MYADDRESS)); ?></td>
+            <td>
+              <label for="adresse"><input type="text" id="adresse" name="adresse" value="<?php print("$adresse"); ?>" size="50" /></label>
+            </td>
+          </tr>
+
+          <tr>
+            <td class="align-right"><?php print($msg->read($CONFIG_ZIPCODE)); ?></td>
+            <td>
+              <label for="cp"><input type="text" id="cp" name="cp" value="<?php print("$cp"); ?>" size="6" /></label> -
+              <label for="ville"><input type="text" id="ville" name="ville" value="<?php print("$ville"); ?>" size="20" /></label>
+            </td>
+          </tr>
+
+          <tr>
+            <td class="align-right"><?php print($msg->read($CONFIG_TEL)); ?></td>
+            <td>
+              <label for="tel"><input type="text" id="tel" name="tel" value="<?php print("$tel"); ?>" size="20" /></label>
+            </td>
+          </tr>
+
+          <tr>
+            <td class="align-right"><?php print($msg->read($CONFIG_FAX)); ?></td>
+            <td>
+              <label for="fax"><input type="text" id="fax" name="fax" value="<?php print("$fax"); ?>" size="20" /></label>
+            </td>
+          </tr>
+
+          <tr>
+            <td class="align-right"><?php print($msg->read($CONFIG_WEBSITE)); ?></td>
+            <td>
+              <label for="web"><input type="text" id="web" name="web" value="<?php print("$web"); ?>" size="40" /></label>
+            </td>
+          </tr>
+
+          <tr>
+            <td class="align-right"><?php print($msg->read($CONFIG_EMAIL)); ?></td>
+            <td>
+              <label for="email"><input type="text" id="email" name="email" value="<?php print("$email"); ?>" size="40" /></label>
+            </td>
+          </tr>
+
+          <tr>
+            <td class="align-right valign-top"><?php print($msg->read($CONFIG_MYLOGO)); ?></td>
+            <td>
+		  <?php printf("<label for=\"logo1\"><input type=\"checkbox\" id=\"logo1\" name=\"logo1\" value=\"O\" %s /></label>", ($logo1 == "O") ? "checked=\"checked\"" : ""); ?>
+              <?php print($msg->read($CONFIG_MAIN, myurlencode("index.php?item=$item&cmde=logo&IDconf=$IDconf"))); ?>
+		  
+		  <input type="hidden" id="align_C" name="align" value="C" /> 
+		  <br/>
+
+		  <p class="hidden"><input type="hidden" name="MAX_FILE_SIZE" value="<?php print($FILESIZE); ?>" /></p>
+		  <input type="file" name="UploadedFile1" style="font-size: 9px;" /><br/>
+
+		  <?php printf("<label for=\"logo2\"><input type=\"checkbox\" id=\"logo2\" name=\"logo2\" value=\"O\" %s /></label>", ($logo2 == "O") ? "checked=\"checked\"" : ""); ?>
+              <?php print($msg->read($CONFIG_SECONDARY, "download/logos/". rawurlencode($_SESSION["CfgIdent"]) ."/logo02.jpg")); ?><br/>
+
+		  <p class="hidden"><input type="hidden" name="MAX_FILE_SIZE" value="<?php print($FILESIZE); ?>" /></p>
+		  <input type="file" name="UploadedFile2" style="font-size: 9px;" />
+            </td>
+          </tr>
+
+          <tr>
+            <td class="align-right"><?php print($msg->read($CONFIG_WINTITLE)); ?></td>
+            <td>
+              <label for="title"><input type="text" id="title" name="title" value="<?php print("$title"); ?>" size="50" /></label>
+            </td>
+          </tr>
+
+          <tr>
+            <td class="align-right"><?php print($msg->read($CONFIG_HOMEMSG)); ?></td>
+            <td>
+              <label for="texte"><input type="text" id="texte" name="texte" value="<?php print("$texte"); ?>" size="50" /></label>
+            </td>
+          </tr>
+
+          <tr>
+            <td class="align-right valign-top">
+              <strong><?php print($msg->read($CONFIG_CONNECTION)); ?></strong> <a href="#" onclick="popWin('spip_typo.php?lang=<?php print($_SESSION["lang"]); ?>', '450', '350'); return false;">
+		  <img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/spip/aide.gif" title="<?php print($msg->read($CONFIG_HELP)); ?>" alt="" /></a>
+            </td>
+            <td>
+              <label for="login"><textarea id="login" name="login" rows="4" cols="40"><?php print("$login"); ?></textarea></label>
+            </td>
+          </tr>
+
+          <tr>
+            <td class="align-right valign-top">
+              <?php print($msg->read($CONFIG_MAINTENANCE)); ?> <a href="#" onclick="popWin('spip_typo.php?lang=<?php print($_SESSION["lang"]); ?>', '450', '350'); return false;">
+		  <img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/spip/aide.gif" title="<?php print($msg->read($CONFIG_HELP)); ?>" alt="" /></a>
+            </td>
+            <td>
+              <label for="nologin"><textarea id="nologin" name="nologin" rows="4" cols="40"><?php print("$nologin"); ?></textarea></label>
+            </td>
+          </tr>
+
+          <tr>
+            <td class="align-right"><?php print($msg->read($CONFIG_WEBMASTER)); ?></td>
+            <td>
+              <label for="admin"><input type="text" id="admin" name="admin" value="<?php print("$admin"); ?>" size="40" /></label>
+            </td>
+          </tr>
+        </table>
+
+	<hr/>
+
+        <table class="width100">
+          <tr>
+             <td style="width:10%;" class="valign-middle align-center">
+			<?php print("<input type=\"image\" src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/valid.gif\" name=\"valid\" alt=\"".$msg->read($CONFIG_INPUTOK)."\" />"); ?>
+             </td>
+             <td class="valign-middle">
+			<?php print($msg->read($CONFIG_VALIDATE)); ?>
+             </td>
+          </tr>
+	       
+          <tr>
+             <td class="valign-middle align-center">
+			<a href="index.php"><?php print("<img src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/cancel.gif\" title=\"\" alt=\"".$msg->read($CONFIG_INPUTCANCEL)."\" />"); ?></a>
+             </td>
+             <td class="valign-middle">
+			<?php print($msg->read($CONFIG_GOHOME)); ?>
+             </td>
+          </tr>
+        </table>
+
+      </form>
+      
+</div>

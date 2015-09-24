@@ -1,0 +1,402 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2009 by Dominique Laporte(C-E-D@wanadoo.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : ccn.htm
+ *		projet   : page d'affichage des Cahier de Correspondance Numériques
+ *
+ *		version  : 1.0
+ *		auteur   : laporte
+ *		creation : 25/10/09
+ *		modif    : 
+ */
+
+
+$IDcentre = ( @$_POST["IDcentre"] ) 	// ID du centre
+	? (int) $_POST["IDcentre"]
+	: (int) (@$_GET["IDcentre"] ? $_GET["IDcentre"] : $_SESSION["CnxCentre"]) ;
+$IDdest   = ( @$_POST["IDdest"] ) 		// ID du destinataire
+	? (int) $_POST["IDdest"]
+	: (int) @$_GET["IDdest"] ;
+$IDexp    = ( @$_POST["IDexp"] ) 		// ID de l'expéditeur
+	? (int) $_POST["IDexp"]
+	: (int) @$_GET["IDexp"] ;
+
+$skpage = ( @$_GET["skpage"] )		// n° de la page affichée
+	? (int) $_GET["skpage"]
+	: 1 ;
+$skshow = ( @$_GET["skshow"] )		// n° du flash info
+	? (int) $_GET["skshow"]
+	: 1 ;
+
+$submit = ( @$_POST["del_x"] )		// bouton de validation
+	? "del"
+	: (@$_POST["move_x"] ? "move" : @$_GET["submit"]) ;
+?>
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($CCN_TITLE)); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+
+	<?php
+		// lecture des droits
+		$Query  = "select _IDgrpwr, _IDgrprd, _IDmod from ccn ";
+		$Query .= "where _IDcentre = '".$_SESSION["CnxCentre"]."' ";
+		$Query .= "limit 1";
+
+		$result = mysql_query($Query, $mysql_link);
+		$auth   = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+		// vérification des autorisations
+		verifySessionAccess(0, $auth[1]);
+
+		// on filtre les données
+		switch ( getAccess() ) {
+			case '1' :	// les élèves
+				$IDdest = $_SESSION["CnxID"];
+				break;
+
+			case '2' :	// le personnel
+				break;
+
+			default :	// les autres
+				logSessionAccess();
+				break;
+			} // end switch
+
+		// initialisation
+		$href   = "IDcentre=$IDcentre&skpage=$skpage&skshow=$skshow";
+	?>
+
+	<form id="formulaire" action="index.php" method="post">
+	<?php
+		print("
+			<p class=\"hidden\"><input type=\"hidden\" name=\"item\"   value=\"$item\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"cmde\"   value=\"$cmde\" /></p>
+			");
+	?>
+
+	<table class="width100">
+	  <tr>
+		<td style="width:50%;" class="align-right">
+			<?php print($msg->read($CCN_CHOOSECENTER)); ?>
+		</td>
+		<td style="width:50%;">
+			<label for="IDcentre">
+			<select id="IDcentre" name="IDcentre" onchange="document.forms.formulaire.submit()">
+			<?php
+				// lecture des centres constitutifs
+				$query  = "select _IDcentre, _ident from config_centre ";
+				$query .= "where _visible = 'O' AND _lang = '".$_SESSION["lang"]."' ";
+				$query .= "order by _IDcentre";
+
+				$result = mysql_query($query, $mysql_link);
+				$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+				while ( $row ) {			
+					printf("<option value=\"$row[0]\" %s>$row[1]</option>", ($IDcentre == $row[0]) ? "selected=\"selected\"" : "");
+
+					$row = remove_magic_quotes(mysql_fetch_row($result));
+					}				
+			?>
+			</select> <img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/home.gif" title="" alt="" />
+			</label>
+		</td>
+	  </tr>
+	</table>
+
+	<hr/>
+
+	<?php
+		// envoie d'un message
+		if ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $auth[0] OR ($auth[0] AND pow(2, $_SESSION["CnxGrp"] - 1)) )
+			print("
+		            <table class=\"width100\">
+		              <tr>
+		                <td style=\"width:10%;\" class=\"valign-middle\">
+					<a href=\"".myurlencode("index.php?item=$item&cmde=post&$href")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/post.gif\" title=\"". $msg->read($CCN_INPUTNEW) ."\" alt=\"". $msg->read($CCN_INPUTNEW) ."\"/></a>
+			          </td>
+		                <td class= \"valign-middle\">
+					". $msg->read($CCN_NEWMSG) ."
+			          </td>
+		              </tr>
+		            </table>");
+
+		// sélection des expéditeurs
+		$select1  = "
+			  <label for=\"IDexp\">
+		  	  <select id=\"IDexp\" name=\"IDexp\" onchange=\"document.forms.formulaire.submit()\">
+				<option value=\"0\">". $msg->read($CCN_SENTBY) ."</option>";
+
+				// sélection des groupes
+				$query  = "select distinctrow user_group._IDgrp, user_group._ident, ccn._IDgrprd ";
+				$query .= "from user_group, ccn ";
+				$query .= "where user_group._visible = 'O' AND user_group._lang = '".$_SESSION["lang"]."' ";
+				$query .= "AND (ccn._IDgrpwr & pow(2, user_group._IDgrp - 1)) ";
+				$query .= "AND ccn._IDcentre = '$IDcentre' ";
+				$query .= "order by user_group._ident asc";
+
+				$result = mysql_query($query, $mysql_link);
+				$cat    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+				while ( $cat ) {
+					$select1 .= "<optgroup label=\"$cat[1]\">";
+
+					//---- détermine les expéditeurs
+					$query  = "select distinctrow ccn_items._ID ";
+					$query .= "from user_id, ccn_items ";
+					$query .= "where user_id._IDgrp = '$cat[0]' " ;
+					$query .= "AND user_id._ID = ccn_items._ID " ;
+
+					$res    = mysql_query($query, $mysql_link);
+					$row    = ( $res ) ? mysql_fetch_row($res) : 0 ;
+
+					while ( $row ) {
+						$is_sel   = ( $IDexp == $row[0] ) ? "selected=\"selected\"" : "" ;
+						$select1 .= "<option value=\"$row[0]\" $is_sel>". getUserName($row[0], false) ."</option>";
+
+						$row      = mysql_fetch_row($res);
+						}
+
+					$select1 .= "</optgroup>";
+
+					$cat = remove_magic_quotes(mysql_fetch_row($result));
+					}	// endwhile catégorie
+
+		$select1 .= "</select>";
+		$select1 .= "</label>";
+
+		// sélection des destinataires
+		$select2  = "
+			  <label for=\"IDdest\">
+		  	  <select id=\"IDdest\" name=\"IDdest\" onchange=\"document.forms.formulaire.submit()\">
+				<option value=\"0\">". $msg->read($CCN_RCIEVFROM) ."</option>";
+
+				// sélection des groupes
+				$query  = "select distinctrow user_group._IDgrp, user_group._ident, ccn._IDgrprd ";
+				$query .= "from user_group, ccn ";
+				$query .= "where user_group._visible = 'O' AND user_group._lang = '".$_SESSION["lang"]."' ";
+				$query .= "AND (ccn._IDgrprd & pow(2, user_group._IDgrp - 1)) ";
+				$query .= "AND ccn._IDcentre = '$IDcentre' ";
+				$query .= "order by user_group._ident asc";
+
+				$result = mysql_query($query, $mysql_link);
+				$cat    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+				while ( $cat ) {
+					$select2 .= "<optgroup label=\"$cat[1]\">";
+
+					//---- détermine les destinataires
+					$query  = "select distinctrow ccn_items._IDdest ";
+					$query .= "from user_id, ccn_items ";
+					$query .= "where user_id._IDgrp = '$cat[0]' " ;
+					$query .= "AND user_id._ID = ccn_items._IDdest " ;
+
+					$res    = mysql_query($query, $mysql_link);
+					$row    = ( $res ) ? mysql_fetch_row($res) : 0 ;
+
+					while ( $row ) {
+						$is_sel   = ( $IDdest == $row[0] ) ? "selected=\"selected\"" : "" ;
+						$select2 .= "<option value=\"$row[0]\" $is_sel>". getUserName($row[0], false) ."</option>";
+
+						$row      = mysql_fetch_row($res);
+						}
+
+					$select2 .= "</optgroup>";
+
+					$cat = remove_magic_quotes(mysql_fetch_row($result));
+					}	// endwhile catégorie
+
+		$select2 .= "</select>";
+		$select2 .= "</label>";
+	?>
+
+            <table class="width100">
+              <tr style="background-color:#c0c0c0;">
+                <td class="align-center" style="width:1%;">
+			<img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/document.gif" title="<?php print($msg->read($CCN_MSGPRIORITY)); ?>" alt="<?php print($msg->read($CCN_MSGPRIORITY)); ?>" />
+                </td>
+                <td class="align-center" style="width:1%;">
+			<img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/certificate.png" title="<?php print($msg->read($CCN_ACK)); ?>" alt="<?php print($msg->read($CCN_ACK)); ?>" />
+                </td>
+                <td style="width:57%;"><?php print($select1); ?></td>
+                <td class="align-center" style="width:1%;">
+			<img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/breve.gif" title="<?php print($msg->read($CCN_ACK)); ?>" alt="<?php print($msg->read($CCN_ACK)); ?>" />
+                </td>
+                <td class="align-center" style="width:30%;"><?php print($select2); ?></td>
+                <td class="align-center" style="width:10%;"><?php print($msg->read($CCN_REPLY)); ?></td>
+              </tr>
+
+		<?php
+			//---- lecture des messages
+			$Query  = "select _IDmsg, _ID, _IP, _date, _ack, _title, _ack, _priority, _IDdest, _email from ccn_items ";
+			$Query .= "where _IDcentre = '$IDcentre' AND _IDparent = '0' ";
+			$Query .= ( $IDexp ) ? "AND _ID = '$IDexp' " : "" ;
+			$Query .= ( $IDdest ) ? "AND _IDdest = '$IDdest' " : "" ;
+			$Query .= "order by _date desc";
+
+			$result = mysql_query($Query, $mysql_link);
+			$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+			// détermination du nombre de pages
+			$result = mysql_query($Query, $mysql_link);
+			$nbelem = ( $result ) ? mysql_affected_rows($mysql_link) : 0 ;
+
+			$page   = $nbelem;
+			$show   = 1;
+
+			if ( $nbelem ) {
+				$page  = ( $page % $MAXPAGE )
+					? (int) ($page / $MAXPAGE) + 1
+					: (int) ($page / $MAXPAGE) ;
+
+				$show  = ( $page % $MAXSHOW )
+					? (int) ($page / $MAXSHOW) + 1
+					: (int) ($page / $MAXSHOW) ;
+
+				// initialisation
+				$j     = 1;
+				$first = 1 + (($skpage - 1) * $MAXPAGE);
+				$pos   = $first;
+				
+				// se positionne sur la page ad hoc
+				mysql_data_seek($result, $first - 1);
+				$row = remove_magic_quotes(mysql_fetch_row($result));
+
+				while ( $row AND $j <= $MAXPAGE ) {
+					$bgcol = ( $j++ % 2 ) ? "item" : "menu" ;
+
+					// priorité des messages
+					$list   = explode(",", $msg->read($CCN_PRIORITYLEVEL));
+					$idx    = (int) $row[7];
+
+					$icon   = ( $idx )
+						? "<img src=\"".$_SESSION["ROOTDIR"]."/images/p$idx.gif\" title=\"$list[$idx]\" alt=\"$list[$idx]\" />"
+						: "" ;
+
+					// message acquitté ?
+					$ack    = ( $row[4] == "0000-00-00 00:00:00" )
+						? "<img src=\"".$_SESSION["ROOTDIR"]."/images/invisible.gif\" title=\"". $msg->read($CCN_NA) ."\" alt=\"". $msg->read($CCN_NA) ."\" />"
+						: "<img src=\"".$_SESSION["ROOTDIR"]."/images/visible.gif\" title=\"". $msg->read($CCN_ISACK, date2longfmt($row[4])) ."\" alt=\"". $msg->read($CCN_ISACK, date2longfmt($row[4])) ."\" />" ;
+
+					// accès au post-it
+					$link   = "<a href=\"".myurlencode("index.php?item=$item&cmde=visu&IDmsg=$row[0]&IDdest=$row[8]&IDexp=$row[1]&$href")."\">$row[5]</a>";
+
+					// copie envoyée
+					switch ( $row[9] ) {
+						case '1' :	// SMS
+							$image = "<img src=\"".$_SESSION["ROOTDIR"]."/images/spip/tel.gif\" title=\"". $msg->read($CCN_SMS) ."\" alt=\"". $msg->read($CCN_SMS) ."\" />";
+							break;
+
+						case '2' :	// post-it
+							$image = "<img src=\"".$_SESSION["ROOTDIR"]."/images/ip.gif\" title=\"". $msg->read($CCN_POSTIT) ."\" alt=\"". $msg->read($CCN_POSTIT) ."\" />";
+							break;
+
+						case '3' :	// email
+							$image = "<img src=\"".$_SESSION["ROOTDIR"]."/images/email.gif\" title=\"". $msg->read($CCN_EMAIL) ."\" alt=\"". $msg->read($CCN_EMAIL) ."\" />";
+							break;
+
+						default:	//
+							$image = "";
+							break;
+						}
+
+					// lecture de la classe
+					$query  = "select campus_classe._ident ";
+					$query .= "from campus_classe, user_id ";
+					$query .= "where user_id._ID = '$row[8]' ";
+					$query .= "AND campus_classe._IDclass = user_id._IDclass ";
+					$query .= "limit 1";
+
+					$return = mysql_query($query, $mysql_link);
+					$myrow    = ( $return ) ? remove_magic_quotes(mysql_fetch_row($return)) : 0 ;
+
+					// nombre de réponse
+					$query  = "select _IDmsg from ccn_items ";
+					$query .= "where _IDparent = '$row[0]' ";
+
+					$return = mysql_query($query, $mysql_link);
+					$nbrow  = ( $return ) ? mysql_numrows($return) : 0 ;
+
+					print("
+						<tr class=\"$bgcol\">
+	          		    		    <td class=\"valign-top\">$icon</td>
+	          		    		    <td class=\"valign-top\">$ack</td>
+	          		    		    <td>
+	          		    		  	$link<br/>
+	          		    		  	<span class=\"x-small\">".$msg->read($CCN_POSTBY, array(getUserName($row[1]), date2longfmt($row[3]), _getHostName($row[2])))."</span>
+			       	          </td>
+	          		    		    <td class=\"align-center valign-top\">$image</td>
+	          		    		    <td class=\"align-center valign-top\">
+							". getUserName($row[8]) ."<br/>$myrow[0]
+			       	          </td>
+	          		    		    <td class=\"align-center valign-top\">$nbrow</td>
+		       		       </tr>
+		       		       ");
+
+					$row = remove_magic_quotes(mysql_fetch_row($result));
+					}
+				}
+		?>
+            </table>
+
+		</form>
+
+		<?php
+			// bouton précédent
+			$where = $skshow - 1;
+			if ( $skshow == 1 )
+				$prev = "";
+			else {
+				$skpg = 1 + (($skshow - 2) * $MAXSHOW);
+				$prev = "[<a href=\"".myurlencode("index.php?item=$item&IDcentre=$IDcentre&skpage=$skpg&skshow=$where")."\">".$msg->read($CCN_PREV)."</a>]";
+				}
+
+			// liens directs sur n° de page
+			$start = 1 + (($skshow - 1) * $MAXSHOW);
+			$end   = $skshow * $MAXSHOW;
+
+			$choix = ( $skpage == $start )
+				? "<img src=\"".$_SESSION["ROOTDIR"]."/images/nav_left.gif\" title=\"«\" alt=\"«\" /><strong>$start</strong><img src=\"".$_SESSION["ROOTDIR"]."/images/nav_right.gif\" title=\"»\" alt=\"»\" />"
+				: "<a href=\"".myurlencode("index.php?item=$item&IDcentre=$IDcentre&skpage=$start&skshow=$skshow")."\">$start</a>" ;
+
+			for ($j = $start + 1; $j <= $end AND $j <= $page; $j++)
+				$choix .= ( $skpage == $j )
+					? "|<img src=\"".$_SESSION["ROOTDIR"]."/images/nav_left.gif\" title=\"«\" alt=\"«\" /><strong>$j</strong><img src=\"".$_SESSION["ROOTDIR"]."/images/nav_right.gif\" title=\"»\" alt=\"»\" />"
+					: "|<a href=\"".myurlencode("index.php?item=$item&IDcentre=$IDcentre&skpage=$j&skshow=$skshow")."\">$j</a>" ;
+
+			// bouton suivant
+			$where = $skshow + 1;
+			$next  = ( $skshow == $show )
+				? ""
+				: "[<a href=\"".myurlencode("index.php?item=$item&IDcentre=$IDcentre&skpage=$j&skshow=$where")."\">".$msg->read($CCN_NEXT)."</a>]";
+		?>
+
+	      <hr/>
+			<?php if ( $nbelem ) print("<div style=\"text-align:center;\">$prev $choix $next</div>"); ?>
+		<hr/>
+
+</div>

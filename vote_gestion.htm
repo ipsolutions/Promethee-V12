@@ -1,0 +1,242 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2003-2007 by Dominique Laporte(C-E-D@wanadoo.fr)
+   Copyright (c) 2006 by Nordine Zetoutou (nordine.zetoutou@educagri.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : vote_gestion.htm
+ *		projet   : la page de gestion des sondages
+ *
+ *		version  : 1.0
+ *		auteur   : laporte
+ *		creation : 8/06/03
+ *		modif    : 17/07/06 - par Nordine Zetoutou
+ * 	                 migration des balises HTML en XHTML 1.0 strict
+ */
+
+
+$IDdata = ( @$_POST["IDdata"] )		// ID de la matière (0 : général)
+	? (int) $_POST["IDdata"]
+	: (int) @$_GET["IDdata"] ;
+$IDpoll = ( @$_POST["IDpoll"] )		// ID du sondage
+	? (int) $_POST["IDpoll"]
+	: (int) @$_GET["IDpoll"] ;
+$nbq    = ( @$_POST["nbq"] )		// nombre de question
+	? (int) $_POST["nbq"]
+	: (int) @$_GET["nbq"] ;
+
+$title       = addslashes(@$_POST["title"]);
+$q           = @$_POST["q"];
+$cbwr        = @$_POST["cbwr"];
+$cbrd        = @$_POST["cbrd"];
+$single      = ( @$_POST["single"] )  ? $_POST["single"]  : "O" ;
+$end         = ( @$_POST["end"] )     ? $_POST["end"]     : "N" ;
+$anonyme     = ( @$_POST["anonyme"] ) ? $_POST["anonyme"] : "O" ;
+$MoreChoices = @$_POST["MoreChoices"];
+$autoclose   = (int) @$_POST["autoclose"];
+$endDay      = (int) @$_POST["endDay"];
+$endMonth    = (int) @$_POST["endMonth"];
+$endYear     = (int) @$_POST["endYear"];
+
+$submit      = @$_POST["valid_x"];		// bouton de validation
+?>
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($VOTE_MANAGEMENT)); ?>
+		<?php print(($cmde == "new") ? "<br/>". $msg->read($VOTE_FORMFEED) : ""); ?> 
+	</div>
+</div>
+
+<div class="maincontent">
+
+	<?php
+          	if ( $nbq == 0 )
+          		$nbq = 5;
+          	else
+          		if ( strlen($MoreChoices) )
+	          		$nbq += 5;
+
+		$grpwr   = $grprd   = 0;
+		$visible = "O";
+
+		$error   = 1;
+		$error1  = $error2 = "";
+
+		// l'utilisateur a validé
+		if ( $submit ) {
+			// vérification de la saisie
+	        	$error1 = ( !strlen($title) )
+   		  		? "<span style=\"color:#FF0000;\">". $msg->read($VOTE_ERRINPUT) ."</span>"
+   		     		: "" ;
+
+	        	$error2 = ( !strlen(@$q[0]) OR !strlen(@$q[1]) )
+   		     		? "<span style=\"color:#FF0000;\">". $msg->read($VOTE_ERRANSWER) ."</span>"
+	       	 	: "" ;
+
+			// qui accède au sondage
+			$grpwr = $grprd = 0;
+			for ($i = 0; $i < count($cbwr); $i++)
+				$grpwr += ( @$cbwr[$i] ) ? $cbwr[$i] : 0 ;
+			for ($i = 0; $i < count($cbrd); $i++)
+				$grprd += ( @$cbrd[$i] ) ? $cbrd[$i] : 0 ;
+
+			// tout est correct
+			if ( $error1 == "" AND $error2 == "" ) {
+				// date de fermeture du sondage
+				$close = ( $autoclose )
+					? "$endYear-$endMonth-$endDay"
+					: "" ;
+
+				// on enregistre le sondage
+				if ( $IDpoll ) {
+					//----- mise à jour d'un sondage
+					$Query  = "update sondage_data ";
+					$Query .= "set _close = '$close', _IDgrpwr = '$grpwr', _IDgrprd = '$grprd', _title = '$title', _single = '$single', _result= '$end', _anonyme = '$anonyme' ";
+					$Query .= "where _IDpoll = '$IDpoll' ";
+					}
+				else {
+					//----- création d'un nouveau sondage
+					$Query  = "insert into sondage_data ";
+					$Query .= "values('', '$IDdata', '".$_SESSION["CnxID"]."', '$grpwr', '$grprd', '". date("Y-m-d", time()) ."', '$close', '$title', '$single', '$anonyme', '$end', 'O', '".$_SESSION["lang"]."')";
+					}
+
+				//requête SQL
+				if ( !mysql_query($Query, $mysql_link) )
+					sql_error($mysql_link);
+				else {
+					// on récupère l'ID du nouveau sondage
+					if ( $IDpoll == 0 )
+						$IDpoll = mysql_insert_id();
+
+					// on efface les anciennes questions (si mise à jour)
+					if ( mysql_query("delete from sondage_items where _IDpoll = '$IDpoll'", $mysql_link) )
+						mysql_query("delete from sondage_vote where _IDpoll = '$IDpoll'", $mysql_link);
+
+					// on n'enregistre pas les questions vides !
+		             	for ($i = 0; $i < $nbq, strlen(@$q[$i]); $i++) {
+		             		$j = $i + 1;
+						mysql_query("insert into sondage_items values('$IDpoll', '$j', '".addslashes($q[$i])."', '0')", $mysql_link);
+						}
+
+					// ok, pas d'erreur
+					$error = 0;
+					}
+				}
+			}
+
+	    	switch ( $cmde ) {
+			case "del" :
+				//----- suppression d'un sondage
+				$Query  = "delete from sondage_data ";
+				$Query .= "where _IDpoll = '$IDpoll' ";
+				$Query .= ( $_SESSION["CnxAdm"] == 255 ) ? "" : "AND _IDmod = '".$_SESSION["CnxID"]."'";
+
+				if ( !mysql_query($Query, $mysql_link) )
+					sql_error($mysql_link);
+				else {
+					mysql_query("delete from sondage_items where _IDpoll = '$IDpoll'", $mysql_link);
+					mysql_query("delete from sondage_vote where _IDpoll = '$IDpoll'", $mysql_link);
+
+					$IDpoll = 0;
+					}
+
+				// on enchaîne...
+
+			case "open" :
+			case "close" :
+				//----- ouverture/fermeture d'un sondage
+				if ( $IDpoll ) {
+					$Query  = "update sondage_data ";
+					$Query .= ( $cmde == "open" ) ? "set _visible = 'O' " : "set _visible = 'N' " ;
+					$Query .= "where _IDpoll = '$IDpoll' ";
+					$Query .= ( $_SESSION["CnxAdm"] == 255 ) ? "" : "AND _IDmod = '".$_SESSION["CnxID"]."'";
+
+					if ( !mysql_query($Query, $mysql_link) )
+						sql_error($mysql_link);
+					}
+
+				// on enchaîne...
+				$cmde = "gestion";
+
+	    		case "gestion" :
+			    	// lecture du sondage
+				$Query   = "select _IDpoll, _IDgrpwr, _IDgrprd, _title, _single, _result, _anonyme, _visible from sondage_data ";
+				$Query  .= "where _IDdata = '$IDdata' AND _lang = '".$_SESSION["lang"]."' ";
+				$Query  .= ( $IDpoll )
+					? "AND _IDpoll = '$IDpoll' "
+					: "order by _IDpoll desc limit 1" ;
+
+				$result  = mysql_query($Query, $mysql_link);
+				$row     = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+				$nbtot   = ( $result ) ? mysql_num_rows($result) : 0 ;
+
+				$i       = 0;
+
+				if ( $nbtot ) {
+					$IDpoll  = $row[0];
+					$grpwr   = $row[1];
+					$grprd   = $row[2];
+					$title   = $row[3];
+					$single  = $row[4];
+					$end     = $row[5];
+					$anonyme = $row[6];
+					$visible = $row[7];
+
+				    	// lecture des questions du sondage
+					$Query   = "select _q from sondage_items ";
+					$Query  .= "where _IDpoll = '$IDpoll' ";
+					$Query  .= "order by _IDq asc";
+
+					$result  = mysql_query($Query, $mysql_link);
+					$row     = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+					while ( $row ) {
+						$q[$i] = $row[0];
+						$row   = remove_magic_quotes(mysql_fetch_row($result));
+						$i++;
+						}
+					}
+
+				for (; $i < $nbq; $i++)
+					$q[$i] = "";
+
+				require "vote_saisie.php";
+				break;
+
+			default :	// création d'un nouveau sondage
+				// si l'utilisateur a validé et qu'il n'y a pas d'erreur
+				if ( $submit AND !strlen($error1) AND !strlen($error2) AND !$error )
+					print("
+						<div class=\"center\">
+						<p>
+						". $msg->read($VOTE_CREATED) ."<br/>
+						[<a href=\"index.php?item=$item&amp;IDpoll=$IDpoll&amp;IDdata=$IDdata&amp;cmde=gestion\">". $msg->read($VOTE_BACK) ."</a>]
+						</p>
+						</div>
+						");
+				else
+					require "vote_saisie.php";
+				break;
+			}
+	?>
+
+</div>

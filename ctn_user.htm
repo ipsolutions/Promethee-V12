@@ -1,0 +1,323 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2008-2009 by Dominique Laporte(C-E-D@wanadoo.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : ctn_user.htm
+ *		projet   : la page de visualisation des cahier de texte personnels
+ *
+ *		version  : 1.0
+ *		auteur   : laporte
+ *		creation : 9/11/08
+ *		modif    : 
+ */
+
+
+$IDcentre = ( @$_POST["IDcentre"] )			// identification du centre
+	? (int) $_POST["IDcentre"]
+	: (int) $_SESSION["CnxCentre"] ;
+$year     = ( @$_POST["year"] )			// année scolaire
+	? (int) $_POST["year"]
+	: (int) (@$_GET["year"] ? $_GET["year"] : date("Y")) ;
+
+$idclass  = (int) @$_POST["idclass"];		// ID de la classe
+$idmat    = (int) @$_POST["idmat"];			// ID de la matière
+
+$submit   = ( @$_POST["valid_x"] ) 			// bouton validation
+	? "valid"
+	: (@$_POST["del_x"] ? "del" : "") ;
+?>
+
+
+<?php
+	// vérification des autorisations
+	if ( getAccess() != 2 )
+		logSessionAccess();
+
+	// commandes des utilisateurs
+     	switch ( $submit ) {
+		case "del" :
+			$cb = @$_POST["cbdata"];
+
+			for ($i = 0; $i < count($cb); $i++) {
+				$IDdata = (int) $cb[$i];
+
+				$Query  = "select _year, _file from ctn_user ";
+				$Query .= "where _IDuser = '$IDdata' ";
+				$Query .= "limit 1";
+
+				$result = mysql_query($Query, $mysql_link);
+				$row    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+				if ( $row ) {
+					$Query  = "delete from ctn_user ";
+					$Query .= "where _IDuser = '$IDdata' AND _ID = '".$_SESSION["CnxID"]."' ";
+					$Query .= "limit 1";
+
+					if ( mysql_query($Query, $mysql_link) )
+						// effacer les documents sur le serveur...
+						@unlink("$DOWNLOAD/ctn/files/$row[0]-$row[1]");
+					}
+				}
+			break;
+
+		case "valid" :
+			// transfert d'une Pièce Jointe
+			$file   = @$_FILES["UploadPJ"]["tmp_name"];
+			$fname  = @$_FILES["UploadPJ"]["name"];
+
+			if ( $file AND authfile(@$_FILES["UploadPJ"]["name"]) ) {
+				$Query  = "insert into ctn_user ";
+				$Query .= "values('', '$idclass', '$idmat', '".$_SESSION["CnxID"]."', '".$_SESSION["CnxIP"]."', '".date("Y-m-d H:i:s")."', '$year', '$fname')";
+
+				if ( mysql_query($Query, $mysql_link) && $file )
+					// copie du fichier temporaire -> répertoire de stockage
+					if ( move_uploaded_file($file, "$DOWNLOAD/ctn/files/$year-$fname") )
+						mychmod("$DOWNLOAD/ctn/files/$year-$fname", $CHMOD);
+				}
+			break;
+
+		default :
+			break;
+		}
+?>
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($CTN_CTN)); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+
+	<form id="formulaire" action="index.php" method="post" enctype="multipart/form-data">
+	<?php
+		print("
+			<p class=\"hidden\"><input type=\"hidden\" name=\"item\" value=\"$item\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"cmde\" value=\"$cmde\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"MAX_FILE_SIZE\" value=\"$FILESIZE\" /></p>");
+	?>
+
+		<p><?php print($msg->read($CTN_DIRECTACCESS, "index.php?item=$item")); ?></p>
+
+		<hr style="width:80%;" />
+
+		<table class="width100">
+		  <tr>
+			<td style="width:50%;" class="align-right">
+			    	<?php print($msg->read($CTN_CHOOSECENTER)); ?> 
+			</td>
+			<td style="width:50%;">
+				<label for="IDcentre">
+			  	<select id="IDcentre" name="IDcentre" onchange="document.forms.formulaire.submit()">
+				<?php
+					// lecture des centres constitutifs
+					$query  = "select _IDcentre, _ident from config_centre ";
+					$query .= "where _visible = 'O' AND _lang = '".$_SESSION["lang"]."' ";
+					$query .= "order by _IDcentre";
+
+					$result = mysql_query($query, $mysql_link);
+					$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+					while ( $row ) {			
+						printf("<option value=\"$row[0]\" %s>$row[1]</option>", $IDcentre == $row[0] ? "selected=\"selected\"" : "");
+
+						$row = remove_magic_quotes(mysql_fetch_row($result));
+						}				
+				?>
+				</select> <img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/home.gif" title="" alt="" />
+				</label>
+			</td>
+		  </tr>
+
+		<?php
+			print("
+			  <tr>
+				<td class=\"align-right\">
+				  ". $msg->read($CTN_CHOOSEYEAR) ." 
+				</td>
+				<td>
+				  <label for=\"year\">
+			  	  <select id=\"year\" name=\"year\" onchange=\"document.forms.formulaire.submit()\">
+					<option value=\"".date("Y")."\">".date("Y")."</option>");
+
+			// recherche des années
+			$query  = "select distinctrow _year from ctn_user ";
+			$query  = "where _year != '".date("Y")."' ";
+			$query  = "order by _year desc";
+
+			$result = mysql_query($query, $mysql_link);
+			$row    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+			$i = 0;
+			while ( $row ) {
+				printf("<option value=\"$row[0]\" %s>$row[1]</option>", ($year == $row[0]) ? "selected=\"selected\"" : "");
+
+				$row = mysql_fetch_row($result);
+				}	// endwhile catégorie
+
+			print("
+				  </select> <img src=\"".$_SESSION["ROOTDIR"]."/images/agenda.gif\" alt=\"\" title=\"\" />
+				  </label>
+				</td>
+			  </tr>");
+		?>
+		</table>
+
+		<hr style="width:80%;" />
+
+	<?php
+		// suppression des ressources
+		$delete = "<input type=\"image\" src=\"".$_SESSION["ROOTDIR"]."/images/corb.gif\" name=\"del\" title=\"". $msg->read($CTN_ERASE) ."\" alt=\"". $msg->read($CTN_ERASE) ."\" />";
+
+		print("
+			<table class=\"width100\">
+			  <tr class=\"align-center\" style=\"background-color:#c0c0c0;\">
+	                <td style=\"width:1%;\">$delete</td>
+	                <td style=\"width:30%;\">". $msg->read($CTN_GETCLASS) ."</td>
+	                <td style=\"width:30%;\">". $msg->read($CTN_GETMATTER) ."</td>
+	                <td style=\"width:39%;\">". $msg->read($CTN_PROGRESS) ."</td>
+			  </tr>
+			");
+
+		// les cahiers de texte
+		$Query  = "select distinctrow ";
+		$Query .= "ctn_user._IDuser, ctn_user._year, ctn_user._file, ";
+		$Query .= "campus_classe._ident, ";
+		$Query .= "campus_data._titre ";
+		$Query .= "from ctn_user, campus_classe, campus_data ";
+		$Query .= "where ctn_user._ID = '".$_SESSION["CnxID"]."' ";
+		$Query .= "AND campus_classe._IDclass = ctn_user._IDclass ";
+		$Query .= "AND campus_data._IDmat = ctn_user._IDmat ";
+		$Query .= "AND campus_data._lang = '".$_SESSION["lang"]."' ";
+		$Query .= "order by ctn_user._IDuser";
+
+		$result = mysql_query($Query, $mysql_link);
+		$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+		$i = 0;
+		while ( $row ) {
+			$bgcolor = ( $i++ % 2 ) ? "item" : "menu" ;
+
+			$link    = ( $row[1] )
+				? "<a href=\"$DOWNLOAD/ctn/files/$row[1]-$row[2]\" onclick=\"window.open(this.href, '_blank'); return false;\">$row[2]</a>"
+				: "" ;
+
+			print("
+				<tr class=\"$bgcolor\">
+				  <td><label for=\"cbdata_$row[0]\"><input type=\"checkbox\" id=\"cbdata_$row[0]\" name=\"cbdata[]\" value=\"$row[0]\" /></label></td>
+				  <td>$row[3]</td>
+				  <td>$row[4]</td>
+				  <td>$link</td>
+				</tr>
+				");
+
+			$row = remove_magic_quotes(mysql_fetch_row($result));
+			}
+
+		print("<tr>");
+
+		// suppression
+		print("<td></td>");
+
+		// les classes
+		$Query  = "select _IDclass, _ident from campus_classe ";
+		$Query .= "where _visible = 'O' ";
+		$Query .= "AND _IDcentre = '$IDcentre' ";
+		$Query .= "order by _ident";
+
+		$result = mysql_query($Query, $mysql_link);
+		$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+		print("
+			<td>
+			  <label for=\"idclass\">
+				<select id=\"idclass\" name=\"idclass\">");
+
+		while ( $row ) {			
+			$select = ( $row[0] == $idclass ) ? "selected=\"selected\"" : "" ;
+
+			print("<option value=\"$row[0]\" $select>$row[1]</option>");
+
+			$row    = remove_magic_quotes(mysql_fetch_row($result));
+			}
+
+		print("
+				</select>
+			  </label>
+			</td>");
+
+
+		// les matières
+		$Query  = "select _IDmat, _titre from campus_data ";
+		$Query .= "where _visible = 'O' ";
+		$Query .= "AND _lang = '".$_SESSION["lang"]."' ";
+		$Query .= "order by _titre";
+
+		$result = mysql_query($Query, $mysql_link);
+		$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+		print("
+			<td>
+			  <label for=\"idmat\">
+				<select id=\"idmat\" name=\"idmat\">");
+
+		while ( $row ) {			
+			$select = ( $row[0] == $idmat ) ? "selected=\"selected\"" : "" ;
+
+			print("<option value=\"$row[0]\" $select>$row[1]</option>");
+
+			$row    = remove_magic_quotes(mysql_fetch_row($result));
+			}
+
+		print("
+				</select>
+			  </label>
+			</td>");
+
+		print("
+			<td>
+			  <input type=\"file\" name=\"UploadPJ\" size=\"50\" style=\"font-size:9px;\" />
+			</td>");
+
+		print("</tr>");
+
+		print("</table>");
+
+		print("<hr/>");
+
+		print("
+			<table class=\"width100\">
+			  <tr>
+	                <td style=\"width:10%;\" class=\"valign-middle align-center\">
+				<input type=\"image\" src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/post.gif\" name=\"valid\" alt=\"".$msg->read($CTN_INPUTNEW)."\" />
+	                </td>
+	                <td class= \"valign-middle\">
+				". $msg->read($CTN_PROGRESSION) ."
+	                </td>
+			  </tr>
+	            </table>
+			");
+	?>
+
+	</form>
+
+</div>

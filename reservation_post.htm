@@ -1,0 +1,659 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2004-2008 by Dominique Laporte(C-E-D@wanadoo.fr)
+   Copyright (c) 2006 by Nordine Zetoutou (nordine.zetoutou@educagri.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : reservation_post.htm
+ *		projet   : la page de saisie des demande de réservations
+ *
+ *		version  : 1.0
+ *		auteur   : laporte
+ *		creation : 25/09/04
+ *		modif    : 17/07/06 - Nordine Zetoutou
+ * 	                 migration des balises HTML en XHTML 1.0 strict
+ */
+
+
+$IDcentre = ( @$_POST["IDcentre"] )		// Identifiant du centre
+	? (int) $_POST["IDcentre"]
+	: (int) @$_GET["IDcentre"] ;
+$IDres    = ( @$_POST["IDres"] )		// ID de la réservation
+	? (int) $_POST["IDres"]
+	: (int) @$_GET["IDres"] ;
+$IDdata  = ( @$_POST["IDdata"] )		// ID de la ressource
+	? (int) $_POST["IDdata"]
+	: (int) @$_GET["IDdata"] ;
+$IDitem   = ( @$_POST["IDitem"] )		// ID de la réservation
+	? (int) $_POST["IDitem"]
+	: (int) @$_GET["IDitem"] ;
+$weekly   = ( @$_POST["weekly"] )		// affichage hebdo / mensuel
+	? (int) $_POST["weekly"]
+	: (int) @$_GET["weekly"] ;
+
+$year     = ( @$_POST["year"] )
+	? (int) $_POST["year"]
+	: (int) @$_GET["year"] ;
+$month    = ( @$_POST["month"] )
+	? (int) $_POST["month"]
+	: (int) @$_GET["month"] ;
+$day      = ( @$_POST["day"] )
+	? (int) $_POST["day"]
+	: (int) @$_GET["day"] ;
+$time     = ( @$_POST["time"] )
+	? $_POST["time"]
+	: @$_GET["time"] ;
+$hour     = (int) (strlen(@$_POST["hour"]) ? @$_POST["hour"] : -1) ;
+$minute   = (int) (strlen(@$_POST["minute"]) ? $_POST["minute"] : -1) ;
+
+$y_end    = (int) @$_POST["y_end"];
+$m_end    = (int) @$_POST["m_end"];
+$d_end    = (int) @$_POST["d_end"];
+$h_end    = (int) @$_POST["h_end"];
+$min_end  = (int) @$_POST["min_end"];
+$texte    = addslashes(trim(@$_POST["texte"]));
+$rb       = ( @$_POST["rb"] ) ? $_POST["rb"] : "B" ;
+$rb2      = ( @$_POST["rb2"] ) ? $_POST["rb2"] : "W" ;
+$weeks    = (int) @$_POST["weeks"];
+
+$m_index  = $month - 1;
+
+$submit   = ( @$_POST["valid"] )			// bouton de validation
+	? $_POST["valid"]
+	: @$_GET["valid"] ;
+
+//---------------------------------------------------------------------------
+function spentdays($year, $month, $delta)
+{
+/*
+ * fonction :	retourne le nombre de jours écoulés entre 2 dates
+ * in :		$year : année de départ, $month : mois de départ, $delta : mois écoulés
+ * out :		nombre de jours écoulés depuis $delta mois
+ */
+
+	$days = 0;
+
+	for ($i = 0; $i < $delta; $i++ ) {
+		if ( $month == 12 ) {
+			$month = 0;
+			$year++;
+			}
+		$month++;
+
+		$days += getmaxdays($year, $month);
+		}
+
+	return $days;
+}
+//---------------------------------------------------------------------------
+?>
+
+
+<script type="text/javascript" src="script/edit.js"></script>
+
+
+<?php
+	// lecture de la base de données des réservations
+	$query  = "select _titre, _IDmod, _autoval, _horaire, _IDgrpwr from reservation ";
+	$query .= "where _IDres = '$IDres' ";
+	$query .= "AND _lang = '".$_SESSION["lang"]."' ";
+	$query .= "limit 1";
+
+	$result = mysql_query($query, $mysql_link);
+	$matos  = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+	// vérification des autorisations
+	verifySessionAccess($matos[1], $matos[4]);
+
+	$table  = explode(",", $matos[3]);
+?>
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($RESERVATION_RESERVED, $matos[0])); ?><br/>
+		<?php print($msg->read($RESERVATION_FORMPOST)); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+
+<?php
+	require_once "include/calendar_tools.php";
+
+	// initialisation
+	if ( !$year )
+		$year   = date("Y");
+	else
+		$year   = ( $year < date("Y") ) ? date("Y") : $year ;
+
+	if ( !$month )
+		$month  = (int) date("m");
+	else
+		$month  = (int) (( $year == date("Y") AND $month < date("m") ) ? date("m") : $month );
+
+	if ( !$day )
+		$day    = date("d");
+	else
+		$day    = ( $year == date("Y") AND $month == date("m") AND $day < date("d") ) ? date("d") : $day ;
+
+	if ( strlen($time) )
+		list($hour, $minute) = explode(":", $time);
+
+	if ( $hour < 0 )
+		$hour   = (int) date("H");
+	else {
+		$hour   = (int) (( $year == date("Y") AND $month == date("m") AND $day == date("d") AND $hour < date("H") ) ? date("H") : $hour );
+
+		// on cherche la plage horaire
+		for ($i = 0, $j = 1; $i < count($table); $i++, $j++) {
+			list($h, $m) = explode(":", $table[$i]);
+
+			if ( (int) $h == (int) $hour ) {
+				@list($next_h, $next_m) = @explode(":", $table[$j]);
+				break;
+				}
+			}
+		}
+
+	if ( $minute < 0 )
+		$minute = roundup(date("i"));
+	else
+		$minute = ( $year == date("Y") AND $month == date("m") AND $day == date("d") AND $hour == date("H") AND $minute < date("i") ) ? roundup(date("i")) : $minute ;
+
+	// l'utilisateur a posté son message
+	switch ( $submit ) {
+		case "del" :
+			if ( mysql_query("delete from reservation_data where _IDdata = '$IDdata' limit 1", $mysql_link) )
+				$IDdata = 0;
+			break;
+
+		case "Valider" :
+			if ( @$_POST["valid_x"] ) {
+				// date de création de la demande
+				$date  = date("Y-m-d H:i:s");
+
+				// dates début et fin de la réservation
+				$start = "$year-$month-$day $hour:$minute";
+				$end   = "$y_end-$m_end-$d_end $h_end:$min_end";
+
+				$valid = "";
+				$found = false;
+
+				if ( $IDitem ) {
+					$Query  = "update reservation_items ";
+					$Query .= "set _comment = '$texte', ";
+					$Query .= "_start = '$start', _end = '$end', _priority = '$rb', _update = '$date' ";
+					$Query .= "where _IDitem = '$IDitem' ";
+					$Query .= "limit 1";
+
+					$isok   = mysql_query($Query, $mysql_link);
+
+					// supression des plages de report
+					if ( $isok )
+						mysql_query("delete from reservation_items where _parent = '$IDitem'", $mysql_link);
+					}
+				else {
+					// on vérifie si la ressource n'a pas déjà été réservée
+					$Query  = "select _IDitem from reservation_items ";
+					$Query .= "where _visible <> 'N' ";
+					$Query .= "AND ((_start < '$start' AND _end > '$start') OR (_start < '$end' AND _end > '$end')) ";	
+					$Query .= "AND _IDdata = '$IDdata' ";
+					$Query .= "limit 1";
+
+					$value  = mysql_query($Query, $mysql_link);
+
+					// on ne valide pas la demande
+					// si la ressource est réservée ET que la validation automatique n'est pas sélectionnée
+					// (sauf si modérateur)
+					$found  = ( $value ) ? mysql_numrows($value) : 0 ;
+					$valid  = ( $found )
+						? ""
+						: (($_SESSION["CnxID"] == $matos[1] OR $matos[2] == "O")
+							? "O"
+							: "") ;
+
+					$Query  = "insert into reservation_items ";
+					$Query .= "values('', '$IDdata', '0', '".$_SESSION["CnxID"]."', '".$_SESSION["CnxIP"]."', '$date', '$date', '$date', '$date', '$rb', '$start', '$end', '$texte', '', '$valid')";
+
+					$isok   = mysql_query($Query, $mysql_link);
+					}
+
+				if ( !$isok )
+					sql_error($mysql_link);
+				else {
+					require_once "include/postit.php";
+
+					$parent = ( $IDitem ) ? $IDitem : mysql_insert_id() ;
+
+					// mise à jour des reports (limité à 52 semaines ou à 12 mois)
+					$limit  = ( $rb2 == "W" ) ? 52 : 12 ;
+					for ($i = 0; $i < $weeks AND $i < $limit; $i++ ) {
+						$offset  = ( $rb2 == "W" )
+							? (($i + 1) * 7 * 24 * 3600)
+							: (spentdays($year, $month + 1, $i + 1) * 24 * 3600) ;
+
+						list($year, $month, $day, $hour, $min) = preg_split("/[- :]/", $start);
+						$s_stamp = mktime($hour, $minute, 0, $month, $day, $year) + $offset;
+
+						list($year, $month, $day, $hour, $min) = preg_split("/[- :]/", $end);
+						$e_stamp = mktime($h_end, $min_end, 0, $month, $day, $year) + $offset;
+
+						$Query   = "insert into reservation_items ";
+						$Query  .= "values('', '$IDdata', '$parent', '".$_SESSION["CnxID"]."', '".$_SESSION["CnxIP"]."', '$date', '$date', '$date', '$date', '$rb', '".date("Y-m-d H:i:s", $s_stamp)."', '".date("Y-m-d H:i:s", $e_stamp)."', '$texte', '', '$valid')";
+
+						mysql_query($Query, $mysql_link);
+						}
+
+					// envoie d'alarme au gestionnaire de réservation en attente
+					if ( $valid == "" ) {
+						// lecture des réservations
+						$Query  = "select distinctrow ";
+						$Query .= "reservation._titre, reservation_data._titre ";
+						$Query .= "from reservation, reservation_data ";
+						$Query .= "where reservation._lang = '".$_SESSION["lang"]."' ";
+						$Query .= "AND reservation_data._IDres = reservation._IDres ";
+						$Query .= "AND reservation_data._IDdata = '$IDdata' ";
+						$Query .= "limit 1";
+
+						$result = mysql_query($Query, $mysql_link);
+						$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+						sendAlertMessage(
+							$matos[1],
+							$msg->read($RESERVATION_SUBJECT),
+							$msg->read($RESERVATION_PENDING, Array($_SESSION["CnxName"], date2longfmt($date), $row[1], $row[0], date2longfmt($start))));
+						}
+
+					// affichage message à l'utilisateur
+					$warning = ( $found )
+						? "<span style=\"color:#FF0000;\">".$msg->read($RESERVATION_WARNING)."</span><br/>"
+						: "" ;
+					$annonce = ( $matos[1] OR $matos[2] == "N" )
+						? $msg->read($RESERVATION_BATCH) ."<br/>"
+						: "" ;
+
+					print("
+						<div class=\"center\">
+	      					". $msg->read($RESERVATION_RECORD) ."<br/>
+							$warning
+							$annonce
+	      					". $msg->read($RESERVATION_THANX) ."<br/><br/>
+							[<a href=\"".myurlencode("index.php?item=$item&IDres=$IDres&IDcentre=$IDcentre&IDdata=$IDdata&year=$year&month=$m_index&day=$day&weekly=$weekly")."\">".$msg->read($RESERVATION_GOBACK)."</a>]
+						</div>
+						");
+					}
+				}
+			break;
+			
+		default :
+			if ( $IDitem ) {
+				// lecture de le demande
+				$query   = "select _start, _end, _comment, _priority from reservation_items ";
+				$query  .= "where _IDitem = '$IDitem' ";
+				$query  .= "limit 1";
+
+				$result  = mysql_query($query, $mysql_link);
+				$row     = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+				$year    = (int) substr($row[0], 0, 4);
+				$month   = (int) substr($row[0], 5, 2);
+				$day     = (int) substr($row[0], 8, 2);
+				$hour    = (int) substr($row[0], 11, 2);
+				$minute  = (int) substr($row[0], 14, 2);
+
+				$y_end   = (int) substr($row[1], 0, 4);
+				$m_end   = (int) substr($row[1], 5, 2);
+				$d_end   = (int) substr($row[1], 8, 2);
+				$h_end   = (int) substr($row[1], 11, 2);
+				$min_end = (int) substr($row[1], 14, 2);
+
+				$texte   = $row[2];
+				$rb      = $row[3];
+				}
+			break;
+		}
+
+	// saisie du formulaire
+	if ( @$_POST["valid_x"] == "" ) {
+		print("
+		<table class=\"width100\">
+		  <tr>
+		    <td style=\"width:19%;\" class=\"valign-middle align-right\">".$msg->read($RESERVATION_AUTHOR)."</td>
+		    <td style=\"width:81%;\" class=\"valign-middle\">".$_SESSION["CnxName"]."</td>
+		  </tr>
+		</table>
+
+		<form id=\"formulaire\" action=\"index.php\" method=\"post\" enctype=\"multipart/form-data\">
+			<p class=\"hidden\"><input type=\"hidden\" name=\"item\"     value=\"$item\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"cmde\"     value=\"$cmde\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"IDres\"    value=\"$IDres\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"IDcentre\" value=\"$IDcentre\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"IDdata\"   value=\"$IDdata\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"IDitem\"   value=\"$IDitem\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"weekly\"   value=\"$weekly\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"valid\"    value=\"Valider\" /></p>
+			");
+
+		//----- date de début -----
+	    	print("
+		  <table class=\"width100\">
+		    <tr>
+		      <td style=\"width:19%;\" class=\"valign-middle align-right\">".$msg->read($RESERVATION_FROM)."</td>
+		      <td style=\"width:81%;\">
+		    	");
+
+		$mois = array_merge(Array(''), explode(",", $msg->read($RESERVATION_MONTHFULL)));
+
+		// sélection de l'année
+		print("<label for=\"year\">");
+		print("<select id=\"year\" name=\"year\" onchange=\"document.forms.formulaire.submit()\">");
+		for ($i = date("Y"); $i < date("Y") + 3; $i++) {
+			$select = ( $year == $i ) ? "selected=\"selected\"" : "" ;
+			print("<option $select value=\"$i\">$i</option>");
+			}
+    		print("</select>");
+    		print("</label>");
+
+		// sélection du mois
+		print("<label for=\"month\">");
+		print("<select id=\"month\" name=\"month\" onchange=\"document.forms.formulaire.submit()\">");
+		$start = (int) (( $year == date("Y") ) ? date("m") : 1 );
+		for ($i = (int) $start; $i <= 12; $i++) {
+			$select = ( $month == $i ) ? "selected=\"selected\"" : "" ;
+			print("<option $select value=\"$i\">$mois[$i]</option>");
+			}
+	    	print("</select>");
+    		print("</label>");
+
+		// sélection du jour
+		print("<label for=\"day\">");
+		print("<select id=\"day\" name=\"day\" onchange=\"document.forms.formulaire.submit()\">");
+		$start = ( $year == date("Y") AND $month == date("m") ) ? date("d") : 1 ;
+		for ($i = (int) $start; $i <= getmaxdays($year, $month); $i++) {
+			$select = ( $day == $i ) ? "selected=\"selected\"" : "" ;
+			print("<option $select value=\"$i\">$i</option>");
+			}
+    		print("</select>");
+    		print("</label>");
+
+		print(" - ");
+
+		// sélection de l'heure
+		print("<label for=\"hour\">");
+		print("<select id=\"hour\" name=\"hour\" onchange=\"document.forms.formulaire.submit()\">");
+		$start = ( $year == date("Y") AND $month == date("m") AND $day == date("d") ) ? date("H") : 0 ;
+		for ($i = (int) $start; $i < 24; $i++) {
+			$select = ( $hour == $i ) ? "selected=\"selected\"" : "" ;
+			print("<option $select value=\"$i\">$i</option>");
+			}
+	    	print("</select>");
+    		print("</label>");
+
+		print(" ".$msg->read($RESERVATION_HOUR)." ");
+
+		//sélection des minutes
+		print("<label for=\"minute\">");
+		print("<select id=\"minute\" name=\"minute\" onchange=\"document.forms.formulaire.submit()\">");
+		$start = ( $year == date("Y") AND $month == date("m") AND $day == date("d") AND $hour == date("H") ) ? roundup(date("i")) : 0 ;
+		for ($i = (int) $start; $i < 60; $i += 5) {
+			$select = ( $minute == $i ) ? "selected=\"selected\"" : "" ;
+			print("<option $select value=\"$i\">$i</option>");
+			}
+    		print("</select>");
+    		print("</label>");
+
+	    	print("
+		      </td>
+		    </tr>
+		    	");
+
+		//----- date de fin -----
+	    	print("
+		    <tr>
+		      <td class=\"valign-middle align-right\">".$msg->read($RESERVATION_TO)."</td>
+		      <td>
+		    	");
+
+		// sélection de l'année
+		print("<label for=\"y_end\">");
+		print("<select id=\"y_end\" name=\"y_end\" onchange=\"document.forms.formulaire.submit()\">");
+		$y_end = ( $y_end < $year ) ? $year : $y_end ;
+		for ($i = $year; $i < date("Y") + 3; $i++) {
+			$select = ( $y_end == $i ) ? "selected=\"selected\"" : "" ;
+			print("<option $select value=\"$i\">$i</option>");
+			}
+    		print("</select>");
+    		print("</label>");
+
+		// sélection du mois
+		print("<label for=\"m_end\">");
+		print("<select id=\"m_end\" name=\"m_end\" onchange=\"document.forms.formulaire.submit()\">");
+		$m_end = ( $y_end == $year AND $m_end < $month ) ? $month : $m_end ;
+		$start = ( $y_end == $year ) ? $month : 1 ;
+		for ($i = (int) $start; $i <= 12; $i++) {
+			$select = ( $m_end == $i ) ? "selected=\"selected\"" : "" ;
+			print("<option $select value=\"$i\">$mois[$i]</option>");
+			}
+    		print("</select>");
+    		print("</label>");
+
+		// sélection du jour
+		print("<label for=\"d_end\">");
+		print("<select id=\"d_end\" name=\"d_end\" onchange=\"document.forms.formulaire.submit()\">");
+		$d_end = ( $y_end == $year AND $m_end == $month AND $d_end < $day ) ? $day : $d_end ;
+		$start = ( $y_end == $year AND $m_end == $month ) ? $day : 1 ;
+		for ($i = (int) $start; $i <= getmaxdays($y_end, $m_end); $i++) {
+			$select = ( $d_end == $i ) ? "selected=\"selected\"" : "" ;
+			print("<option $select value=\"$i\">$i</option>");
+			}
+    		print("</select>");
+    		print("</label>");
+
+		print(" - ");
+
+		// sélection de l'heure
+		print("<label for=\"h_end\">");
+		print("<select id=\"h_end\" name=\"h_end\" onchange=\"document.forms.formulaire.submit()\">");
+		$h_end = ( $y_end == $year AND $m_end == $month AND $d_end == $day AND $h_end < $hour ) ? $hour : $h_end ;
+		$start = ( $y_end == $year AND $m_end == $month AND $d_end == $day ) ? @$next_h : 0 ;
+		for ($i = (int) $start; $i < 24; $i++) {
+			$select = ( $h_end == $i ) ? "selected=\"selected\"" : "" ;
+			print("<option $select value=\"$i\">$i</option>");
+			}
+    		print("</select>");
+    		print("</label>");
+
+		print(" ".$msg->read($RESERVATION_HOUR)." ");
+
+		// sélection des minutes
+		print("<label for=\"min_end\">");
+		print("<select id=\"min_end\" name=\"min_end\">");
+		$min_end = ( $y_end == $year AND $m_end == $month AND $d_end == $day AND $h_end == $hour AND $min_end < $minute ) ? $minute : $min_end ;
+		$start   = ( $y_end == $year AND $m_end == $month AND $d_end == $day AND $h_end == $hour ) ? @$next_m : 0 ;
+		for ($i = (int) $start; $i < 60; $i += 5) {
+			$select = ( $min_end == $i ) ? "selected=\"selected\"" : "" ;
+			print("<option $select value=\"$i\">$i</option>");
+			}
+    		print("</select>");
+    		print("</label>");
+
+	    	print("
+		      </td>
+		    </tr>
+		    	");
+
+		$query  = "select _IDdata, _titre from reservation_data ";
+		$query .= "where _visible = 'O' ";
+		$query .= "AND _IDres = '$IDres' AND _IDcentre like '% $IDcentre %' ";
+		$query .= "order by _titre";
+
+		$result = mysql_query($query, $mysql_link);
+		$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+		$nbres  = ( $result ) ? mysql_numrows($result) : 0 ;
+
+		if ( !$IDdata )
+			$IDdata = $row[0];
+
+	    	print("
+		    <tr>
+		      <td class=\"valign-middle align-right\">
+				". $msg->read($RESERVATION_RESOUCETITLE) ."
+				<a href=\"#\" onclick=\"popWin('".$_SESSION["ROOTDIR"]."/reservation_info.php?IDdata=$IDdata&amp;lang=".$_SESSION["lang"]."', '450', '350'); return false;\"><img src=\"".$_SESSION["ROOTDIR"]."/images/info.gif\" title=\"".$msg->read($RESERVATION_MORINFO)."\" alt=\"\" /></a>
+				:
+			</td>
+		      <td>
+				<label for=\"IDdata\">
+				<select id=\"IDdata\" name=\"IDdata\" onchange=\"document.forms.formulaire.submit()\">
+		    	");
+
+		while ( $row ) {			
+			if ( $IDdata == $row[0] )
+				print("<option selected=\"selected\" value=\"$row[0]\">$row[1]</option>");
+			else
+				print("<option value=\"$row[0]\">$row[1]</option>");
+
+			$row = remove_magic_quotes(mysql_fetch_row($result));
+			}				
+
+		// suppression des ressources
+		$req = $msg->read($RESERVATION_DELRESOURCE);
+		$del = ( $IDdata AND ($_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $matos[1]) )
+			? "<a href=\"".myurlencode("index.php?item=$item&cmde=$cmde&IDres=$IDres&IDcentre=$IDcentre&IDdata=$IDdata&weekly=$weekly&valid=del")."\" onclick=\"return confirmLink(this, '$req');\"><img src=\"".$_SESSION["ROOTDIR"]."/images/corb.gif\" title=\"".$msg->read($RESERVATION_DELRESOURCE)."\"  alt=\"".$msg->read($RESERVATION_DELRESOURCE)."\"  /></a>"
+			: "" ;
+
+		// modification des ressources
+		$maj = ( $IDdata AND ($_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $matos[1]) )
+			? "<a href=\"".myurlencode("index.php?item=$item&cmde=new&IDres=$IDres&IDcentre=$IDcentre&IDdata=$IDdata&year=$year&month=$month&day=$day&weekly=$weekly&from=post")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/stats/post.gif\" title=\"".$msg->read($RESERVATION_UPDATERESOURCE)."\" alt=\"".$msg->read($RESERVATION_UPDATERESOURCE)."\" /></a>"
+			: "" ;
+
+		// ajout d'une nouvelle ressource
+		$add = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $matos[1] )
+			? "<a href=\"".myurlencode("index.php?item=$item&cmde=new&IDres=$IDres&IDcentre=$IDcentre&year=$year&month=$month&day=$day&weekly=$weekly&from=post")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/ajouter.gif\" title=\"".$msg->read($RESERVATION_ADDRESOURCE)."\" alt=\"".$msg->read($RESERVATION_ADDRESOURCE)."\" /></a>"
+			: "" ;
+
+    		print("
+				</select> $del $maj $add
+				</label>
+			</td>
+		    </tr>
+		    	");
+
+	    	print("
+		    <tr>
+		      <td class=\"align-right valign-top\">
+		        <strong>".$msg->read($RESERVATION_MESSAGE)." <a href=\"#\" onclick=\"popWin('".$_SESSION["ROOTDIR"]."/spip_typo.php?lang=".$_SESSION["lang"]."', '450', '350'); return false;\">
+		        <img src=\"".$_SESSION["ROOTDIR"]."/images/spip/aide.gif\" title=\"\" alt=\"\" /></a> :</strong><br/>".$msg->read($RESERVATION_OPTION)."
+		      </td>
+		      <td><label for=\"texte\"><textarea id=\"texte\" name=\"texte\" rows=\"5\" cols=\"39\">$texte</textarea></label></td>
+		    </tr>
+		    	");
+
+		// affichage des smileys d'édition
+	    	print("
+		    <tr>
+		      <td class=\"valign-middle align-right\"><strong>Smileys :</strong></td>
+		      <td>
+		    	");
+
+		$res   = mysql_query("select _code, _ident from smileys where _type = 'T'", $mysql_link);
+		$smile = ( $res ) ? mysql_fetch_row($res) : 0 ;
+
+		while ( $smile ) {
+			print("
+				<img src=\"".$_SESSION["ROOTDIR"]."/images/smiley/forum/$smile[1].gif\" title=\" code: ".$smile[0]." \" 
+				onclick=\"Javacript:ajoutsmile('$smile[0]')\" style=\"cursor: hand;\" alt=\" code: ".$smile[0]." \" />
+				");
+				
+			$smile = ( $res ) ? mysql_fetch_row($res) : 0 ;
+			}
+
+	    	print("
+		      </td>
+		    </tr>
+		    	");
+
+		// priorité de l'annonce
+		$check1 = ( $rb == "B" ) ? "checked=\"checked\"" : "" ;
+		$check2 = ( $rb == "H" ) ? "checked=\"checked\"" : "" ;
+
+		// report de l'annonce
+		$check3 = ( $rb2 == "W" ) ? "checked=\"checked\"" : "" ;
+		$check4 = ( $rb2 == "M" ) ? "checked=\"checked\"" : "" ;
+
+	    	print("
+		    <tr>
+		      <td class=\"align-right valign-top\">". $msg->read($RESERVATION_PRIORITY) ."</td>
+		      <td>
+		      	<label for=\"rb_B\"><input type=\"radio\" id=\"rb_B\" name=\"rb\" value=\"B\" $check1 />". $msg->read($RESERVATION_LOW) ."</label>
+		      	<label for=\"rb_H\"><input type=\"radio\" id=\"rb_H\" name=\"rb\" value=\"H\" $check2 />". $msg->read($RESERVATION_HIGH) ."</label>
+			</td>
+		    </tr>
+
+		    <tr>
+		      <td class=\"align-right valign-top\">". $msg->read($RESERVATION_POSTPONE) ."</td>
+		      <td>
+				<label for=\"weeks\"><input type=\"text\" id=\"weeks\" name=\"weeks\" size=\"2\" value=\"$weeks\" /> ". $msg->read($RESERVATION_NBWEEKS) ."</label>
+		      </td>
+		    </tr>
+		    <tr>
+		      <td></td>
+		      <td>
+		      	<label for=\"rb_W\"><input type=\"radio\" id=\"rb_W\" name=\"rb2\" value=\"W\" $check3 />". $msg->read($RESERVATION_WEEKLY) ."</label>
+		      	<label for=\"rb_M\"><input type=\"radio\" id=\"rb_M\" name=\"rb2\" value=\"M\" $check4 />". $msg->read($RESERVATION_MONTHLY) ."</label>
+			</td>
+		    </tr>
+
+
+		  </table>
+			");
+
+		$m = $m_index + 1;
+
+	    	print("
+	         <table class=\"width100\">
+	           <tr>
+	              <td style=\"width:100%;\" colspan=\"2\"><hr style=\"width:80%;\" /></td>
+	           </tr>");
+
+		if ( $nbres )
+			print("
+		           <tr>
+		              <td style=\"width:19%;\" class=\"align-right\">
+		              	<input type=\"image\" src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/valid.gif\" name=\"valid\" alt=\"".$msg->read($RESERVATION_INPUTOK)."\" />
+		              </td>
+		              <td class= \"valign-middle\">". $msg->read($RESERVATION_POST) ."</td>
+		           </tr>");
+
+	    	print("
+	           <tr>
+	              <td style=\"width:19%;\" class=\"align-right\">
+	              	<a href=\"".myurlencode("index.php?item=$item&IDres=$IDres&IDcentre=$IDcentre&IDdata=$IDdata&year=$year&month=$m_index&day=$day&weekly=$weekly")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/cancel.gif\" title=\"\" alt=\"".$msg->read($RESERVATION_INPUTCANCEL)."\" /></a>
+			  </td>
+			  <td class= \"valign-middle\">".$msg->read($RESERVATION_GOBACK)."</td>
+	           </tr>
+	         </table>
+
+			</form>
+			");
+		}
+?>
+
+</div>

@@ -1,0 +1,1150 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2005-2009 by Dominique Laporte(C-E-D@wanadoo.fr)
+   Copyright (c) 2006 by frédéric poyet(frederic.poyet@free.fr)
+   Copyright (c) 2006 by Nordine Zetoutou (nordine.zetoutou@educagri.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : cours_visu.htm
+ *		projet   : la page de visualisation des cours en ligne
+ *
+ *		version  : 1.0
+ *		auteur   : laporte
+ *		creation : 13/12/03
+ *		modif    : 11/06/06 - par Fred POYET
+ *                     migration php5
+ *		           17/07/06 - Nordine Zetoutou
+ * 	                 migration des balises HTML en XHTML 1.0 strict
+ */
+
+
+$IDcours    = ( @$_POST["IDcours"] )		// Identifiant du cours
+	? (int) $_POST["IDcours"]
+	: (int) @$_GET["IDcours"] ;
+$IDmat      = ( @$_POST["IDmat"] )			// Identifiant de la matière/formation
+	? (int) $_POST["IDmat"]
+	: (int) @$_GET["IDmat"] ;
+$IDdata     = ( @$_POST["IDdata"] )			// Identifiant de la matière
+	? (int) $_POST["IDdata"]
+	: (int) @$_GET["IDdata"] ;
+$IDparent   = ( @$_POST["IDparent"] )		// Identifiant du répertoire parent
+	? (int) $_POST["IDparent"]
+	: (int) @$_GET["IDparent"] ;
+$IDroot     = ( @$_POST["IDroot"] )			// Identifiant du répertoire racine
+	? (int) $_POST["IDroot"]
+	: (int) @$_GET["IDroot"] ;
+$page_cmde  = ( @$_POST["page_cmde"] )		// commande utilisateur
+	? $_POST["page_cmde"]
+	: @$_GET["page_cmde"] ;
+
+$IDitem     = (int) @$_GET["IDitem"];
+$newdir     = @$_GET["newdir"];
+
+$titre      = trim(@$_POST["titre"]);
+$texte      = trim(@$_POST["texte"]);
+$ver        = trim(@$_POST["ver"]);
+
+$wiki_tag   = ( @$_POST["wiki_tag"] )
+	? $_POST["wiki_tag"] 
+	: @$_GET["wiki_tag"] ;
+$wiki_title = ( @$_POST["wiki_title"] )
+	? $_POST["wiki_title"] 
+	: @$_GET["wiki_title"] ;
+$wiki_cmde  = ( @$_POST["wiki_cmde"] )
+	? $_POST["wiki_cmde"] 
+	: @$_GET["wiki_cmde"] ;
+?>
+
+
+<?php
+	require_once "include/user.php";
+	require_once "include/wiki.php";
+
+	// lecture de la base de données
+	$Query  = "select _titre, _IDgrpwr, _IDgrprd, _texte, _private, _IDmod, _PJ, _sort from cours ";
+	$Query .= "where _IDcours = '$IDcours' " ;
+	$Query .= "limit 1" ;
+
+	$result = mysql_query($Query, $mysql_link);
+	$dir    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+	// vérification des autorisations
+	verifySessionAccess($dir[5], $dir[2]);
+
+	// pour les cours privés (gestion par ACL)
+	$acl = new user_acl("course");
+
+	// test du droit de lecture
+	if ( $dir[4] == "O" AND !$acl->isMember($IDcours, $_SESSION["CnxID"]) )
+		logSessionAccess();
+
+	// suppression de documents
+	if ( @$_POST["del_x"] )
+		if ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $dir[5] ) {
+			//---- suppression de fichiers/url
+			$cb = @$_POST["cbitem"];
+
+			for ($i = 0; $i < count($cb); $i++) {
+				$IDitem = (int) $cb[$i];
+
+				$result = mysql_query("select _file, _size, _IDdata from cours_items where _IDitem = '$IDitem' limit 1", $mysql_link);
+				$row    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+				$Query  = "delete from cours_items ";
+				$Query .= "where _IDitem = '$IDitem' ";
+				$Query .= "limit 1";
+
+				if ( mysql_query($Query, $mysql_link) )
+					if ( $row[1] )
+						// effacer les documents sur le serveur...
+						unlink("$DOWNLOAD/e-campus/".stripaccent($_SESSION["CampusName"])."/$IDcours/$row[2]-".stripaccent($row[0]));
+				}
+
+			//---- suppression de dossiers
+			$cb = @$_POST["cbdata"];
+
+			for ($i = 0; $i < count($cb); $i++) {
+				$IDdata = (int) $cb[$i];
+
+				$Query  = "delete from cours_data ";
+				$Query .= "where _IDdata = '$IDdata' ";
+				$Query .= "limit 1";
+
+				mysql_query($Query, $mysql_link);
+				}
+
+			//---- suppression de doc wiki
+			$cb = @$_POST["cbwiki"];
+
+			for ($i = 0; $i < count($cb); $i++) {
+				$IDpage = (int) $cb[$i];
+
+				$wk = new wiki;
+				$wk->delete($IDpage);
+				}
+			}
+
+	// RAZ des visualisations
+	if ( @$_POST["clear_x"] )
+		if ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $dir[5] ) {
+			$Query  = "select _file, _size from cours_items ";
+			$Query .= "where _IDcours = '$IDcours' AND _IDdata = '$IDroot' ";
+
+			$result = mysql_query($Query, $mysql_link);
+			$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+			while ( $row ) {
+				$myfile = ( $row[1] ) ? "$DOWNLOAD/e-campus/".$_SESSION["CampusName"]."/$IDcours/$IDroot-$row[0]" : $row[0] ;
+
+				$return = mysql_query("select _IDdown from download_data where _file = '$myfile' limit 1", $mysql_link);
+				$myrow  = ( $return ) ? mysql_fetch_row($return) : 0 ;
+
+				// RAZ du compteur des téléchargements
+				if ( mysql_query("delete from download where _IDdown = '$myrow[0]' ", $mysql_link) )
+					mysql_query("delete from download_data where _IDdown = '$myrow[0]' ", $mysql_link);
+
+				$row    = remove_magic_quotes(mysql_fetch_row($result));
+				}
+			}
+
+//---------------------------------------------------------------------------
+function setItemOrder($IDdata, $IDcours, $IDitem, $value, $isfile = true)
+{
+	/*
+	 * fonction :	déplacement des items dans la liste
+	 * in :		$IDdata : id du dossier, $IDcours : ID du cours, $IDitem : ID du répertoire, $value : up|down, $isfile : fichier (true|false)
+	 */
+
+	global	$mysql_link;
+
+	$items  = array();
+
+	if ( $isfile ) {
+		$query  = "select _IDitem from cours_items ";
+		$query .= "where _IDdata = '$IDdata' AND _IDcours = '$IDcours' ";
+		$query .= "order by _order asc";
+		}
+	else {
+		$query  = "select _IDdata from cours_data ";
+		$query .= "where _IDparent = '$IDdata' AND _IDcours = '$IDcours' ";
+		$query .= "order by _order asc";
+		}
+
+	$return = mysql_query($query, $mysql_link);
+	$myrow  = ( $return ) ? mysql_fetch_row($return) : 0 ;
+	$nbelem = ( $return ) ? mysql_affected_rows($mysql_link) : 0 ;
+
+	$i = 1;
+	while ( $myrow ) {
+		$key = ( $myrow[0] == $IDitem )
+			? ($value == "up"
+				? ($i == 1 ? ($nbelem*2) + 5 : ($i*2) - 3)
+				: ($i == $nbelem ? -3 : ($i*2) + 3) )
+			: $i * 2 ;
+
+		$items += Array($key => $myrow[0]);
+		$i++;
+
+		$myrow = mysql_fetch_row($return);
+		}
+
+	// tri
+	@ksort($items);
+
+	// réécriture
+	$i = 0;
+	foreach ($items as $clef => $valeur) {
+		$i++;
+
+		if ( $isfile )
+			mysql_query("update cours_items set _order = '$i' where _IDitem = '$valeur' limit 1", $mysql_link);
+		else
+			mysql_query("update cours_data set _order = '$i' where _IDdata = '$valeur' limit 1", $mysql_link);
+		}
+}
+//---------------------------------------------------------------------------
+function readdirectory($dir, $IDcours, $IDroot, $link, $i = 0)
+{
+	/*
+	 * fonction :	affiche les documents
+	 * in :		dir : autorisations, IDcours : id du cours, IDroot : id du répertoire parent, $link : url de base des liens
+	 */
+
+	require "globals.php";
+
+	require "msg/cours.php";
+	require_once "include/TMessage.php";
+
+	$msg    = new TMessage($_SESSION["ROOTDIR"]."/msg/".$_SESSION["lang"]."/cours.php");
+	$date   = date("Y-m-d H:i:s");
+
+	//----- lecture des répertoires -----
+	$Query  = "select _IDdata, _ID, _IP, _date, _titre, _open, _visible, _max, _order, _usability from cours_data ";
+	$Query .= "where _IDcours = '$IDcours' AND _IDparent = '$IDroot' ";
+	$Query .= ( $_SESSION["CnxAdm"] == 255 ) ? "" : "AND (_ID = '".$_SESSION["CnxID"]."' OR _visible = 'O') ";
+	$Query .= ( $_SESSION["CnxAdm"] == 255 ) ? "" : "AND (_ID = '".$_SESSION["CnxID"]."' OR _open <= '$date') ";
+	switch ( $dir[7] ) {
+		case "1" :
+		case "2" :
+			$Query .= "order by _titre";
+			break;
+		case "3" :
+			$Query .= "order by _open";
+			break;
+		default :
+			$Query .= "order by _order";
+			break;
+		}
+
+	$result = mysql_query($Query, $mysql_link);
+	$nbdir  = ( $result ) ? mysql_numrows($result) : 0 ;
+	$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+	// suppression du dossier
+	$req    = $msg->read($COURS_DELDIR);
+
+	while ( $row ) {
+		$bgcolor = ( $i++ % 2 ) ? "item" : "menu" ;
+
+		// nbr de dossiers dans le répertoire
+		$return  = mysql_query("select _IDdata from cours_data where _IDparent ='$row[0]'", $mysql_link);
+		$count   = ( $return ) ? mysql_numrows($return) : 0 ;
+		$total   = $count;
+
+		$msg->isPlural = (bool) ( $count > 1 );
+
+		$nbdocs  = $msg->read($COURS_NBDIR, strval($count)) .", ";
+
+		// nbr de documents dans le répertoire
+		$return  = mysql_query("select _IDitem from cours_items where _IDdata ='$row[0]'", $mysql_link);
+		$count   = ( $return ) ? mysql_affected_rows($mysql_link) : 0 ;
+		$total  += $count;
+
+		$msg->isPlural = (bool) ( $count > 1 );
+
+		$nbdocs .= $msg->read($COURS_NBFILE, strval($count));
+
+		// on efface uniquement les dossiers vides
+		$isrm    = ( ($_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $row[1]) AND !$count )
+			? ""
+			: "disabled=\"disabled\"" ;
+
+            $update  = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $row[1] )
+			? "<a href=\"".myurlencode("$link&IDparent=$row[0]&newdir=$row[4]&page_cmde=createDir")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/stats/post.gif\" title=\"". $msg->read($COURS_UPDTDIR) ."\" alt=\"". $msg->read($COURS_UPDTDIR) ."\" /></a>"
+			: "" ;
+            $secure  = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $row[1] )
+			? "<a href=\"".myurlencode("$link&IDparent=$row[0]&cmde=tuning")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/tools.gif\" title=\"". $msg->read($COURS_MGMTDIR) ."\" alt=\"". $msg->read($COURS_MGMTDIR) ."\" /></a>"
+			: "" ;
+
+		$icon    = ( $row[6] == "O" ) ? "folder-closed.gif" : "lock.gif" ;
+		$mylink  = ( $row[6] == "O" OR ($_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $row[1]) )
+			? "<a href=\"".myurlencode("$link&IDroot=$row[0]")."\">$row[4]</a>"
+			: "$row[4]" ;
+
+		// date d'ouverture
+		$isopen = ( $row[6] == "N" )
+			? "<a href=\"".myurlencode("$link&IDparent=$row[0]&IDparent=$row[0]&page_cmde=dir_open")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/locked.gif\" title=\"". $msg->read($COURS_PUBLISH) ."\" alt=\"". $msg->read($COURS_PUBLISH) ."\" /></a> ".$msg->read($COURS_CLOSED)
+			: ($row[5] <= $date
+				? "<a href=\"".myurlencode("$link&IDparent=$row[0]&IDparent=$row[0]&page_cmde=dir_close")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/visible.gif\" title=\"". $msg->read($COURS_UNPUBLISH) ."\" alt=\"". $msg->read($COURS_UNPUBLISH) ."\" /></a> ".date2longfmt(substr($row[5], 0, 10), "jm")
+				: "<img src=\"".$_SESSION["ROOTDIR"]."/images/invisible.gif\" title=\"". $msg->read($COURS_PUBLISH) ."\" alt=\"". $msg->read($COURS_PUBLISH) ."\" /> ".date2longfmt(substr($row[5], 0, 10), "jm") ) ;
+
+		// déployer un dossier
+		$max    = ( $total AND ($_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $dir[5]) )
+			? ($row[7] == "N"
+				? "<a href=\"".myurlencode("$link&IDparent=$row[0]&page_cmde=max")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/max.gif\" title=\"\" alt=\"\" /></a>"
+				: "<a href=\"".myurlencode("$link&IDparent=$row[0]&page_cmde=min")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/min.gif\" title=\"\" alt=\"\" /></a>")
+			: "" ;
+
+		// déplacer un dossier
+		$updown  = ( !$dir[7] AND $nbdir > 1 AND ($_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $dir[5]) )
+			? "<a href=\"".myurlencode("$link&IDparent=$row[0]&page_cmde=file_order_up")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/menu/up.png\" title=\"". $msg->read($COURS_UP) ."\" alt=\"". $msg->read($COURS_UP) ."\" /></a>"
+			: "" ;
+		$updown .= ( !$dir[7] AND $nbdir > 1 AND ($_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $dir[5]) )
+			? "<a href=\"".myurlencode("$link&IDparent=$row[0]&page_cmde=file_order_down")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/menu/down.png\" title=\"". $msg->read($COURS_DOWN) ."\" alt=\"". $msg->read($COURS_DOWN) ."\" /></a>"
+			: "" ;
+
+		// utilisabilité
+		$check1 = ( $row[9] & 1 ) ? "on" : "off" ;
+		$check2 = ( $row[9] & 2 ) ? "on" : "off" ;
+		$check3 = ( $row[9] & 4 ) ? "on" : "off" ;
+
+		// affichage tableau
+		if ( $dir[2] & pow(2, $_SESSION["CnxGrp"] - 1) )
+			print("
+				<tr class=\"$bgcolor\">
+      				<td class=\"align-center\"><img src=\"".$_SESSION["ROOTDIR"]."/images/$icon\" title=\"\" alt=\"\" /></td>
+					<td>
+	   					$mylink ($nbdocs) $max $update $secure<br/>
+						<span class=\"x-small\">".$msg->read($COURS_CREATEBY, date2longfmt($row[3])).", ".getUserName($row[1])." "._getHostName($row[2])."</span>
+					</td>
+			       	<td class=\"align-center\" style=\"white-space: nowrap;\">$updown</td>
+	       	         	<td>
+						<label for=\"cbdata_$row[0]\">
+						<input type=\"checkbox\" id=\"cbdata_$row[0]\" name=\"cbdata[]\" value=\"$row[0]\" $isrm />
+						</label>
+					</td>
+	       	         	<td></td>
+	       	         	<td></td>
+					<td class=\"align-center\">$isopen</td>
+	       	         	<td class=\"align-center\"><img src=\"".$_SESSION["ROOTDIR"]."/images/checkbox_$check1.gif\" title=\"\" alt=\"\" /></td>
+	       	         	<td class=\"align-center\"><img src=\"".$_SESSION["ROOTDIR"]."/images/checkbox_$check2.gif\" title=\"\" alt=\"\" /></td>
+	       	         	<td class=\"align-center\"><img src=\"".$_SESSION["ROOTDIR"]."/images/checkbox_$check3.gif\" title=\"\" alt=\"\" /></td>
+	       	         	<td class=\"align-center\">X</td>
+				</tr>
+				");
+
+		if ( $row[7] == "O" )
+			readfiles($dir, $IDcours, $row[0], $link);
+
+		$row = remove_magic_quotes(mysql_fetch_row($result));
+		}
+
+	return $i;
+}
+//---------------------------------------------------------------------------
+function readfiles($dir, $IDcours, $IDroot, $link, $i = 0)
+{
+	/*
+	 * fonction :	affiche les documents
+	 * in :		dir : autorisations, IDcours : id du cours, IDroot : id du répertoire parent, $link : url de base des liens
+	 */
+
+	require "globals.php";
+
+	require "msg/cours.php";
+	require_once "include/TMessage.php";
+
+	$msg    = new TMessage($_SESSION["ROOTDIR"]."/msg/".$_SESSION["lang"]."/cours.php");
+	$date   = date("Y-m-d H:i:s");
+
+	//---- lecture des documents ----
+	$Query  = "select _IDitem, _ID, _IP, _date, _titre, _texte, _open, _file, _size, _ver, _visible, _usability, _note, _time, _order ";
+	$Query .= "from cours_items ";
+	$Query .= "where _IDcours = '$IDcours' AND _IDdata = '$IDroot' ";
+	$Query .= ( $_SESSION["CnxAdm"] == 255 ) ? "" : "AND (_ID = '".$_SESSION["CnxID"]."' OR _visible = 'O') ";
+	$Query .= ( $_SESSION["CnxAdm"] == 255 ) ? "" : "AND (_ID = '".$_SESSION["CnxID"]."' OR _open <= '$date') ";
+	switch ( $dir[7] ) {
+		case "1" :
+			$Query .= "order by _file";
+			break;
+		case "2" :
+			$Query .= "order by _titre";
+			break;
+		case "3" :
+			$Query .= "order by _open";
+			break;
+		default :
+			$Query .= "order by _order";
+			break;
+		}
+
+	$result = mysql_query($Query, $mysql_link);
+	$nbfile = ( $result ) ? mysql_numrows($result) : 0 ;
+	$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+	// suppression des fichiers
+	$req    = $msg->read($COURS_DELFILE);
+
+	while ( $row ) {
+		$bgcolor = ( $i++ % 2 ) ? "item" : "menu" ;
+
+		if ( $dir[2] & pow(2, $_SESSION["CnxGrp"] - 1) )  {
+			// lecture de l'icone associée à l'extension
+			$ext   = ( $row[8] )
+				? "mime/".extension($row[7]).".gif"
+				: ((strstr($row[7], "http://") OR strstr($row[7], "https://")) ? "url.png" : "url.gif") ;
+
+			$res   = mysql_query("select _mime from config_mime where _ext = '".extension($row[7])."' AND _lang = '".$_SESSION["lang"]."' limit 1", $mysql_link);
+			$alt   = ( $res ) ? mysql_fetch_row($res) : 0 ;
+
+			// lecture du modérateur du cours
+			$desc  = $msg->read($COURS_AUTHOR) ." ". getUserName($row[1], false);
+
+			// lecture de l'adresse IP
+			$desc  .= " " . _getHostName($row[2], false) . "<br/>";
+
+			// date de création
+			$desc  .= $msg->read($COURS_CREATEBY, date2longfmt($row[3]));
+
+			// date d'ouverture
+			$isopen = ( $row[10] == "N" )
+				? "<a href=\"".myurlencode("$link&IDparent=$row[0]&IDitem=$row[0]&page_cmde=file_open")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/locked.gif\" title=\"". $msg->read($COURS_PUBLISH) ."\" alt=\"". $msg->read($COURS_PUBLISH) ."\" /></a> ".$msg->read($COURS_CLOSED)
+				: ($row[6] <= $date
+					? "<a href=\"".myurlencode("$link&IDparent=$row[0]&IDitem=$row[0]&page_cmde=file_close")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/visible.gif\" title=\"". $msg->read($COURS_UNPUBLISH) ."\" alt=\"". $msg->read($COURS_UNPUBLISH) ."\" /></a> ".date2longfmt(substr($row[6], 0, 10), "jm")
+					: "<img src=\"".$_SESSION["ROOTDIR"]."/images/invisible.gif\" title=\"". $msg->read($COURS_PUBLISH) ."\" alt=\"". $msg->read($COURS_PUBLISH) ."\" /> ".date2longfmt(substr($row[6], 0, 10), "jm") ) ;
+
+			// lien sur le fichier
+			$file   = ( strlen($row[4]) ) ? $row[4] : $row[7] ;
+			$myfile = ( $row[8] ) ? "$DOWNLOAD/e-campus/".$_SESSION["CampusName"]."/$IDcours/$IDroot-$row[7]" : $row[7] ;
+			$mylink = ( $row[10] == "O" OR ($_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $row[1]) )
+				? "<a href=\"".myurlencode("index.php?file=$myfile")."\" class=\"overlib\" onclick=\"window.open(this.href, '_blank'); return false;\">$file<span>$desc</span></a>"
+				: $file ;
+
+			// type de fichier
+			$type   = ( $row[8] )
+				? $msg->read($COURS_BYTE, number_format($row[8], 0, ",", " "))
+				: $msg->read($COURS_URL) ;
+
+			// note associée
+			$over   = ( strlen($row[12]) ) 
+				? "<span>". str_replace(Array("'", "\r", "\n"), Array("\'", "", "<br/>"), $row[12]) ."</span>"
+				: "" ;
+
+			$click  = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $row[1] )
+				? "onclick=\"popWin('".myurlencode($_SESSION["ROOTDIR"]."/cours_note.php?sid=".$_SESSION["sessID"]."&item=33&IDitem=$row[0]&IDcours=$IDcours&IDroot=$IDroot&lang=".$_SESSION["lang"])."', '450', '305'); return false;\""
+				: "" ;
+
+			$note   = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $row[1] OR $over )
+				? "<a href=\"#\" class=\"overlib\" $click><img src=\"".$_SESSION["ROOTDIR"]."/images/document.gif\" title=\"". $msg->read($COURS_ADDCOMMENT) ."\" alt=\"". $msg->read($COURS_ADDCOMMENT) ."\" />$over</a>"
+				: "" ;
+
+			// suppression des fichiers
+			$isrm   = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $row[1] )
+				? ""
+				: "disabled=\"disabled\"" ;
+
+			// déplacement des fichiers
+			$ismv   = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $row[1] )
+				? ((@$_POST["move_x"] AND @in_array($row[0], @$_POST["mvitem"])) ? "checked=\"checked\"" : "")
+				: "disabled=\"disabled\"" ;
+
+			// copie des fichiers
+			$iscp   = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $row[1] )
+				? ((@$_POST["copy_x"] AND @in_array($row[0], @$_POST["cpitem"])) ? "checked=\"checked\"" : "")
+				: "disabled=\"disabled\"" ;
+
+	            $secure = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $row[1] )
+        	      	? "<a href=\"".myurlencode("$link&IDitem=$row[0]&cmde=tuning")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/tools.gif\" title=\"". $msg->read($COURS_MGMTFILE) ."\" alt=\"". $msg->read($COURS_MGMTFILE) ."\" /></a>"
+       			: "" ;
+
+			// description
+			$texte  = ( strlen($row[5]) > 60 )
+				? substr($row[5], 0, 60) . "... [<a href=\"#\" class=\"overlib\">". $msg->read($COURS_MORE) ."<span>$row[5]</span></a>]"
+				: $row[5] ;
+			$texte  = str_replace("<br/>", " ", $texte);
+
+			// lecture du compteur des téléchargements
+			$res    = mysql_query("select _IDdown, _count from download_data where _file = '$myfile' limit 1", $mysql_link);
+			$down   = ( $res ) ? mysql_fetch_row($res) : 0 ;
+
+			$dwload = ( $down[0] )
+				? "<a href=\"#\" onclick=\"popWin('".$_SESSION["ROOTDIR"]."/user_list.php?sid=".$_SESSION["sessID"]."&amp;IDdown=$down[0]&amp;cmde=dwload&amp;lang=".$_SESSION["lang"]."', '450', '200'); return false;\">$down[1]</a>"
+				: "0" ;
+
+			// utilisabilité
+			$check1 = ( $row[11] & 1 ) ? "on" : "off" ;
+			$check2 = ( $row[11] & 2 ) ? "on" : "off" ;
+			$check3 = ( $row[11] & 4 ) ? "on" : "off" ;
+
+			// durée
+			$time   = ( $row[13] != "00:00:00" )
+				? "<span class=\"x-small\">". $msg->read($COURS_LENGTH) ." ". str_replace(":", $msg->read($COURS_HOUR), substr($row[13], 0, 5)) ."</span>"
+				: "" ;
+
+			// déplacer une ressource
+			$updown  = ( !$dir[7] AND $nbfile > 1 AND ($_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $dir[5]) )
+				? "<a href=\"".myurlencode("$link&IDparent=$row[0]&IDitem=$row[0]&page_cmde=file_order_up")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/menu/up.png\" title=\"". $msg->read($COURS_UP) ."\" alt=\"". $msg->read($COURS_UP) ."\" /></a>"
+				: "" ;
+			$updown .= ( !$dir[7] AND $nbfile > 1 AND ($_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $dir[5]) )
+				? "<a href=\"".myurlencode("$link&IDparent=$row[0]&IDitem=$row[0]&page_cmde=file_order_down")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/menu/down.png\" title=\"". $msg->read($COURS_DOWN) ."\" alt=\"". $msg->read($COURS_DOWN) ."\" /></a>"
+				: "" ;
+
+			// affichage tableau
+			print("            
+				<tr class=\"$bgcolor\">
+					<td class=\"align-center\"><img src=\"".$_SESSION["ROOTDIR"]."/images/$ext\" title=\"\" alt=\"\" /></td>
+	       	         	<td>
+	       	         		$mylink $type $note $secure<br/>
+	       	         		<span class=\"x-small\">$texte &nbsp;</span>
+					</td>
+			       	<td style=\"white-space: nowrap;\">$updown</td>
+					<td class=\"align-center\"><label for=\"cbitem_$row[0]\"><input type=\"checkbox\" id=\"cbitem_$row[0]\" name=\"cbitem[]\" value=\"$row[0]\" $isrm /></label></td>
+					<td class=\"align-center\"><label for=\"mvitem_$row[0]\"><input type=\"checkbox\" id=\"mvitem_$row[0]\" name=\"mvitem[]\" value=\"$row[0]\" $ismv /></label></td>
+					<td class=\"align-center\"><label for=\"cpitem_$row[0]\"><input type=\"checkbox\" id=\"cpitem_$row[0]\" name=\"cpitem[]\" value=\"$row[0]\" $iscp /></label></td>
+	       	         	<td class=\"align-center\">$isopen<br/>$time</td>
+	       	         	<td class=\"align-center\"><img src=\"".$_SESSION["ROOTDIR"]."/images/checkbox_$check1.gif\" title=\"\" alt=\"\" /></td>
+	       	         	<td class=\"align-center\"><img src=\"".$_SESSION["ROOTDIR"]."/images/checkbox_$check2.gif\" title=\"\" alt=\"\" /></td>
+	       	         	<td class=\"align-center\"><img src=\"".$_SESSION["ROOTDIR"]."/images/checkbox_$check3.gif\" title=\"\" alt=\"\" /></td>
+	       	         	<td class=\"align-center\">[$dwload]</td>
+	       		</tr>
+	       		");
+			}
+
+		$row = remove_magic_quotes(mysql_fetch_row($result));
+		}
+
+	return $i;
+}
+//---------------------------------------------------------------------------
+?>
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print("<strong>".$_SESSION["CampusName"]."::$dir[0]</strong>"); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+
+	<?php
+		// initialisation
+		$line = 0;
+
+		if ( !$IDroot ) {
+			// accès au suivi
+			$href = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $dir[5] )
+				? myurlencode("index.php?item=$item&cmde=monitor&IDcours=$IDcours&IDmat=$IDmat&IDdata=$IDdata")
+				: "#" ;
+
+			print("
+				<p style=\"border:#cccccc solid 1px; text-align:justify; margin-top:0px; margin-bottom:5px; padding:2px;\">
+				<a href=\"$href\">
+				<img style=\"float:left; margin-right:5px;\" src=\"".$_SESSION["ROOTDIR"]."/images/options.png\" title=\"". $msg->read($COURS_MONITORING) ."\" alt=\"". $msg->read($COURS_MONITORING) ."\" />
+				</a>
+				". $msg->read($COURS_TEXT) ."
+				</p>
+				");
+			}
+
+		//----- lecture du répertoire courant -----
+		$Query  = "select _titre, _IDparent, _texte, _info from cours_data ";
+		$Query .= "where _IDdata = '$IDroot' ";
+
+		$result = mysql_query($Query, $mysql_link);
+		$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+		// les annonces
+		$annonce = ( $IDroot AND $row[3] != "0000-00-00 00:00:00" )
+			? $msg->read($COURS_INFO, date2longfmt($row[3])). "<br/>" . nltobr($row[2])
+			: nltobr($dir[3]) ;
+
+		if ( strlen($annonce) )
+			print("
+				<p style=\"background-color:#eeeeee; text-align:justify; margin-top:0px; margin-bottom:5px; padding:5px;\">
+				<img style=\"float:left; margin-right:5px;\" src=\"".$_SESSION["ROOTDIR"]."/images/annonce.gif\" title=\"\" alt=\"\" />$annonce
+				</p>
+				");
+	?>
+
+	<table class="width100">
+	<?php
+		// initialisation
+		$mydir  = ( $IDroot ) ? $row[0] : $msg->read($COURS_ROOTDIR) ;
+		$link   = "index.php?item=$item&IDcours=$IDcours&IDroot=$IDroot&IDdata=$IDdata&IDmat=$IDmat&cmde=visu";
+		$date   = date("Y-m-d H:i:s");
+
+		// actions sur les répertoires
+		if ( @$_POST["move_x"] )
+			$page_cmde = "moveDir";
+		if ( @$_POST["copy_x"] )
+			$page_cmde = "copyDir";
+
+		switch ( $page_cmde ) {
+			case "createDir" :	// création d'un répertoire
+				$value = ( $IDparent ) ? $msg->read($COURS_ACTIONUPDT) : $msg->read($COURS_ACTIONCREAT) ;
+
+				print("
+			              <tr>
+						<td colspan=\"2\">
+							<form id=\"form_dir\" action=\"".myurlencode($link)."\" method=\"post\">
+								<p class=\"hidden\"><input type=\"hidden\" name=\"IDparent\"  value=\"$IDparent\" /></p>
+								<p class=\"hidden\"><input type=\"hidden\" name=\"IDroot\"    value=\"$IDroot\" /></p>
+								<p class=\"hidden\"><input type=\"hidden\" name=\"page_cmde\" value=\"$value\" /></p>
+
+								<p style=\"margin: 0px;\">
+								<img src=\"".$_SESSION["ROOTDIR"]."/images/folder-add.gif\" title=\"".$msg->read($COURS_CREATEDIR)."\" alt=\"".$msg->read($COURS_CREATEDIR)."\" />
+								<label for=\"titre\"><input type=\"text\" id=\"titre\" name=\"titre\" size=\"30\" value=\"$newdir\" /></label> <input type=\"submit\" value=\"$value\" name=\"form_cmde\" />
+								</p>
+							</form>
+						</td>
+			              </tr>
+					");
+				break;
+
+			case "max" :	// déployer
+			case "min" :	// réduire
+				if ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $dir[5] ) {
+					$Query  = "update cours_data ";
+					$Query .= ( $page_cmde == "max" ) ? "set _max = 'O' " : "set _max = 'N' " ;
+					$Query .= "where _IDdata = '$IDparent' ";
+					$Query .= "limit 1";
+
+					mysql_query($Query, $mysql_link);
+					}
+				break;
+
+			case "moveDir" :	// déplacement dans répertoire
+			case "copyDir" :	// copie dans répertoire
+				$value   = ( $page_cmde == "moveDir" ) ? $msg->read($COURS_MOVE) : $msg->read($COURS_COPY) ;
+				$cbw     = ( $page_cmde == "moveDir" ) ? @$_POST["mvwiki"] : @$_POST["cpwiki"] ;
+				$cbi     = ( $page_cmde == "moveDir" ) ? @$_POST["mvitem"] : @$_POST["cpitem"] ;
+
+				$query  = "select _IDdata, _titre from cours_data ";
+				$query .= "where _IDcours = '$IDcours' AND _IDparent = '$IDroot' ";
+				$query .= "order by _titre";
+
+				$result = mysql_query($query, $mysql_link);
+				$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+				$select  = "<label for=\"newdir\" >" ;
+				$select .= "<select id=\"newdir\" name=\"newdir\" style=\"font-size:9px;\" >" ;
+				$select .= ( $IDroot ) ? "<option value=\"0\">..</option>" : "<option value=\"0\">.</option>" ;
+
+				while ( $row ) {			
+					$select .= "<option value=\"$row[0]\">$row[1]</option>";
+
+					$row = remove_magic_quotes(mysql_fetch_row($result));
+					}				
+				$select .= "</select>";
+				$select .= "</label>";
+
+				print("
+			              <tr>
+						<td>
+						  <form id=\"copyDir\" action=\"".myurlencode($link)."\" method=\"post\">
+							<p class=\"hidden\"><input type=\"hidden\" name=\"IDdata\"    value=\"$IDdata\" /></p>
+							<p class=\"hidden\"><input type=\"hidden\" name=\"IDroot\"    value=\"$IDroot\" /></p>");
+
+				for ($i = 0; $i < count($cbw); $i++)
+					print("<p class=\"hidden\"><input type=\"hidden\" name=\"cbwiki[]\" value=\"$cbw[$i]\" /></p>");
+				for ($i = 0; $i < count($cbi); $i++)
+					print("<p class=\"hidden\"><input type=\"hidden\" name=\"cbitem[]\" value=\"$cbi[$i]\" /></p>");
+
+				print("
+							<p style=\"margin:0px;\">
+							<img src=\"".$_SESSION["ROOTDIR"]."/images/mvcopy.gif\" title=\"\" alt=\"\" />
+							". $msg->read($COURS_SELECTION, $value) ." $select
+							<input type=\"submit\" name=\"page_cmde\" value=\"$value\" style=\"font-size: 9px;\" />
+							". $msg->read($COURS_OR) ."
+							<input type=\"submit\" value=\"".$msg->read($COURS_INPUTCANCEL)."\" name=\"page_cancel\" style=\"font-size: 9px;\" />
+							</p>
+						  </form>
+						</td>
+			              </tr>
+					");
+				break;
+
+			case "file_order_up" :
+			case "file_order_down" :	// déplacement dans la liste
+				$action = ( $page_cmde == "file_order_down" ) ? "down" : "up" ;
+
+				if ( $IDitem )
+					setItemOrder($IDroot, $IDcours, $IDitem, $action);
+				else
+					setItemOrder($IDroot, $IDcours, $IDparent, $action, false);
+				break;
+
+			default :
+				switch ( $page_cmde ) {
+					case "file_open" :
+					case "file_close" :	// publier/fermer une ressource
+						$action = ( $page_cmde == "file_open" ) ? "O" : "N" ;
+
+						if ( $IDitem )
+							mysql_query("update cours_items set _visible = '$action' where _IDitem = '$IDitem' limit 1", $mysql_link);
+						break;
+
+					case "dir_open" :
+					case "dir_close" :	// ouvrir/fermer un répertoire
+						$action = ( $page_cmde == "dir_open" ) ? "O" : "N" ;
+
+						if ( $IDparent )
+							mysql_query("update cours_data set _visible = '$action' where _IDdata = '$IDparent' limit 1", $mysql_link);
+						break;
+
+					case "delete" :
+						$Query  = "delete from cours_data ";
+						$Query .= "where _IDdata = '$IDparent' ";
+						$Query .= ( $_SESSION["CnxAdm"] == 255 ) ? "" : "AND _ID = '".$_SESSION["CnxID"]."'";
+
+						if ( mysql_query($Query, $mysql_link) ) {
+							$Query  = "delete from cours_items ";
+							$Query .= "where _IDdata = '$IDparent' ";
+							$Query .= ( $_SESSION["CnxAdm"] == 255 ) ? "" : "AND _ID = '".$_SESSION["CnxID"]."'";
+
+							if ( mysql_query($Query, $mysql_link) ) {
+								// effacer les documents sur le serveur...
+								}
+							}
+						break;
+					default :
+						// ajout dans la base de données
+						if ( $page_cmde == $msg->read($COURS_ACTIONCREAT) )
+							if ( $_SESSION["CnxAdm"] == 255 OR ($dir[1] & pow(2, $_SESSION["CnxGrp"] - 1)) ) {
+								$Query  = "insert into cours_data ";
+								$Query .= "values('', '$IDroot', '$IDcours', '".$_SESSION["CnxID"]."', '".$_SESSION["CnxIP"]."', '$date', '". addslashes($titre) ."', '', '', '$date', 'N', '0', '0', 'O')";
+
+								if ( !mysql_query($Query, $mysql_link) )
+									sql_error($mysql_link);
+								}
+
+						// mise à jour de la base de données
+						if ( $page_cmde == $msg->read($COURS_ACTIONUPDT) ) {
+							$Query  = "update cours_data ";
+							$Query .= "set _titre = '". addslashes($titre) ."' ";
+							$Query .= "where _IDdata = '$IDparent'";
+
+							if ( !mysql_query($Query, $mysql_link) )
+								sql_error($mysql_link);
+							}
+
+					// copie ou déplacement dans répertoire
+					if ( $page_cmde == $msg->read($COURS_COPY) OR $page_cmde == $msg->read($COURS_MOVE) ) {
+						$cbi  = @$_POST["cbitem"];
+						$date = date("Y-m-d H:i:s");
+
+						for ($i = 0; $i < count($cbi); $i++) {
+							$result = mysql_query("select * from cours_items where _IDitem = '$cbi[$i]' limit 1", $mysql_link);
+							$row    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+							// ajout dans la base de données
+							$Query  = "insert into cours_items ";
+							$Query .= "values('', '".@$_POST["newdir"]."', '$row[2]', '".$_SESSION["CnxID"]."', '".$_SESSION["CnxIP"]."', '$date', '$row[6]', '$row[7]', '$date', '$row[9]', '$row[10]', '$row[11]', '$row[12]', '', '', '0', '$row[14]')";
+
+							if ( mysql_query($Query) AND $row[10] )
+								copy(
+									"$DOWNLOAD/e-campus/".$_SESSION["CampusName"]."/$IDcours/$row[1]-$row[9]",
+									"$DOWNLOAD/e-campus/".$_SESSION["CampusName"]."/$IDcours/".@$_POST["newdir"]."-$row[9]");
+
+							// si on déplace => suppression ancien fichier
+							if ( $page_cmde == $msg->read($COURS_MOVE) )
+								if ( mysql_query("delete from cours_items where _IDitem = '$cbi[$i]' limit 1", $mysql_link) )
+									unlink("$DOWNLOAD/e-campus/".stripaccent($_SESSION["CampusName"])."/$IDcours/$row[1]-".stripaccent($row[9]));
+							}
+						}
+						break;
+					}	// end switch
+
+				$home = "<a href=\"".myurlencode("$link&IDroot=0")."\">". $msg->read($COURS_ROOTDIR) ."</a>";
+				$add  = ( $_SESSION["CnxAdm"] == 255 OR ($dir[1] & pow(2, $_SESSION["CnxGrp"] - 1)) )
+					? "<img src=\"".$_SESSION["ROOTDIR"]."/images/folder-add.gif\" title=\"".$msg->read($COURS_CREATEDIR)."\" alt=\"".$msg->read($COURS_CREATEDIR)."\" /> <a href=\"".myurlencode("$link&IDroot=$IDroot&page_cmde=createDir")."\">".$msg->read($COURS_CREATEDIR)."</a>."
+					: "" ;
+
+				print("
+			              <tr>
+			                <td class=\"valign-middle align-left\">$add</td>
+			                <td class=\"valign-middle align-right\">[$home]</td>
+			              </tr>
+		              	");
+		              break;
+			}	// end switch
+	?>
+	</table>
+
+	<form id="formulaire" action="index.php" method="post" enctype="multipart/form-data">
+	<?php
+		print("
+			<p class=\"hidden\"><input type=\"hidden\" name=\"item\"      value=\"$item\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"cmde\"      value=\"$cmde\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"IDmat\"     value=\"$IDmat\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"IDdata\"    value=\"$IDdata\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"IDcours\"   value=\"$IDcours\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"IDroot\"    value=\"$IDroot\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"IDparentt\" value=\"$IDparent\" /></p>
+			");
+	?>
+
+	<table class="width100">
+	<?php
+		// suppression des ressources
+		$delete = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $dir[5] )
+			? "<input type=\"image\" src=\"".$_SESSION["ROOTDIR"]."/images/corb.gif\" name=\"del\" title=\"". $msg->read($COURS_DELDOC) ."\" alt=\"". $msg->read($COURS_DELDOC) ."\" />"
+			: "<img src=\"".$_SESSION["ROOTDIR"]."/images/corb.gif\" title=\"\" alt=\"*\" />" ;
+
+		// déplacement des ressources
+		$move   = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $dir[5] )
+			? "<input type=\"image\" src=\"".$_SESSION["ROOTDIR"]."/images/mv.gif\" name=\"move\" title=\"". $msg->read($COURS_MOVE) ."\" alt=\"". $msg->read($COURS_MOVE) ."\" />"
+			: "<img src=\"".$_SESSION["ROOTDIR"]."/images/mv.gif\" title=\"\" alt=\"*\" />" ;
+
+		// copie des ressources
+		$copy   = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $dir[5] )
+			? "<input type=\"image\" src=\"".$_SESSION["ROOTDIR"]."/images/add.gif\" name=\"copy\" title=\"". $msg->read($COURS_COPY) ."\" alt=\"". $msg->read($COURS_COPY) ."\" />"
+			: "<img src=\"".$_SESSION["ROOTDIR"]."/images/add.gif\" title=\"\" alt=\"*\" />" ;
+
+		// raz des fichiers vus
+		$reset  = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $dir[5] )
+			? "<input type=\"image\" src=\"".$_SESSION["ROOTDIR"]."/images/corb.gif\" name=\"clear\" title=\"". $msg->read($COURS_RESET) ."\" alt=\"". $msg->read($COURS_RESET) ."\" />"
+			: "" ;
+
+		// en-tête tableau
+		print("
+	              <tr style=\"background-color:#C0C0C0;\">
+	                <td style=\"width:1%;\"><img src=\"".$_SESSION["ROOTDIR"]."/images/folder-opened.gif\" title=\"\" alt=\"\" /></td>
+	                <td style=\"width:66%;\"><strong>$mydir</strong></td>
+			    <td style=\"width:2%;\"  class=\"align-center\"><img src=\"".$_SESSION["ROOTDIR"]."/images/updown.png\" title=\"\" alt=\"\" /></td>
+			    <td style=\"width:1%;\"  class=\"align-center\">$delete</td>
+		          <td style=\"width:1%;\"  class=\"align-center\">$move</td>
+		          <td style=\"width:1%;\"  class=\"align-center\">$copy</td>
+	                <td style=\"width:15%;\" class=\"align-center\">". $msg->read($COURS_PUBLICATION) ."</td>
+	                <td style=\"width:1%;\"  class=\"align-center\"><img src=\"".$_SESSION["ROOTDIR"]."/images/usability/vak1.png\" title=\"\" alt=\"\" class=\"imgLink\" /></td>
+	                <td style=\"width:1%;\"  class=\"align-center\"><img src=\"".$_SESSION["ROOTDIR"]."/images/usability/vak2.png\" title=\"\" alt=\"\" class=\"imgLink\" /></td>
+	                <td style=\"width:1%;\"  class=\"align-center\"><img src=\"".$_SESSION["ROOTDIR"]."/images/usability/vak3.png\" title=\"\" alt=\"\" class=\"imgLink\" /></td>
+	                <td style=\"width:10%;\" class=\"align-center\">". $msg->read($COURS_HIT) ." $reset</td>
+	              </tr>
+			");
+
+		// accès au répertoire parent
+		if ( $IDroot )
+			print("            
+				<tr>
+					<td style=\"width:1%;\" class=\"align-center\"><img src=\"".$_SESSION["ROOTDIR"]."/images/folder-up.gif\" title=\"".$msg->read($COURS_PARENTDIR)."\" alt=\"".$msg->read($COURS_PARENTDIR)."\" /></td>
+					<td style=\"width:99%;\" colspan=\"10\">[<a href=\"".myurlencode("$link&IDroot=$row[1]")."\">".$msg->read($COURS_PARENTDIR)."</a>]</td>
+				</tr>
+	       		");
+
+		//----- lecture des répertoires des cours -----
+		if ( $page_cmde != "createFile" )
+			$line = readdirectory($dir, $IDcours, $IDroot, $link, $line);
+
+		//----- lecture des documents des cours -----
+		switch ( $page_cmde ) {
+			case "createFile" :
+				print("
+					<tr>
+						<td colspan=\"11\"><hr/></td>
+					</tr>
+					<tr>
+						<td colspan=\"11\">
+							<form id=\"form_file\" action=\"".myurlencode($link)."\" method=\"post\" enctype=\"multipart/form-data\">
+								<p class=\"hidden\"><input type=\"hidden\" name=\"IDparent\"      value=\"$IDparent\" /></p>
+								<p class=\"hidden\"><input type=\"hidden\" name=\"page_cmde\"     value=\"insertFile\" /></p>
+								<p class=\"hidden\"><input type=\"hidden\" name=\"MAX_FILE_SIZE\" value=\"$FILESIZE\" /></p>
+
+								<p style=\"margin:0px;\">
+								<img src=\"".$_SESSION["ROOTDIR"]."/images/item-add.gif\" title=\"". $msg->read($COURS_ADDFILE) ."\" alt=\"". $msg->read($COURS_ADDFILE) ."\" />
+								<input type=\"file\" name=\"UploadFile[]\" size=\"50\" style=\"font-size:9px;\" />
+								<input type=\"submit\" value=\"". $msg->read($COURS_SEND) ."\" style=\"font-size:9px;\" />
+								<span style=\"cursor: pointer;\" onclick=\"$('uploaded')._display.toggle(); return false;\"><img src=\"".$_SESSION["ROOTDIR"]."/images/updown.png\" title=\"". $msg->read($COURS_MORE) ."\" alt=\"". $msg->read($COURS_MORE) ."\" /></span>
+								</p>
+
+							<div id=\"uploaded\" style=\"display:none;\">");
+
+						for ($k = 1; $k < $dir[6]; $k++)
+							print("
+								<img src=\"".$_SESSION["ROOTDIR"]."/images/item-add.gif\" title=\"". $msg->read($COURS_ADDFILE) ."\" alt=\"". $msg->read($COURS_ADDFILE) ."\" />
+								<input type=\"file\" name=\"UploadFile[]\" size=\"50\" style=\"font-size:9px;\" /><br/>");
+
+				print("
+							</div>
+							</form>
+						</td>
+				 	</tr>
+					");
+				break;
+
+			case "createUrl" : // Affichage des zones pour l'insertion d'une URL
+				print("
+					<tr>
+						<td colspan=\"11\"><hr/></td>
+					</tr>
+					<tr>
+						<td colspan=\"11\">
+						  <form id=\"form_url\" action=\"".myurlencode($link)."\" method=\"post\">
+							<p class=\"hidden\"><input type=\"hidden\" name=\"IDparent\"  value=\"$IDparent\" /></p>
+							<p class=\"hidden\"><input type=\"hidden\" name=\"page_cmde\" value=\"insertUrl\" /></p>
+
+							<p style=\"margin:0px;\">
+							<img src=\"".$_SESSION["ROOTDIR"]."/images/world.gif\" title=\"\" alt=\"\" />
+							<input name=\"UploadUrl\" size=\"50\" style=\"font-size:9px;\" />
+							<input type=\"submit\" value=\"". $msg->read($COURS_SEND) ."\" style=\"font-size:9px;\" />
+							</p>
+						  </form>
+						</td>
+				 	</tr>
+					");
+				break;
+
+			case "createLink" : // Affichage des zones pour l'insertion d'un lien
+				print("
+					<tr>
+						<td colspan=\"11\"><hr/></td>
+					</tr>
+					<tr>
+						<td colspan=\"11\">
+						  <form id=\"form_link\" action=\"".myurlencode($link)."\" method=\"post\" enctype=\"multipart/form-data\">
+							<p class=\"hidden\"><input type=\"hidden\" name=\"IDparent\"  value=\"$IDparent\" /></p>
+							<p class=\"hidden\"><input type=\"hidden\" name=\"page_cmde\" value=\"insertLink\" /></p>
+
+							<p style=\"margin:0px;\">
+							<img src=\"".$_SESSION["ROOTDIR"]."/images/server.gif\" title=\"\" alt=\"\" />
+							<input type=\"file\" name=\"UploadLink\" onblur=\"form.LienC.value=this.value\" size=\"50\" style=\"font-size:9px;\" />
+							<input type=\"hidden\" name=\"LienC\" />
+							<input type=\"submit\" value=\"". $msg->read($COURS_SEND) ."\" style=\"font-size:9px;\" />
+							</p>
+						  </form>
+						</td>
+				 	</tr>
+					");
+				break;
+
+			case "insertFile" :
+			case "insertLink" :
+			case "insertUrl" :
+			case "deleteFile" :
+			case "deleteWiki" :
+				if ( $page_cmde == "insertFile" ) {
+					$UploadFile = @$_FILES["UploadFile"]["tmp_name"];
+
+					for ($j = 0; $j < count($UploadFile) && @$UploadFile[$j]; $j++) {
+						// Vérification du type de fichier à transférer
+						$error = authfile(@$_FILES["UploadFile"]["name"][$j]) ? 0 : 4 ;
+
+						// répertoire destination
+						$dest  = "$DOWNLOAD/e-campus/".stripaccent($_SESSION["CampusName"]);
+						if ( !is_dir($dest) )
+							mymkdir($dest, $CHMOD);
+
+						$dest .= "/$IDcours";
+						if ( !is_dir($dest) )
+							mymkdir($dest, $CHMOD);
+
+						// fichier destination
+						$dest  = stripaccent("$dest/$IDroot-".$_FILES["UploadFile"]["name"][$j]);
+
+						// copie du fichier temporaire -> répertoire de stockage
+						if ( move_uploaded_file($UploadFile[$j], $dest) )
+							mychmod($dest, $CHMOD);
+
+						// ajout dans la base de données
+						$Query  = "insert into cours_items ";
+						$Query .= "values('', '$IDroot', '$IDcours', '".$_SESSION["CnxID"]."', '".$_SESSION["CnxIP"]."', '$date', '". addslashes($titre) ."', '". addslashes($texte) ."', '$date', '".addslashes($_FILES["UploadFile"]["name"][$j])."', '".$_FILES["UploadFile"]["size"][$j]."', '$ver', '0', '', '', '0', 'O')";
+
+						if ( !mysql_query($Query, $mysql_link) )
+							mysql_error($mysql_link);
+						}
+					}
+
+				if ( $page_cmde == "insertLink" OR $page_cmde == "insertUrl" ) {
+					// les Liens
+					$Upload     = "";
+					$UploadUrl  = @$_POST["UploadUrl"];
+					$UploadLink = @$_POST["LienC"];
+
+					if ( $UploadUrl != "" AND strstr($UploadUrl, "http://") == "" AND strstr($UploadUrl, "https://") == "" )
+						$UploadUrl = "http://" . $UploadUrl;
+
+					if ( $UploadUrl != "" )
+						$Upload = $UploadUrl;
+					if ( $UploadLink != "" )
+						$Upload = str_replace("\\", "/", substr($UploadLink, strpos($UploadLink, $DOWNLOAD), strlen($UploadLink)));
+
+					// ajout dans la base de données
+					$Query  = "insert into cours_items ";
+					$Query .= "values('', '$IDroot', '$IDcours', '".$_SESSION["CnxID"]."', '".$_SESSION["CnxIP"]."', '$date', '', '', '$date', '$Upload', '0', '', '0', '', '', '0', 'O')";
+
+					if ( $Upload != "" )
+						mysql_query($Query, $mysql_link);
+					}
+
+				if ( $page_cmde == "deleteFile" ) {
+					$Query  = "delete from cours_items ";
+					$Query .= "where _IDitem = '$IDitem' ";
+					$Query .= ( $_SESSION["CnxAdm"] == 255 ) ? "" : "AND _ID = '".$_SESSION["CnxID"]."' ";
+					$Query .= "limit 1";
+
+					if ( mysql_query($Query, $mysql_link) ) {
+						// effacer les documents sur le serveur...
+						}
+					}
+
+				if ( $page_cmde == "deleteWiki" ) {
+					$wk = new wiki;
+					$wk->delete((int) @$_GET["IDpage"]);
+					}
+//				break;
+
+			default :
+				//---- lecture des documents ----
+				if ( $wiki_cmde != "createFile" )
+					$line = readfiles($dir, $IDcours, $IDroot, $link, $line);
+				break;
+			}
+
+		//----- lecture des documents collaboratifs -----
+		$wk = new wiki;
+
+		// initialisation des variables de l'objet wiki
+		$wk->tag     = ( $wiki_tag )
+			? $wiki_tag								// lien interne
+			: "ECAMPUS_".$IDcours."_". date("Y-m-d-H-i-s") ;	// générateur ID unique peu rigoureux mais rapide
+		$wk->version = "$item.$IDroot";
+		$wk->admin   = (bool) ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $dir[5] );
+		$wk->user    = (bool) ( $dir[1] & pow(2, $_SESSION["CnxGrp"] - 1));
+		$wk->link    = myurlencode("index.php?item=$item&cmde=$cmde&IDcours=$IDcours&IDroot=$IDroot");
+
+		switch ( $wiki_cmde ) {
+			case "createFile" :
+				print("
+					<tr>
+						<td colspan=\"11\"><hr/></td>
+					</tr>
+					<tr>
+			                  <td colspan=\"11\">
+			       	");
+
+				$wk->rows  = 30;
+				$wk->title = $msg->read($COURS_DOCTITLE);
+				$wk->init(0);	// on crée le document
+
+				print("
+			                  </td>
+					</tr>
+					");
+				break;
+
+			default :
+				switch ( $wiki_cmde ) {
+					case "insert" :
+						$wk->insert($wiki_title, "", $_SESSION["CnxName"]);
+						break;
+					default :
+						break;
+					}
+
+				//---- lecture des documents ----
+				$Query  = "select _IDpage, _title, _date, _author, _ver, _owner ";
+				$Query .= "from wiki ";
+				$Query .= "where _ver = '$IDroot' AND _current = 'O' ";
+				$Query .= "AND _tag like 'ECAMPUS\_".$IDcours."\_%' ";
+
+				$result = mysql_query($Query, $mysql_link);
+				$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+				// suppression des fichiers
+				$req    = $msg->read($COURS_DELFILE);
+
+				while ( $row AND $page_cmde != "createFile" AND $page_cmde != "createUrl" AND $page_cmde != "createLink" ) {
+					$bgcolor = ( $line++ % 2 ) ? "item" : "menu" ;
+
+					$titre   = ( strpos($row[1], "\n") )
+						? substr($row[1], 0, strpos($row[1], "\n"))
+						: $row[1] ;
+					$titre   = ( strlen($titre) > 60 )
+						? substr($titre, 0, 60) . "..."
+						: $titre ;
+
+					// suppression des ressources
+					$isrm  = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxName"] == $row[3] )
+						? ""
+						: "disabled=\"disabled\"" ;
+
+					// affichage tableau
+					print("            
+						<tr class=\"$bgcolor\">
+      		    				<td class=\"align-center\"><img src=\"".$_SESSION["ROOTDIR"]."/images/mime/txt.gif\" title=\"\" alt=\"\" /></td>
+			       	         	<td>
+			       	         		<a href=\"".myurlencode("index.php?item=34&cmde=visu&IDroot=1&IDpage=$row[0]")."\">$titre</a><br/>
+								<span class=\"x-small\">".$msg->read($COURS_CREATEBY, date2longfmt($row[2])).", $row[3]</span>
+							</td>
+			       	         	<td></td>
+				       		<td class=\"align-center\"><label for=\"cbwiki_$row[0]\"><input type=\"checkbox\" id=\"cbwiki_$row[0]\" name=\"cbwiki[]\" value=\"$row[0]\" $isrm /></label></td>
+			       	         	<td></td>
+			       	         	<td></td>
+			       	         	<td class=\"align-center\">wiki</td>
+			       	         	<td></td>
+			       	         	<td></td>
+			       	         	<td></td>
+			       	         	<td></td>
+			       		</tr>
+			       		");
+
+					$row = remove_magic_quotes(mysql_fetch_row($result));
+					}
+				break;
+			}
+	?>
+	</table>
+
+	</form>
+
+	<hr/>
+
+	<?php
+		// bouton ajout document
+		$add  = ( $_SESSION["CnxAdm"] == 255 OR ($dir[1] & pow(2, $_SESSION["CnxGrp"] - 1)) )
+			? "<a href=\"".myurlencode("$link&IDroot=$IDroot&page_cmde=createFile")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/item-add.gif\" title=\"". $msg->read($COURS_ADDFILE) ."\" alt=\"". $msg->read($COURS_ADDFILE) ."\" /></a>"
+			: "" ;
+
+		// bouton édition document
+		$edit = ( $_SESSION["CnxAdm"] == 255 OR ($dir[1] & pow(2, $_SESSION["CnxGrp"] - 1)) )
+			? "<a href=\"".myurlencode("$link&IDroot=$IDroot&wiki_cmde=createFile")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/update.gif\" title=\"". $msg->read($COURS_CREATEDOC) ."\" alt=\"". $msg->read($COURS_CREATEDOC) ."\" /></a>"
+			: "" ;
+
+		// bouton ajout URL
+		$url  = ( $_SESSION["CnxAdm"] == 255 OR ($dir[1] & pow(2, $_SESSION["CnxGrp"] - 1)) )
+			? "<a href=\"".myurlencode("$link&IDroot=$IDroot&page_cmde=createUrl")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/world.gif\" title=\"". $msg->read($COURS_ADDURL) ."\" alt=\"". $msg->read($COURS_ADDURL) ."\" /></a>"
+			: "" ;
+
+		// bouton ajout doc server
+		$serv = ( $_SESSION["CnxAdm"] == 255 OR ($dir[1] & pow(2, $_SESSION["CnxGrp"] - 1)) )
+			? "<a href=\"".myurlencode("$link&IDroot=$IDroot&page_cmde=createLink")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/server.gif\" title=\"". $msg->read($COURS_ADDILINK) ."\" alt=\"". $msg->read($COURS_ADDILINK) ."\" /></a>"
+			: "" ;
+
+		print("
+	            <table class=\"width100\">
+			  <tr>
+           		      <td class= \"valign-middle\">$add $edit $url $serv</td>
+	                  <td class=\"valign-middle align-right\">[ <a href=\"".myurlencode("index.php?item=$item&IDmat=$IDmat&IDdata=$IDdata")."\">". $msg->read($COURS_BACK) ."</a> ]</td>
+			  </tr>
+	            </table>
+   	           	");
+	?>
+
+</div>

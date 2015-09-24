@@ -1,0 +1,460 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2002-2008 by Dominique Laporte(C-E-D@wanadoo.fr)
+   Copyright (c) 2006 by Nordine Zetoutou (nordine.zetoutou@educagri.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+/*
+ *		module   : user_ident.htm
+ *		projet   : la page d'identification
+ *
+ *		version  : 1.3
+ *		auteur   : laporte
+ *		creation : 20/10/02
+ *		modif    : 20/03/03 - par D. Laporte
+ *                     champ de saisie en hidden (sécurité)
+ *		           26/11/05 - par D. Laporte
+ *                     mode maintenance
+ *		           17/07/06 - Nordine Zetoutou
+ * 	                 migration des balises HTML en XHTML 1.0 strict
+ */
+
+
+// remarque : login automatique si les variables ID utilisateur $id et mot de passe $pwd sont renseignées
+$id       = ( @$_POST["id"] )		// ID utilisateur
+	? $_POST["id"]
+	: @$id ;
+
+$pwd      = ( @$_POST["pwd"] )	// mot de passe
+	? $_POST["pwd"]
+	: @$pwd ;
+
+$id       = addslashes(trim($id));
+$pwd      = addslashes(trim($pwd));
+$zip      = trim(@$_POST["zip"]);
+$idschool = (int) @$_POST["idschool"];
+
+
+//==== authentification par annuaire LDAP ====//
+require_once "Authentification/Authentification.php";
+//
+$oAuthentification = new Authentification();
+//on vérifie quel  mode d'authentification est mis en place
+$oBase = $oAuthentification->getAuthMode();
+//l'objet $oBase nous indique lequel ( si ldap ou cas )
+
+if ( is_object($oBase) )
+{
+	$bAuthentifie = false;
+	$bAuthMode    = true;
+	//	
+	switch ( $oBase->type )
+	{
+		case 'cas' :
+			require_once "Authentification/CAS/CAS/CAS.php";
+
+			// initialize phpCAS
+			phpCAS :: setDebug();
+
+			// initialize phpCAS
+			phpCAS :: client(CAS_VERSION_2_0, $oBase->host, $oBase->port, 'cas');
+
+			//si déconnexion
+			if ( isset($_SESSION['logout']) )
+			{
+				unset($_SESSION['logout']);
+				phpCAS::logout();
+			}//fin if
+
+			// force CAS authentication
+			phpCAS :: forceAuthentication();
+			//
+			
+			$userLogin=phpCAS::getUser();
+			//
+			if ( isset($userLogin) )
+			{
+				$bAuthentifie        = true;				
+				//on simule les submit de la page login
+				$_POST["submitAuth"] = "Valider";
+				$id                  = $userLogin;
+				$pwd                 = '-';				
+				
+			}
+			break;
+
+		default :		
+			if ( !empty($id) AND !empty($pwd) )
+			{
+				switch ( $oBase->type )
+				{
+					case 'openldap' :
+						//on redéfinit le dn spécifique à openldap
+						$oBase->dn = $oBase->login_field . '='.$id.',' . $oBase->dn;
+						break;
+						//
+					case 'activedirectory' :
+						break;
+						//
+				}
+
+				//on récupère soit un objet soit une chaine erreur 
+				$authentificationResult = $oAuthentification->ldap_authenticate($oBase, $id, $pwd);
+
+				//si c'est un objet
+				if ( is_object($authentificationResult) )
+				{
+					$bAuthentifie = true;
+					//
+					//on construit un objet de paramètres de mysql
+					$oMysql = new stdClass();
+
+					$SERVER       = 'localhost';
+					$oMysql->host = $SERVER;
+					$oMysql->db   = $DATABASE;
+					$oMysql->root = $USER;
+					$oMysql->port = '';
+					//
+					//on interroge la base mysql avec l'id ldap inséré lors de son importation
+					//on récupère un nouvel objet $oUser de mysql
+					$oMysqlUser = $oAuthentification->mysql_authenticate($oMysql, $authentificationResult->ldap_user_id);
+					//si n'existe pas dans la base mysql
+					if ( !is_object($oMysqlUser) )
+					{
+						$bMysqlUserExists = false;
+					} 
+					//
+				}
+				else
+				{
+					$bAuthentifie = false;
+				}
+			}
+			break;
+	} //fin switch
+	//
+}
+?>
+
+<div>
+	<form id="formulaire" action="index.php" method="post" class="form-signin">
+	
+	<div class="align-center">
+	<?php print($msg->read($USER_LOGIN)); ?>
+	<?php $msg->languageBanner("msg"); ?>
+	</div>
+	<br />
+	
+	<?php
+		print("
+			<p class=\"hidden\"><input type=\"hidden\" name=\"item\"     value=\"$item\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"cmde\"     value=\"$cmde\" /></p>
+			");
+
+
+		require_once "include/spip.php";
+
+		// maintenance de l'intranet
+		if ( $MAINTENANCE ) {
+			$query  = "select _nologin from config ";
+			$query .= "where _ident = '". $_SESSION["CfgIdent"] ."' AND _lang = '". $_SESSION["lang"] ."' ";
+			$query .= "limit 1";
+
+			$result = mysql_query($query, $mysql_link);
+			$row    = remove_magic_quotes(mysql_fetch_row($result));
+
+			$text   = ( $row ) ? find_typo($row[0], $note) : $msg->read($USER_CANTREACH) ;
+
+			print("
+		            <table class=\"width100\">
+		              <tr style=\"background-color:#eeeeee;\">
+		                <td style=\"width:10%;\" class=\"align-center\"><img src=\"".$_SESSION["ROOTDIR"]."/images/warning.png\" title=\"\" alt=\"\" /></td>
+		                <td>$text</td>
+		              </tr>
+		            </table>
+				");
+			}
+
+		// paramétrage de l'intranet
+		if ( $_SESSION["CfgIdent"] == "default" )
+			print("
+				<p style=\"background-color:#eeeeee; padding:2px; margin-top:0px;\">
+					". $msg->read($USER_DOINSTALL, $_SESSION["ROOTDIR"]."/config_init.php") ."
+				</p>
+				");
+
+		// création de compte
+		list($iscreat, $nil) = explode(":", $AUTHUSER);
+		$create = ( $iscreat )
+			? $msg->read($USER_CREATEACCOUNT, @$_SESSION["CnxAdm"] ? "index.php?item=1000&amp;cmde=new" : "index.php?item=1000")
+			: "" ;
+
+		// message d'accueil à la connexion
+		if ( strlen($_SESSION["CfgLogin"]) )
+			print("
+				<p>
+				<img src=\"".$_SESSION["ROOTDIR"]."/images/hand.gif\" title=\"\" alt=\"\" /> ".stripslashes(find_typo($_SESSION["CfgLogin"], $note)) ."
+				</p>");
+
+            if ( @$_POST["submitAuth"] == "Valider" OR	// l'utilisateur a validé
+//            if ( @$_POST["valid_x"] OR	// l'utilisateur a validé
+            	(strlen($id) AND strlen($pwd)) ) {		// ou on procède à une identification automatique
+
+			if ( $HOSTING ) {
+				$query  = "select _ident from p2p_data ";
+				$query .= "where _visible = 'O' AND _public = 'O' AND _IDdata = '$idschool' ";
+				$query .= "limit 1";
+
+				$result = mysql_query($query, $mysql_link);
+				$row    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+				if ( $row ) {
+//					$ROOTDIR = "";
+					$CFGDIR  = $_SESSION["CFGDIR"]."/host/$idschool" . "-" . stripaccent(str_replace(' ', '', strtolower($row[0])));
+
+					require "$CFGDIR/config.php";
+//die("$DATABASE...");
+
+// connexion à la base de données
+if ( !mysql_select_db($DATABASE, $mysql_link) )
+die("iech");
+//if ( mysql_close($mysql_link) )
+//else
+//$mysql_link = connectDatabase($SERVER, $USER, $PASSWD, $DATABASE, $SERVPORT, $PERSISTENT);
+					}
+				}
+
+			// pour éviter les injections SQL
+            	$pwd = str_replace(" ", "-", trim($pwd));
+
+            	// vérification de l'identité
+			$query  = "select _ID, _date, _cnx, _persistent, _sexe, _adm, _IDcentre, _name, _IDgrp, _passwd, _signature, _delay, _fname, _IDclass ";
+			$query .= "from user_id ";
+			// - si un mode d'authentification externe est trouvé
+			// - et l'utilisateur authentifié
+			if ( isset ($bAuthMode) )
+				$query .= ( $bAuthentifie == false )
+					// on supprime $id ainsi on lui recharge le formulaire de login
+					? "where _ident = '' "
+					// le mot de passe n'est plus indispensable	
+					: "where _ident = '$id' " ;
+			else
+				$query .= "where _ident = '$id' AND _passwd = '$pwd' ";
+			$query .= "limit 1";
+
+			if ( $DEBUG )
+				print($query);
+
+			$result = mysql_query($query, $mysql_link);
+
+			// a-t-on trouvé une valeur ?
+			if ( mysql_affected_rows($mysql_link) == 1 ) {
+				$row    = remove_magic_quotes(mysql_fetch_row($result));
+
+				// on récupère les informations sur l'utilisateur...
+				// attention aux comptes non validés
+				if ( $row[5] AND !timeoutSession($row[0]) ) {
+					$_SESSION["CnxID"]     = $row[0];						// ID de l'utilisateur
+					$_SESSION["CnxPers"]   = $row[3];						// connexion persistante pour l'utilisateur
+					$_SESSION["CnxSex"]    = $row[4];						// Sexe de l'utilisateur (A pour une connexion Anonyme)
+					$_SESSION["CnxAdm"]    = $row[5];						// Droits de connexion de l'utilisateur
+					$_SESSION["CnxCentre"] = $row[6];						// centre de formation
+					$_SESSION["CnxName"]   = formatUserName($row[7], $row[12]);		// Nom de connexion de l'utilisateur
+					$_SESSION["CnxGrp"]    = $row[8];						// Groupe de connexion de l'utilisateur
+					$_SESSION["CnxPasswd"] = $row[9];						// mot de passe (vérification si vide)
+					$_SESSION["CnxSign"]   = $row[10];						// signature forum, ...
+					$_SESSION["CnxClass"]  = $row[13];						// classe de l'élève
+					}
+
+				// ... puis on met à jour la date de dernière connexion
+				$date    = date("Y-m-d H:i:s");
+
+				$query   = "update user_id ";
+				if ( !timeoutSession($row[0]) ) {
+					$query  .= "set _lastcnx = ";
+					$query  .= ( $row[2] ) ? "'$row[1]', " : "'$date', " ;
+					$query  .= "_date = '$date', ";
+					$query  .= "_cnx = _cnx + 1 ";
+					$query  .= "where _ID = '".$_SESSION["CnxID"]."' ";
+					}
+				else {
+					$query  .= "set _adm = '0' ";
+					$query  .= "where _ID = '$row[0]' ";
+					}
+				$query  .= "limit 1";
+
+				if ( !mysql_query($query, $mysql_link) )
+					sql_error($mysql_link);
+				else {
+					// vérification du mode maintenance
+					if ( $MAINTENANCE AND $row[5] != 255 )
+						print("<p style=\"color:#FF0000\">". $msg->read($USER_NOPERM) ."</p>");	          
+					else {
+						// recherche des droits d'accès
+						$query  = "select _dstart, _dend, _hstart, _hend from user_denied ";
+						$query .= "where _IDcentre = '".$_SESSION["CnxCentre"]."' AND _IDgrp = '".$_SESSION["CnxGrp"]."' ";
+						$query .= "limit 1";
+
+						@mysql_query($query, $mysql_link);
+
+						if ( mysql_affected_rows($mysql_link) AND $row[5] != 255 )
+							print("<p style=\"color:#FF0000;\">". $msg->read($USER_DENIED) ."</p>");
+						else
+							// vérification du compte
+							if ( $_SESSION["CnxAdm"] ) {
+								// enregistrement de l'adresse IP de connexion
+								$_SESSION["CnxIP"]  = SessionIP();
+
+								if ( !mysql_query("update user_id set _IP = '".$_SESSION["CnxIP"]."' where _ID = '".$_SESSION["CnxID"]."' limit 1", $mysql_link) )
+									sql_error($mysql_link);
+
+								// enregistrement de la session de l'utilisateur 
+								$_SESSION["sessID"] = updateSessionID(@$_SESSION["sessID"]);
+
+								// enregistrement des logs
+								if ( $TIMELOG ) {
+									// on efface les logs trops anciens
+									$Query  = "DELETE FROM stat_log ";
+									$Query .= "WHERE _date < '". date("Y-m-d H:i:s", (time() - $TIMELOG)) ."' ";
+							
+									if ( !mysql_query($Query, $mysql_link) )
+										sql_error($mysql_link);
+									}
+
+								if ( !mysql_query("insert into stat_log values('".date("Y-m-d H:i:s")."', '".$_SESSION["CnxID"]."', '', '".@$_SERVER["REMOTE_ADDR"]."', 'C')", $mysql_link) )
+									sql_error($mysql_link);
+
+								// accés au menu de l'intranet
+								print("<script type=\"text/javascript\"> window.location.replace('index.php', '_self'); </script>");
+								}
+							else
+								print("<p style=\"color:#FF0000;\"><strong>". $msg->read($USER_ACCOUNTCLOSE) ."</strong></p>");
+						}
+					}
+		            }    
+			// sinon on affiche l'erreur        
+			else {
+				if ( $HOSTING AND !$idschool )
+					print("<p style=\"color:#FF0000;\"><strong>". $msg->read($USER_NOTVALIDSCHOOL) ."</strong></p>");
+				else {
+					print("<p style=\"color:#FF0000;\"><strong>". $msg->read($USER_NOTVALID) ."</strong></p>");
+
+					// on trace...
+					mysql_query("insert into stat_log values('".date("Y-m-d H:i:s")."', '".$_SESSION["CnxID"]."', '$id', '".@$_SERVER["REMOTE_ADDR"]."', 'X')", $mysql_link);
+					}
+				}
+	        	}
+            ?>
+
+		<table  class="width100">
+		  <tr>
+			<td class="align-center">
+
+			<div>
+				<table class="width100">
+				<?php
+					if ( $HOSTING ) {
+						print("
+							  <tr>
+								<td class=\"align-right\">". $msg->read($USER_SCHOOL) ."</td>
+								<td class=\"align-left\">");
+
+							$query  = "select distinctrow _zip from p2p_data ";
+							$query .= "where _visible = 'O' AND _public = 'O' ";
+							$query .= "order by _zip";
+
+							$result = mysql_query($query, $mysql_link);
+							$row    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+						print("
+							<label for=\"zip\">
+							<select id=\"zip\" name=\"zip\" onchange=\"document.forms.formulaire.submit()\" >
+								<option value=\"0\">". $msg->read($USER_ZIPCODE) ."</option>");
+
+							while ( $row ) {
+								$select = ( $row[0] == $zip ) ? "selected=\"selected\"" : "" ;
+
+								print("<option value=\"$row[0]\" $select>$row[0]</option>");
+
+								$row    = mysql_fetch_row($result);
+								}
+
+						print("</select>");
+						print("</label> - ");
+
+							$query  = "select _IDdata, _ident from p2p_data ";
+							$query .= "where _visible = 'O' AND _public = 'O' AND _zip = '$zip' ";
+							$query .= "order by _ident";
+
+							$result = mysql_query($query, $mysql_link);
+							$row    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+						print("
+							<label for=\"idschool\">
+							<select id=\"idschool\" name=\"idschool\" >
+								<option value=\"0\">&nbsp;</option>");
+
+							while ( $row ) {
+								$select = ( $row[0] == $idschool ) ? "selected=\"selected\"" : "" ;
+
+								print("<option value=\"$row[0]\" $select>$row[1]</option>");
+
+								$row = remove_magic_quotes(mysql_fetch_row($result));
+								}
+
+						print("</select>");
+						print("</label>");
+
+						print("
+								<a href=\"#\" onclick=\"popWin('".$_SESSION["ROOTDIR"]."/server.php?key=$myrow[1]&amp;lang=".$_SESSION["lang"]."&amp;public=O', '470', '560'); return false;\">
+								<img src=\"". $_SESSION["ROOTDIR"] ."/images/ip.gif\" title=\"". $msg->read($USER_GETKEY) ."\" alt=\"". $msg->read($USER_GETKEY) ."\" />
+								</a>
+							  </td>
+							</tr>");
+						}
+				?>
+				  <tr>
+					<td class="align-left">
+						<label style="width: 100%" for="id"><input type="text" id="id" name="id" size="20" class="input-block-level" placeholder="<?php print($msg->read($USER_USERID)); ?>" /></label>
+					</td>
+				  </tr>
+				  <tr>
+					<td class="align-left">
+						<label style="width: 100%" for="pwd"><input type="password" id="pwd" name="pwd" size="20" class="input-block-level" placeholder="<?php print($msg->read($USER_PASSWORD)); ?>" /></label>
+						<p class="hidden"><input type="hidden" name="submitAuth" value="Valider" /></p>
+					</td>
+				  </tr>
+				</table>
+			</div>
+			
+			<button class="btn btn-large btn-primary" type="submit" name="valid"><?php print($msg->read($USER_INPUTOK)); ?></button>
+			<hr />
+			
+			</td>
+		  </tr>
+		  <tr>
+			<td class="align-center"><?php print($msg->read($USER_LOSTPASSWD, myurlencode("index.php?item=1&cmde=lost"))); ?></td>
+		  </tr>
+		  <tr>
+			<td class="align-center"><?php print("$create"); ?></td>
+		  </tr>
+		</table>
+
+		
+
+	</form>

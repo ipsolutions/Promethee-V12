@@ -1,0 +1,53 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2006 by Dominique Laporte(C-E-D@wanadoo.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : ldap2mysql.htm
+ *		projet   : appel à l'implémentation d'authentification LDAP
+ *
+ *		version  : 1.0
+ *		auteur   : laporte
+ *		creation : 3/12/06
+ *		modif    :
+ */
+?>
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($LDA2MYSQL_TITLE)); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+
+	<?php
+		if ( !function_exists('ldap_connect') )
+			print("". $msg->read($LDA2MYSQL_ERRLIB) ."");
+		else {
+			require "Ldap2mysql.php";
+
+			$oLdap2Mysql = new Ldap2Mysql();
+			$oLdap2Mysql->run();
+			}
+	?>
+
+</div>

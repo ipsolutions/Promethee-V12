@@ -1,0 +1,378 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2003-2007 by Dominique Laporte(C-E-D@wanadoo.fr)
+   Copyright (c) 2006 by Didier Roy (miraceti@free.fr)   
+   Copyright (c) 2006 by Nordine Zetoutou (nordine.zetoutou@educagri.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : spip.htm
+ *		projet   : la page des publications par Internet
+ *
+ *		version  : 1.1
+ *		auteur   : laporte
+ *		creation : 6/09/03
+ *		modif    : 16/06/06 - par Didier Roy
+ *		           migration PHP5 
+ *		           17/07/06 - Nordine Zetoutou
+ * 	                 migration des balises HTML en XHTML 1.0 strict
+ */
+
+
+$IDflash = (int) @$_GET["IDflash"];		// ID du flash info
+$IDroot   = ( @$_POST["IDroot"] )		// ID répertoire racine
+	? (int) $_POST["IDroot"]
+	: (int) @$_GET["IDroot"] ;
+$skpage  = ( @$_GET["skpage"] )		// n° de la page affichée
+	? (int) $_GET["skpage"]
+	: 1 ;
+$skshow  = ( @$_GET["skshow"] )		// n° du flash info
+	? (int) $_GET["skshow"]
+	: 1 ; 
+
+$submit  = @$_GET["submit"];			// bouton de validation
+?>
+
+
+<?php
+	// seul le big chef peut supprimer une publication
+	if ( $_SESSION["CnxAdm"] == 255 )
+		switch ( $submit ) {
+			case "del" :	// on efface la publi
+				$Query  = "delete from flash ";
+				$Query .= "where _IDflash = '$IDflash' ";
+				$Query .= "limit 1";
+
+				if ( !mysql_query($Query, $mysql_link) )
+					mysql_error($mysql_link);
+				else {
+					// et on efface les articles associées
+					$Query  = "delete from flash_data, flash_items ";
+					$Query .= "where _IDflash = '$IDflash' ";
+					$Query .= "AND flash_items._IDinfos = flash_info._IDinfos";
+
+					mysql_query($Query, $mysql_link);
+					}
+				break;
+
+			case "deldir" :	// on efface le répertoire
+				$query  = "delete from flash_root ";
+				$query .= "where _IDroot = '".@$_GET["mydir"]."' ";
+				$query .= ( $_SESSION["CnxAdm"] == 255 ) ? "" : "AND _IDmod = '".$_SESSION["CnxID"]."' ";
+				$query .= "limit 1";
+
+				mysql_query($query, $mysql_link);
+				break;
+
+			case "fermer" :	// fermer le dossier
+			case "ouvrir" :	// ouvrir le dossier
+				$Query  = "update flash_root ";
+				$Query .= ( $submit == "fermer" ) ? "set _visible = 'N' " : "set _visible = 'O' ";
+				$Query .= "where _IDroot = '".@$_GET["IDdir"]."' ";
+				$Query .= ( $_SESSION["CnxAdm"] == 255 ) ? "" : "AND _ID = '".$_SESSION["CnxID"]."' ";
+				$Query .= "limit 1";
+
+				mysql_query($Query, $mysql_link);
+				break;
+
+			default :
+				break;
+			}
+?>
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($SPIP_LIST)); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+
+	<p style="margin-top:0px; margin-bottom:10px; text-align:justify">
+	<?php print($msg->read($SPIP_DISCLAIMER)); ?>
+	</p>
+
+	<?php
+         	// option restreinte aux élèves
+         	if ( getAccess() == 2 ) {
+			$add    = ( $_SESSION["CnxAdm"] == 255 OR ($grpwr & pow(2, $_SESSION["CnxGrp"] - 1)) )
+				? "<a href=\"".myurlencode("index.php?item=$item&cmde=newdir&IDparent=$IDroot")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/folder-new.gif\" title=\"". $msg->read($SPIP_NEWDIR) ."\" alt=\"". $msg->read($SPIP_NEWDIR) ."\"/></a>"
+				: "" ;
+
+			$result = mysql_query("select _ident, _IDparent from flash_root where _IDroot = '$IDroot' limit 1", $mysql_link);
+			$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+			$mydir  = ( $row ) ? $row[0] :  $msg->read($SPIP_ROOTDIR) ;
+
+         		print("
+		            <table class=\"width100\">
+		              <tr>
+		                <td style=\"width:10%\" class=\"valign-middle\">
+		                	<a href=\"index.php?item=$item&amp;cmde=new\"><img src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/post.gif\" title=\"\" alt=\"\" /></a>
+		                </td>
+		                <td class=\"valign-middle\">". $msg->read($SPIP_NEWPUBLI) ."</td>
+		                <td class=\"valign-middle align-right\">[$add $mydir ]</td>
+		              </tr>
+		            </table>
+		            ");
+			}
+	?>
+
+            <table class="width100">
+              <tr  class="align-center" style="background-color:#c0c0c0;">
+                <td colspan="2" style="width:40%;"><?php print($msg->read($SPIP_PUBLICATION)); ?></td>
+                <td style="width:20%;"><?php print($msg->read($SPIP_MODO)); ?></td>
+                <td style="width:20%;"><?php print($msg->read($SPIP_VALIDATION)); ?></td>
+                <td style="width:20%;"><?php print($msg->read($SPIP_ARTICLE)); ?></td>
+              </tr>
+
+	<?php
+		require_once "include/user.php";
+		$acl = new user_acl("flash");
+
+		// accès au répertoire parent
+         	if ( $IDroot )
+			print("
+				<tr class=\"item\">
+   			        <td style=\"width:1%;\" class=\"align-center\">
+   					<img src=\"".$_SESSION["ROOTDIR"]."/images/folder-up.gif\" title=\"\" alt=\"..\" />
+				  </td>
+     		    		  <td style=\"width:39%;\">
+					<a href=\"".myurlencode("index.php?item=$item&IDroot=$row[1]")."\">". $msg->read($SPIP_PARENTDIR) ."</a>
+				  </td>
+     		    		  <td></td>
+				  <td></td>
+				  <td></td>
+				</tr>
+				");
+
+		//---- lecture des répertoires ----
+		$Query  = "select _IDroot, _ident, _IDmod, _IDgrprd, _visible, _IDparent, _ID, _date from flash_root ";
+		$Query .= "where _IDparent = '$IDroot' " ;
+		$Query .= "order by _ident";
+
+		$result = ( $skpage == 1 ) ? mysql_query($Query, $mysql_link) : 0 ;
+		$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+		$i = 0;
+		while ( $row ) {
+			// accès protégé en lecture
+			if ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $row[2] OR $_SESSION["CnxID"] == $row[6] OR ($row[3] & pow(2, $_SESSION["CnxGrp"] - 1) AND $row[4] == "O") ) {
+				$bgcol  = ( $i++ % 2 ) ? "item" : "menu" ;
+
+				// détermination du nombre de répertoires
+				$return = mysql_query("select _IDroot from flash_root where _IDparent = '$row[0]'", $mysql_link);
+				$nbr    = ( $return ) ? mysql_affected_rows($mysql_link) : 0 ;
+
+				$msg->isPlural = (bool) ( $nbr > 1 );
+				$text   = "(". $msg->read($SPIP_NBDIR, strval($nbr)) .", ";
+
+				// détermination du nombre de publications
+				$return = mysql_query("select _IDitem from flash_items where _IDroot = '$row[0]'", $mysql_link);
+				$nbd    = ( $return ) ? mysql_affected_rows($mysql_link) : 0 ;
+
+				$msg->isPlural = (bool) ( $nbd > 1 );
+				$text  .= $msg->read($SPIP_NBFILE, strval($nbd)) .")";
+
+				// accés des répertoires
+				$file   = ( $row[4] == "O" ) ? "folder-closed.gif" : "folder-lock.jpg" ;
+				$action = ( $row[4] == "O" ) ? $msg->read($SPIP_CLOSING)   : $msg->read($SPIP_OPENING) ;
+				$access = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $row[2] )
+					? "<a href=\"".myurlencode("index.php?item=$item&IDroot=$IDroot&IDdir=$row[0]&submit=$action")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/$file\" title=\"$action\" alt=\"$action\" /></a>"
+					: "<img src=\"".$_SESSION["ROOTDIR"]."/images/$file\" title=\"\" alt=\"\" />" ;
+
+				$link   = "<a href=\"". myurlencode("index.php?item=$item&IDroot=$row[0]")."\">$row[1]</a>";
+
+				// suppression du répertoire
+				$req   = $msg->read($SPIP_ERASE, str_replace('"', '&quot;', $row[1]));
+				$del   = ( !$nbr AND !$nbd AND ($_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $row[2]) )
+					? "<a href=\"".myurlencode("index.php?item=$item&IDroot=$IDroot&mydir=$row[0]&submit=deldir")."\" onclick=\"return confirmLink(this, '$req');\"><img src=\"".$_SESSION["ROOTDIR"]."/images/corb.gif\" title=\"$req\" alt=\"$req\" /></a>"
+					: "" ;
+
+				// modification du répertoire
+				$maj   = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $row[2] )
+					? "<a href=\"".myurlencode("index.php?item=$item&cmde=newdir&IDroot=$row[0]&IDparent=$IDroot")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/stats/post.gif\" title=\"". $msg->read($SPIP_MODIFICATION) ."\" alt=\"". $msg->read($SPIP_MODIFICATION) ."\" /></a>"
+					: "" ;
+
+				print("
+					<tr class=\"$bgcol\">
+	   			        <td style=\"width:1%;\" class=\"align-center\">$access</td>
+     		    			  <td style=\"width:39%;\">
+     		    		  		$link $del $maj<br/>
+      		    		  	<span class=\"x-small\">$text</span>
+      		    		  </td>
+	     		    		  <td></td>
+					  <td></td>
+					  <td></td>
+					</tr>
+     					");
+				}
+
+			$row = remove_magic_quotes(mysql_fetch_row($result));
+			}
+
+		//---- lecture de la base de données ----
+		$Query  = "select _IDflash, _IDmod, _date, _title, _visible, _lock, _private, _texte from flash ";
+		$Query .= "where _type = 'P' AND _IDroot = '$IDroot' ";
+		$Query .= "AND _lang = '".$_SESSION["lang"]."' ";
+		$Query .= ( $_SESSION["CnxAdm"] == 255 )
+			? "" 
+			: "AND (_visible = 'O' OR _IDmod = '".$_SESSION["CnxID"]."') AND (_IDgrprd & ". pow(2, $_SESSION["CnxGrp"] - 1) .") ";
+		$Query .= "order by _IDflash desc";
+
+		// détermination du nombre de pages
+		$result = mysql_query($Query, $mysql_link);
+		$nbelem = ( $result ) ? mysql_affected_rows($mysql_link) : 0 ;
+
+		$page  = $nbelem;
+		$show   = 1;
+
+		if ( $nbelem ) {
+			$page  = ( $page % $MAXPAGE )
+				? (int) ($page / $MAXPAGE) + 1
+				: (int) ($page / $MAXPAGE) ;
+
+			$show  = ( $page % $MAXSHOW )
+				? (int) ($page / $MAXSHOW) + 1
+				: (int) ($page / $MAXSHOW) ;
+
+			// initialisation
+			$i     = 1;
+			$first = 1 + (($skpage - 1) * $MAXPAGE);
+			$pos   = $first;
+				
+			// se positionne sur la page ad hoc
+			mysql_data_seek($result, $first - 1);
+			$row   = remove_magic_quotes(mysql_fetch_row($result));
+
+			while ( $row AND $i <= $MAXPAGE ) {
+				$bgcol = ( $i % 2 ) ? "item" : "menu" ;
+
+				// visualisation des publis fermées
+				$img  = ( $row[4] == "O" ) ? "file.gif" : "lock.gif" ;
+
+				// visualisation des publis en cours d'écriture
+				$lck  = ( $row[5] == "N" ) ? "<img src=\"".$_SESSION["ROOTDIR"]."/images/minipost.gif\" title=\"". $msg->read($SPIP_WRITING, $row[5]) ."\" alt=\"". $msg->read($SPIP_WRITING, $row[5]) ."\" />" : "" ;
+
+				// description du menu popup sur le lien
+				$desc =  $msg->read($SPIP_CREATBY) ." $row[2]<br/>$row[7]";
+
+				$desc = str_replace(Array("'", "\n", "\r"), Array("\'", "<br/>", ""), $desc);
+
+				// la publication est-elle privée ?
+				if ( $row[6] == "O" ) {
+					$priv = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $row[1] )
+						? "<a href=\"index.php?item=1&amp;cmde=acl&amp;ident=flash&amp;IDident=$row[0]\"><img src=\"".$_SESSION["ROOTDIR"]."/images/invisible.gif\" title=\"". $msg->read($SPIP_PRIVATE) ."\" alt=\"". $msg->read($SPIP_PRIVATE) ."\" /></a>"
+						: "<img src=\"".$_SESSION["ROOTDIR"]."/images/invisible.gif\" title=\"". $msg->read($SPIP_PRIVATE) ."\" alt=\"". $msg->read($SPIP_PRIVATE) ."\" />" ;
+					$link = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $row[1] OR $acl->isMember($row[0], $_SESSION["CnxID"]) )
+						? "<a href=\"index.php?item=$item&amp;cmde=visu&amp;IDflash=$row[0]\" class=\"overlib\">$row[3]<span>$desc</span></a>"
+						: $row[3] ;
+					}
+				else {
+					$priv = "";
+					$link = "<a href=\"index.php?item=$item&amp;cmde=visu&amp;IDflash=$row[0]\" class=\"overlib\">$row[3]<span>$desc</span></a>";
+					}
+
+				// nombre total d'articles en attente de validation
+				$qry  = "select _IDitem from flash_items, flash_data ";
+				$qry .= "where flash_data._IDinfos = flash_items._IDinfos ";
+				$qry .= "AND flash_data._IDflash = '$row[0]' ";
+
+				$res  = mysql_query("$qry AND flash_items._visible = 'N'", $mysql_link);
+				$val  = ( $res ) ? mysql_numrows($res) : 0 ;				
+
+				// nombre total d'articles visualisables
+				$res  = mysql_query("$qry AND flash_items._visible = 'O'", $mysql_link);
+				$tot  = ( $res ) ? mysql_numrows($res) : 0 ;				
+
+				// suppression des publis
+				$req  = "Supprimer la publication $row[3] ?";
+				$del  = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $row[1] )
+					? "<a href=\"index.php?item=$item&amp;IDflash=$row[0]&amp;submit=del\" onclick=\"return confirmLink(this, '$req');\"><img src=\"".$_SESSION["ROOTDIR"]."/images/corb.gif\" title=\"". $msg->read($SPIP_DELETE) ."\" alt=\"". $msg->read($SPIP_DELETE) ."\" /></a>"
+					: "" ;
+
+				// modification des publis
+				$maj  = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $row[1] )
+					? "<a href=\"index.php?item=$item&amp;cmde=new&amp;IDflash=$row[0]\"><img src=\"".$_SESSION["ROOTDIR"]."/images/stats/post.gif\" title=\"". $msg->read($SPIP_UPDATE) ."\" alt=\"". $msg->read($SPIP_UPDATE) ."\" /></a>"
+					: "" ;
+
+				// backoffice des publis
+				$bck  = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $row[1] )
+					? "<a href=\"index.php?item=$item&amp;cmde=gestion&amp;IDflash=$row[0]\"><img src=\"".$_SESSION["ROOTDIR"]."/images/tools.gif\" title=\"". $msg->read($SPIP_PARAM) ."\" alt=\"". $msg->read($SPIP_PARAM) ."\" /></a>"
+					: "" ;
+
+				print("            
+					<tr class=\"$bgcol\">
+       			         <td style=\"width:1%;\"><img src=\"".$_SESSION["ROOTDIR"]."/images/$img\" title=\"\" alt=\"\" /></td>
+          		    	         <td style=\"width:39%;\">
+          		    		  	$link &nbsp;$lck $priv $del $maj $bck
+	          		         </td>
+		       	          <td class=\"align-center\">". getUserName($row[1]) ."</td>
+				          <td class=\"align-center\">$val</td>
+				          <td class=\"align-center\">$tot</td>
+	       		       </tr>
+	       		       ");
+              
+				$row = remove_magic_quotes(mysql_fetch_row($result));
+				$i++;
+				}
+			}
+	?>
+
+            </table>
+
+	<?php
+		// bouton précédent
+		$where = $skshow - 1;
+		if ( $skshow == 1 )
+			$prev = "";
+		else {
+			$skpg = 1 + (($skshow - 2) * $MAXSHOW);
+			$prev = "[<a href=\"index.php?item=$item&amp;skpage=$skpg&amp;skshow=$where\">". $msg->read($SPIP_PREV) ."</a>]";
+			}
+
+		// liens directs sur n° de page
+		$start = 1 + (($skshow - 1) * $MAXSHOW);
+		$end   = $skshow * $MAXSHOW;
+
+		$choix = ( $skpage == $start )
+			? "<img src=\"".$_SESSION["ROOTDIR"]."/images/nav_left.gif\" title=\"«\" alt=\"«\" /><strong>$start</strong><img src=\"".$_SESSION["ROOTDIR"]."/images/nav_right.gif\" title=\"»\" alt=\"»\" />"
+			: "<a href=\"index.php?item=$item&amp;skpage=$start&amp;skshow=$skshow\">$start</a>" ;
+
+		for ($j = $start + 1; $j <= $end AND $j <= $page; $j++)
+			$choix .= ( $skpage == $j )
+				? "|<img src=\"".$_SESSION["ROOTDIR"]."/images/nav_left.gif\" title=\"«\" alt=\"«\" /><strong>$j</strong><img src=\"".$_SESSION["ROOTDIR"]."/images/nav_right.gif\" title=\"»\" alt=\"»\" />"
+				: "|<a href=\"index.php?item=$item&amp;skpage=$j&amp;skshow=$skshow\">$j</a>" ;
+
+		// bouton suivant
+		$where = $skshow + 1;
+		$next  = ( $skshow == $show )
+			? ""
+			: "[<a href=\"index.php?item=$item&amp;skpage=$j&amp;skshow=$where\">". $msg->read($SPIP_NEXT) ."</a>]" ;
+	?>
+
+	      <hr/>
+			<?php if ( $nbelem ) print("<div style=\"text-align:center;\">$prev $choix $next</div>"); ?>
+		<hr/>
+            
+		<!-- recherche d'un article dans les publications -->
+		<img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/search.gif" title="" alt="" />
+		<?php print($msg->read($SPIP_SEARCH, "index.php?item=91&amp;cmde=search&amp;rub=5")); ?>
+
+</div>

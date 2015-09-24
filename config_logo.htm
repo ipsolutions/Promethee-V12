@@ -1,0 +1,201 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2008 by Dominique Laporte(C-E-D@wanadoo.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : config_logo.htm
+ *		projet   : paramétrage des images du bandeau
+ *
+ *		version  : 1.0
+ *		auteur   : laporte
+ *		creation : 16/03/08
+ *		modif    : 
+ */
+
+
+$IDconf = ( @$_POST["IDconf"] )					// ID de la configuration
+	? (int) $_POST["IDconf"]
+	: (int) @$_GET["IDconf"] ;
+?>
+
+
+<?php
+	require_once "include/gallery.php";
+
+	// vérification des autorisations
+	admSessionAccess();
+
+	if ( @$_POST["valid_x"] ) {
+		// évite le "scintillement" (cf css)
+		copy($_SESSION["ROOTDIR"]."/download/logos/". $_SESSION["CfgIdent"] ."/logo01.jpg", "download/logos/logo01.jpg");
+
+		$cb   = @$_POST["cb"];
+		$del  = @$_POST["del"];
+		$file = @$_FILES["UploadFile"]["tmp_name"];
+
+		// suppression des images
+		for ($i = 0; $i < count($del); $i++)
+			if ( mysql_query("delete from config_logo where _IDlogo = '$del[$i]' limit 1", $mysql_link) )
+				@unlink($_SESSION["ROOTDIR"]."/download/logos/". rawurlencode($_SESSION["CfgIdent"]) ."/logo01-$del[$i].jpg");
+
+		// rendre les images accessibles
+		mysql_query("update config_logo set _visible = 'N'", $mysql_link);
+
+		for ($i = 0; $i < count($cb); $i++)
+			mysql_query("update config_logo set _visible = 'O' where _IDlogo = '$cb[$i]' limit 1", $mysql_link);
+
+		// transfert des fichiers
+		for ($i = 0; $i < count($file) && @$file[$i]; $i++) {
+			$Query  = "insert into config_logo ";
+			$Query .= "values('', 'O')";
+
+			if ( mysql_query($Query, $mysql_link) ) {
+				// copie du fichier temporaire -> répertoire de stockage
+				move_uploaded_file($file[$i], $_SESSION["ROOTDIR"]."/download/logos/". $_SESSION["CfgIdent"] ."/logo01-".mysql_insert_id().".jpg");
+				}
+			}
+		}
+?>
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($CONFIG_TUNING)); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+
+	<hr style="width:80%; text-align:center;" />
+
+	<form id="formulaire" action="index.php" method="post" enctype="multipart/form-data">
+	<?php
+		print("
+			<p class=\"hidden\"><input type=\"hidden\" name=\"item\"    value=\"$item\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"cmde\"    value=\"$cmde\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"IDconf\"  value=\"$IDconf\" /></p>
+			");
+	?>
+
+        <table style="margin-left: 10%; width: 80%">
+          <tr style="background-color:#c0c0c0;">
+		<td class="align-center" style="width:1%;">
+			<img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/corb.gif" title="<?php print($msg->read($CONFIG_DELETE)); ?>" alt="" />
+		</td>
+		<td class="align-center" style="width:1%;">
+			<img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/visible.gif" title="<?php print($msg->read($CONFIG_SHOWLINK)); ?>" alt="" />
+		</td>
+		<td class="align-center" style="width:20%;">
+			<?php print($msg->read($CONFIG_IMGSIZE)); ?>
+		</td>
+		<td style="width:78%;">
+			<?php print($msg->read($CONFIG_MYLOGO)); ?>
+		</td>
+          </tr>
+
+	<?php
+		// logo par défaut
+		$file   = $_SESSION["ROOTDIR"]."/download/logos/". $_SESSION["CfgIdent"] ."/logo01.jpg";
+		$link   = "<a href=\"".$_SESSION["ROOTDIR"]."/download/logos/". rawurlencode($_SESSION["CfgIdent"]) ."/logo01.jpg\" onclick=\"window.open(this.href, '_blank'); return false;\">$file</a>";
+
+		imageSize($file, $srcWidth, $srcHeight);
+
+		print("
+			<tr class=\"item\">
+				<td class=\"align-center\"><input type=\"checkbox\" disabled=\"disabled\" /></td>
+				<td class=\"align-center\"><input type=\"checkbox\" disabled=\"disabled\" /></td>
+				<td class=\"align-center\"><strong>$srcWidth x $srcHeight</strong></td>
+				<td>$link</td>
+			</tr>
+			");
+
+		// lecture de la base de données des logos du bandeau
+		$Query  = "select _IDlogo, _visible from config_logo ";
+		$Query .= "order by _IDlogo";
+
+		$result = mysql_query($Query, $mysql_link);
+		$row    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+		$i = 0;
+		while ( $row OR $i < 10 ) {
+			$bgcolor = ( $i++ % 2 ) ? "item" : "menu" ;
+
+			// affichage du lien
+			$check   = ( $row[1] == "O" ) ? "checked=\"checked\"" : "" ;
+
+			$file    = $_SESSION["ROOTDIR"]."/download/logos/". $_SESSION["CfgIdent"] ."/logo01-$row[0].jpg";
+			$link    = "<a href=\"".$_SESSION["ROOTDIR"]."/download/logos/". rawurlencode($_SESSION["CfgIdent"]) ."/logo01-$row[0].jpg\" onclick=\"window.open(this.href, '_blank'); return false;\">$file</a>";
+
+			if ( $row ) {
+				imageSize($file, $srcWidth, $srcHeight);
+
+				print("
+					<tr class=\"$bgcolor\">
+						<td class=\"align-center\"><label for=\"del_$row[0]\"><input type=\"checkbox\" id=\"del_$row[0]\" name=\"del[]\" value=\"$row[0]\" /></label></td>
+						<td class=\"align-center\"><label for=\"cb_$row[0]\"><input type=\"checkbox\" id=\"cb_$row[0]\" name=\"cb[]\" value=\"$row[0]\" $check /></label></td>
+						<td class=\"align-center\">$srcWidth x $srcHeight</td>
+						<td>$link</td>
+					</tr>
+					");
+				}
+			else
+				print("
+					<tr class=\"$bgcolor\">
+						<td></td>
+						<td></td>
+						<td></td>
+						<td>
+						  <input type=\"file\" name=\"UploadFile[]\" size=\"40\" style=\"font-size: 9px;\" />
+						  <input type=\"hidden\" name=\"MAX_FILE_SIZE\" value=\"$FILESIZE\" />
+						</td>
+					</tr>
+					");
+
+			$row  = mysql_fetch_row($result);
+			}
+	?>
+            </table>
+
+	<hr style="width:80%; text-align:center;" />
+
+        <table class="width100">
+          <tr>
+             <td style="width:10%;" class="valign-middle align-center">
+			<?php print("<input type=\"image\" src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/valid.gif\" name=\"valid\" alt=\"".$msg->read($CONFIG_INPUTOK)."\" />"); ?>
+             </td>
+             <td class="valign-middle">
+			<?php print($msg->read($CONFIG_VALIDATE)); ?>
+             </td>
+          </tr>
+          <tr>
+             <td style="width:10%;" class="valign-middle align-center">
+			<a href="<?php print(myurlencode("index.php?item=$item&cmde=skin&IDconf=$IDconf")); ?>">
+			<?php print("<img src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/cancel.gif\" title=\"\" alt=\"".$msg->read($CONFIG_INPUTCANCEL)."\" />"); ?>
+			</a>
+             </td>
+             <td class="valign-middle">
+			<?php print($msg->read($CONFIG_GOHOME)); ?>
+             </td>
+          </tr>
+        </table>
+
+	</form>
+
+</div>

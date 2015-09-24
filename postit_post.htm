@@ -1,0 +1,862 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2003-2008 by Dominique Laporte(C-E-D@wanadoo.fr)
+   Copyright (c) 2006 by Hugues Lecocq(hugues.lecocq@laposte.net)
+   Copyright (c) 2006 by Nordine Zetoutou (nordine.zetoutou@educagri.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : postit_post.htm
+ *		projet   : la page de saisie des post-it
+ *
+ *		version  : 1.0
+ *		auteur   : laporte
+ *		creation : 20/10/02
+ *		modif    : 15/06/06 - par hugues lecocq
+ *                     migration PHP5 
+ *		           17/07/06 - Nordine Zetoutou
+ * 	                 migration des balises HTML en XHTML 1.0 strict
+ */
+
+
+$IDroot   = ( @$_POST["IDroot"] ) 					// ID du répertoire racine
+	? (int) $_POST["IDroot"]
+	: (int) @$_GET["IDroot"] ;
+$sort     = ( @$_POST["sort"] )     				// mode de tri d'affichage
+	? (int) $_POST["sort"]
+	: (int) @$_GET["sort"] ;
+$IDcentre = ( @$_POST["IDcentre"] )					// Identifiant du centre
+	? (int) $_POST["IDcentre"]
+	: (int) (@$_GET["IDcentre"] ? $_GET["IDcentre"] : $_SESSION["CnxCentre"]);
+$IDtype   = ( @$_POST["IDtype"] )     				// type de post-it			
+	? (int) $_POST["IDtype"]
+	: (int) (@$_GET["IDtype"] ? $_GET["IDtype"] : 1) ;
+$IDdst    = ( @$_POST["IDdst"] )     				// identifiant des destinataires			
+	? (int) $_POST["IDdst"]
+	: (int) @$_GET["IDdst"] ;
+$IDgrp    = ( @$_POST["IDgrp"] )     				// identifiant des groupes			
+	? (int) $_POST["IDgrp"]
+	: (int) @$_GET["IDgrp"] ;
+
+$subject  = trim(@$_POST["subject"]);				// sujet du message			
+$texte    = trim(@$_POST["texte"]);					// texte du message
+$sign     = @$_POST["sign"];						// signature du message			
+$priority = (int) @$_POST["priority"];				// niveau de priorité du message
+
+$sex      = addslashes(@$_POST["sex"]);				// sexe
+$name     = addslashes(trim(@$_POST["name"]));			// nom
+$societe  = addslashes(trim(@$_POST["societe"]));		// societe
+$address  = addslashes(trim(@$_POST["address"]));		// adresse
+$tel      = addslashes(trim(@$_POST["tel"]));			// téléphone
+$email    = addslashes(trim(@$_POST["email"]));			// mél
+$motif    = addslashes(@$_POST["motif"]);				// motif appel
+
+$submit   = ( @$_POST["submit"] )					// bouton de validation
+	? $_POST["submit"]
+	: @$_GET["submit"] ;
+?>
+
+
+<script type="text/javascript" src="script/edit.js"></script>
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($POSTIT_FORMFEED)); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+
+<?php
+	// lecture du droit d'écriture
+	$Query  = "select _IDgrpwr, _IDgrppj, _IDgrprd from postit ";
+	$Query .= "where _IDcentre = '".$_SESSION["CnxCentre"]."' ";
+	$Query .= "limit 1";
+
+	$result = mysql_query($Query, $mysql_link);
+	$auth   = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+	// vérification des autorisations
+	verifySessionAccess(0, $auth[0]);
+
+	// commande de l'utilisateur
+	switch ( $submit ) {
+		case "del" :
+			$IDlidi  = (int) @$_GET["IDlidi"];
+
+			if ( mysql_query("delete from postit_lidi where _IDlidi = '$IDlidi' AND _ID = '".$_SESSION["CnxID"]."' limit 1", $mysql_link) ) {
+				mysql_query("delete from postit_address where _IDlidi = '$IDlidi' limit 1", $mysql_link);
+
+				$IDdst = 0;
+				}
+			break;
+
+		case "reply" :
+		case "quote" :
+		case "forward" :
+			$IDpost  = (int) @$_GET["IDpost"];
+
+			$query   = "select _titre, _texte from postit_items ";
+			$query  .= "where _IDpost = '$IDpost' ";
+			$query  .= "AND (_IDexp = '".$_SESSION["CnxID"]."' OR _IDdst = '".$_SESSION["CnxID"]."') ";
+			$query  .= "limit 1";
+
+			$res     = mysql_query($query, $mysql_link);
+			$row     = ( $res ) ? remove_magic_quotes(mysql_fetch_row($res)) : 0 ;
+
+			$subject = ( $submit == "forward" )
+				? $msg->read($POSTIT_FWD, $row[0])
+				: $msg->read($POSTIT_REPLIED, $row[0]) ;
+			$texte   = ( $submit == "forward" )
+				? $row[1]
+				: ($submit == "quote" ? stripslashes(">" . str_replace("\n", "\n>", $row[1])) : "") ;
+			// on enchaine...
+//			break;
+
+		default :
+			// maj d'une lidie perso
+			$IDlidi  = (int) @$_GET["IDlidi"];
+
+			if ( $IDlidi ) {
+				$IDgrp = -2;
+				$IDdst = $IDlidi;
+				}
+
+			// écrire à un e-groupe
+			$IDgroup = (int) @$_GET["IDgroup"];
+
+			if ( $IDgroup ) {
+				$IDgrp = -($IDgroup + 10);
+				$IDdst = -1;
+				}
+
+			// affichage destinataire si réponse
+			if ( $IDgrp >= 0 AND $IDdst > 0 ) {
+				$result   = mysql_query("select _name, _fname, _IDgrp, _IDcentre from user_id where _ID = '$IDdst' limit 1", $mysql_link);
+				$row      = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+//				$name     = formatUserName($row[0], $row[1]);
+				$IDgrp    = $row[2];
+				$IDcentre = $row[3];
+				}
+			break;
+		}
+
+	// initialisation
+	$error_dest = $error_subject = $error_texte = $error_name = 0;
+
+	// l'utilisateur a validé son message
+	if ( @$_POST["valid_x"] ) {
+		// test de la saisie
+		$error_dest    = ( $IDdst ) ? 0 : 1 ;
+		$error_subject = ( strlen($subject) OR $IDtype == 2 ) ? 0 : 1 ;
+		$error_texte   = ( strlen($texte) OR $IDtype == 2 )   ? 0 : 1 ;
+		$error_name    = ( strlen($name) OR $IDtype == 1 )    ? 0 : 1 ;
+
+		if ( !$error_dest AND !$error_subject AND !$error_texte AND !$error_name ) {
+			require_once "include/postit.php";
+
+			// composition du message
+			if ( $IDtype == 2 ) {
+				$tmp     = "$sex $name $motif<br/>";
+				$tmp    .= ( $societe == "" ) ? "" : addslashes($msg->read($POSTIT_COMPANY)) . " $societe<br/>" ;
+				$tmp    .= ( $address == "" ) ? "" : "$address<br/>" ;
+				$tmp    .= ( $tel == "" ) ? "" : addslashes($msg->read($POSTIT_TEL)) . " $tel<br/>" ;
+				$tmp    .= ( $email == "" ) ? "" : addslashes($msg->read($POSTIT_EMAIL)) . " $email<br/>" ;
+				$tmp    .= $texte;
+
+				$texte   = $tmp;
+				$subject = addslashes($msg->read($POSTIT_ABSENT));
+				}
+
+			// signature du post-it
+			$sign = ( strlen($sign) ) ? $sign : "N" ;
+
+			$ret  = Array();
+
+			switch ( $IDgrp ) {
+				case -1 :	// lidi automatique (catégories / classes)
+					$ret = sendBroadcastCentre($IDcentre, $IDdst, $subject, $texte, $sign, $priority);
+					break;
+				case -2 :	// lidi perso
+					$ret = sendBroadcast($IDdst, $subject, $texte, $sign, $priority);
+					break;
+				default :	// utilisateurs/e-groupes
+					if ( $IDgrp < 0 )
+						// envoie à un e-groupe
+						$ret = sendBroadcastEgroup(-$IDgrp - 10, $IDdst, $subject, $texte, $sign, $priority);
+					else
+						// envoie à un destinataire
+						$ret[0] = sendMessage($IDdst, $subject, $texte, $sign, $priority);
+					break;
+				}
+
+			if ( count($ret) AND $ret[0] ) {
+				// transfert d'une Pièce Jointe
+				$file  = @$_FILES["UploadPJ"]["tmp_name"];
+				$texte = $msg->read($POSTIT_THANX);
+
+				for ($j = 0; $j < count($file); $j++)
+					if (  @$file[$j] AND authfile(@$_FILES["UploadPJ"]["name"][$j]) )
+						for ($i = 0; $i < count($ret); $i++) {
+							// extension du fichier en PJ
+							$ext    = extension($_FILES["UploadPJ"]["name"][$j]);
+							$pjdesc = addslashes(trim(@$_POST["PJdesc"][$j]));
+
+							$Query  = "INSERT INTO postit_pj ";
+							$Query .= "values('', '$ret[$i]', '$pjdesc', '$ext', '".$_FILES["UploadPJ"]["size"][$j]."', '')";
+
+							if ( !mysql_query($Query, $mysql_link) )
+								sql_error($mysql_link);
+							else {
+								// fichier destination
+								$dest = "$DOWNLOAD/post-it/". mysql_insert_id() .".$ext";
+
+								// copie du fichier temporaire -> répertoire de stockage
+								// attention : il faut copier le fichier plusieurs fois
+								if ( !copy($file[$j], $dest) )
+									$texte = $msg->read($POSTIT_ERRDOWNLOAD);
+								}
+							}
+				}
+			else
+				$texte = ( $IDdst )
+					? $msg->read($POSTIT_SENDFAIL) ."<br/>". sql_error_value($mysql_link)
+					: $msg->read($POSTIT_NODEST) ;
+
+			print("
+				<div class=\"center\">
+      				<p>$texte<br/>
+				      [<a href=\"".myurlencode("index.php?item=$item&IDroot=$IDroot&sort=$sort")."\">".$msg->read($POSTIT_GOBACK)."</a>]
+				      </p>
+				</div>
+				");
+			}	// endif erreur
+		else {
+			stripslashes($subject);
+			stripslashes($texte);
+			stripslashes($sign);
+			}
+		}	// endif post
+
+	// saisie du formulaire si
+	// - l'utilisateur n'a pas validé OU
+	// - il y a une erreur de saisie => on redemande de compléter le formulaire
+	if ( empty($_POST["valid_x"]) OR $error_dest OR $error_subject OR $error_texte OR $error_name ) {
+
+	    	print("
+		<form id=\"formulaire\" action=\"index.php\" method=\"post\" enctype=\"multipart/form-data\">
+			<p class=\"hidden\"><input type=\"hidden\" name=\"item\"   value=\"$item\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"cmde\"   value=\"$cmde\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"IDtype\" value=\"$IDtype\" /></p>
+			");
+
+		print("    
+		  <table class=\"width100\">
+		    <tr>
+		      <td style=\"width:20%;\" class=\"valign-middle align-right\">
+				". $msg->read($POSTIT_EXP) ."
+			</td>
+		      <td style=\"width:80%;\" class=\"valign-middle\">
+				". $_SESSION["CnxName"] ."
+			</td>
+		    </tr>
+
+		    <tr>
+		      <td class=\"valign-middle align-right\">
+				". $msg->read($POSTIT_CENTER) ."
+			</td>
+		      <td class= \"valign-middle\">
+				<label for=\"IDcentre\">
+			  	<select id=\"IDcentre\" name=\"IDcentre\" onchange=\"document.forms.formulaire.submit()\">");
+
+		// lecture des centres constitutifs
+		$query  = "select _IDcentre, _ident from config_centre ";
+		$query .= "where _visible = 'O' AND _lang = '".$_SESSION["lang"]."' ";
+		$query .= "order by _IDcentre";
+
+		$result = mysql_query($query, $mysql_link);
+		$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+		while ( $row ) {			
+			printf("<option value=\"$row[0]\" %s>$row[1]</option>", ($IDcentre == $row[0]) ? "selected=\"selected\"" : "");
+
+			$row = remove_magic_quotes(mysql_fetch_row($result));
+			}				
+
+		print("
+				</select> <img src=\"".$_SESSION["ROOTDIR"]."/images/home.gif\" title=\"\" alt=\"\" />
+				</label>
+			</td>
+		    </tr>");
+
+		// saisie du destinataire
+		if ( $error_dest )
+			print("
+			    <tr>
+			   	   <td class=\"valign-middle\" style=\"text-align: justify\" colspan=\"2\">
+			   	     <span style=\"color:#FF0000;\">". $msg->read($POSTIT_WARNING) ." ". $msg->read($POSTIT_ERRDEST) ."</span>
+				   </td>
+			    </tr>
+			    	");
+
+		print("    
+		    <tr>
+		      <td class=\"valign-middle align-right\">
+				".$msg->read($POSTIT_DEST)."
+			</td>
+			<td>
+			  <label for=\"IDgrp\">
+		  	  <select id=\"IDgrp\" name=\"IDgrp\" onchange=\"document.forms.formulaire.submit()\">
+				<optgroup label=\"". $msg->read($POSTIT_CHOOSECAT) ."\">");
+
+		// recherche des groupes
+		$query  = "select distinctrow user_group._IDgrp, user_group._ident, postit._IDgrprd ";
+		$query .= "from user_group, postit ";
+		$query .= "where user_group._visible = 'O' AND user_group._lang = '".$_SESSION["lang"]."' ";
+		$query .= "AND (postit._IDgrprd & pow(2, user_group._IDgrp - 1)) ";
+		$query .= "AND postit._IDcentre = '$IDcentre' ";
+		$query .= "order by user_group._IDgrp asc";
+
+		$result = mysql_query($query, $mysql_link);
+		$cat    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+		// initialisation
+		if ( !$IDgrp )
+			$IDgrp = (int) $cat[0];
+
+		while ( $cat ) {
+			//---- sélection des utilisateurs
+			$query  = "select _ID from user_id ";
+			$query .= "where _IDgrp = '$cat[0]' " ;
+			$query .= "AND (_IDcentre = '$IDcentre' OR _centre & pow(2, $IDcentre - 1)) " ;
+			$query .= "AND _ID <> '".$_SESSION["CnxID"]."' AND _adm AND _sexe != 'A' ";
+
+			$res    = mysql_query($query, $mysql_link);
+			$nbrow  = ( $res ) ? mysql_numrows($res) : 0 ;
+
+			printf("<option value=\"$cat[0]\" %s>$cat[1] ($nbrow)</option>", ($IDgrp == $cat[0]) ? "selected=\"selected\"" : "");
+
+			$cat = remove_magic_quotes(mysql_fetch_row($result));
+			}	// endwhile catégorie
+
+		print("
+				</optgroup>
+				<optgroup label=\"". $msg->read($POSTIT_CHOOSELIST) ."\">");
+
+		//---- sélection des listes automatiques
+		$query  = "select distinctrow _IDgrp from user_group, postit ";
+		$query .= "where _visible = 'O' AND _lang = '".$_SESSION["lang"]."' ";
+		$query .= "AND (_IDgrprd & pow(2, _IDgrp - 1)) ";
+
+		$res    = mysql_query($query, $mysql_link);
+		$nbrow  = ( $res ) ? mysql_numrows($res) : 0 ;
+
+		printf("<option value=\"-1\" %s>". $msg->read($POSTIT_LISTAUTO) ." ($nbrow)</option>", ($IDgrp == -1) ? "selected=\"selected\"" : "");
+
+		//---- sélection des listes personnelles
+		$query  = "select _IDlidi from postit_lidi ";
+		$query .= "where _ID = '".$_SESSION["CnxID"]."' OR _public = 'O' ";
+
+		$res    = mysql_query($query, $mysql_link);
+		$nbrow  = ( $res ) ? mysql_numrows($res) : 0 ;
+
+		printf("<option value=\"-2\" %s>". $msg->read($POSTIT_LISTPERSO) ." ($nbrow)</option>", ($IDgrp == -2) ? "selected=\"selected\"" : "");
+
+		print("
+				</optgroup>
+				<optgroup label=\"". $msg->read($POSTIT_CHOOSEGROUP) ."\">");
+
+		// recherche des e-groupes
+		$Query  = "select distinctrow egroup_data._IDdata, egroup_data._ident, egroup_data._IDmenu ";
+		$Query .= "from egroup_data, egroup_user ";
+		$Query .= "where egroup_user._ID = '".$_SESSION["CnxID"]."' ";
+		$Query .= "AND egroup_user._access > 0 ";
+		$Query .= "AND egroup_data._IDdata = egroup_user._IDdata ";
+		$Query .= "order by egroup_data._ident";
+
+		$result = mysql_query($Query, $mysql_link);
+		$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+		while ( $row ) {
+			//---- sélection des membres
+/*
+			$query  = "select _IDaccess from egroup_access ";
+			$query .= "where _IDaccess > '0' ";
+			$query .= "AND _lang = '".$_SESSION["lang"]."' ";
+_IDdata = '$IDgroup'
+
+			$res    = mysql_query($query, $mysql_link);
+			$nbrow  = ( $res ) ? mysql_numrows($res) : 0 ;
+*/
+
+			printf("<option value=\"".-($row[0] + 10)."\" %s>$row[1]</option>", ($IDgrp == -($row[0] + 10)) ? "selected=\"selected\"" : "");
+
+			$row = remove_magic_quotes(mysql_fetch_row($result));
+			}	// endwhile e-groupe
+
+		print("
+				</optgroup>
+			  </select> <img src=\"".$_SESSION["ROOTDIR"]."/images/group.gif\" title=\"\" alt=\"\" />
+			  </label>
+		      </td>
+		    </tr>");
+
+		// affichage Liste de destinataire(s)
+		$add   = $maj = $del = "";
+
+		// pour des lidies perso, l'utilisateur doit pouvoir modifier
+		$onsel = ( $IDgrp == -2 ) ? "onchange=\"document.forms.formulaire.submit()\"" : "" ;
+
+		print("
+		    <tr>
+			<td></td>
+			<td>
+			  <label for=\"IDdst\">
+		  	  <select id=\"IDdst\" name=\"IDdst\" $onsel>");
+
+		switch ( $IDgrp ) {
+			case -1 :	// lidi automatique (catégories / classes)
+				print("<option value=\"0\">". $msg->read($POSTIT_CHOOSEDEST) ."</option>");
+
+				// sélection des catégories
+				$query  = "select distinctrow _IDgrp, _ident from user_group, postit ";
+				$query .= "where _visible = 'O' AND _lang = '".$_SESSION["lang"]."' ";
+				$query .= "AND (_IDgrprd & pow(2, _IDgrp - 1)) ";
+				$query .= "order by _IDgrp" ;
+
+				$res    = mysql_query($query, $mysql_link);
+				$row    = ( $res ) ? remove_magic_quotes(mysql_fetch_row($res)) : 0 ;
+
+				while ( $row ) {
+					$query  = "select distinctrow _ID from user_id where _IDgrp = '$row[0]' AND _adm ";
+					$query .= "AND (_IDcentre = '$IDcentre' OR _centre & pow(2, $IDcentre - 1)) " ;
+					$query .= "AND _ID <> '".$_SESSION["CnxID"]."' AND _sexe != 'A' ";
+
+					$ret = mysql_query($query, $mysql_link);
+					$nb  = ( $ret ) ? mysql_numrows($ret) : 0 ;
+
+					if ( $nb )
+						printf("<option value=\"-$row[0]\" %s>".$msg->read($POSTIT_LIDI, $row[1])." ($nb)</option>", ($IDdst == -$row[0]) ? "selected=\"selected\"" : "");
+
+					// sélection des matières ou des classes
+					switch ( getAccess($row[0]) ) {
+						case 1 :	// apprenants
+							if ( $auth[2] & pow(2, 0) ) {
+								$query  = "select _IDclass, _ident from campus_classe ";
+								$query .= "where _visible = 'O' ";
+								$query .= "AND _IDcentre = '$IDcentre' ";
+								$query .= "order by _text";
+								}
+							else
+								$query  = "";
+							break;
+
+						case 2 :	// personnel
+							$query  = "select _IDmat, _titre from campus_data ";
+							$query .= "where _visible = 'O' AND _lang = '".$_SESSION["lang"]."' ";
+							$query .= "order by _titre asc";
+							break;
+
+						default :	// extérieur
+							$query  = "";
+							break;
+						}
+
+					$sql    = ( strlen($query) ) ? mysql_query($query, $mysql_link) : 0 ;
+					$myrow  = ( $sql ) ? remove_magic_quotes(mysql_fetch_row($sql)) : 0 ;
+
+					while ( $myrow ) {
+						$offset = ( getAccess($row[0]) == 1 ) ? 1000 : 10000 ;
+
+						$ret    = ( getAccess($row[0]) == 1 )
+							? mysql_query("select distinctrow _ID from user_id where _IDclass = '$myrow[0]' AND _visible = 'O' AND _adm", $mysql_link)
+							: mysql_query("select distinctrow _ID from user_id where _IDgrp = '$row[0]' AND _IDmat like '% $myrow[0] %' AND _adm", $mysql_link) ;
+						$nb     = ( $ret ) ? mysql_numrows($ret) : 0 ;
+
+						if ( $nb )
+							printf("<option value=\"".-($myrow[0] + $offset)."\" %s>".$msg->read($POSTIT_LIDI, $row[1])." -> $myrow[1] ($nb)</option>", ($IDdst == -($myrow[0] + $offset)) ? "selected=\"selected\"" : "");
+
+						$myrow  = remove_magic_quotes(mysql_fetch_row($sql));
+						}
+
+					$row = remove_magic_quotes(mysql_fetch_row($res));
+					}
+				break;
+
+			case -2 :	// lidi perso
+				print("<option value=\"0\">". $msg->read($POSTIT_CHOOSEDEST) ."</option>");
+
+				$owner  = 0;
+
+				$query  = "select distinctrow postit_lidi._IDlidi, postit_lidi._nom, postit_lidi._ID ";
+				$query .= "from postit_lidi, postit_address ";
+				$query .= "where postit_lidi._ID = '".$_SESSION["CnxID"]."' ";
+				$query .= "OR postit_lidi._public = 'O' ";
+				$query .= "OR (postit_lidi._public = 'M' AND postit_address._IDlidi = postit_lidi._IDlidi AND postit_address._ID = '".$_SESSION["CnxID"]."') ";
+				$query .= "order by postit_lidi._nom";
+
+				$res    = mysql_query($query, $mysql_link);
+				$row    = ( $res ) ? remove_magic_quotes(mysql_fetch_row($res)) : 0 ;
+
+				while ( $row ) {
+					$ret = mysql_query("select distinctrow _ID from postit_address where _IDlidi = '$row[0]'", $mysql_link);
+					$nb  = ( $ret ) ? mysql_numrows($ret) : 0 ;
+
+					printf("<option value=\"$row[0]\" %s>$row[1] ($nb)</option>", ($IDdst == $row[0]) ? "selected=\"selected\"" : "");
+
+					if ( $IDdst == $row[0] )
+						$owner = $row[2];
+
+					$row = remove_magic_quotes(mysql_fetch_row($res));
+					}
+
+				// suppression des Lidis persos
+				$req = $msg->read($POSTIT_DELIST);
+				$del = ( $IDdst AND ($_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $owner) )
+					? "<a href=\"".myurlencode("index.php?item=$item&cmde=$cmde&IDlidi=$IDdst&IDcentre=$IDcentre&IDgrp=$IDgrp&submit=del")."\" onclick=\"return confirmLink(this, '$req');\"><img src=\"".$_SESSION["ROOTDIR"]."/images/corb.gif\" title=\"". $msg->read($POSTIT_DELIST) ."\" alt=\"". $msg->read($POSTIT_DELIST) ."\" /></a>"
+					: "" ;
+
+				// modification des Lidis persos
+				$maj = ( $IDdst AND ($_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $owner) )
+					? "<a href=\"".myurlencode("index.php?item=$item&cmde=lidi&IDlidi=$IDdst&IDcentre=$IDcentre")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/stats/post.gif\" title=\"". $msg->read($POSTIT_UPDATELIST) ."\" alt=\"". $msg->read($POSTIT_UPDATELIST) ."\" /></a>"
+					: "" ;
+
+				// ajout d'une nouvelle Lidi
+				$add = "<a href=\"".myurlencode("index.php?item=$item&cmde=lidi&IDcentre=$IDcentre")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/ajouter.gif\" title=\"". $msg->read($POSTIT_ADDLIST) ."\" alt=\"". $msg->read($POSTIT_ADDLIST) ."\" /></a>";
+				break;
+
+			default :	// catégorie ou e-groupe
+				if ( $IDgrp  < 0 ) {
+					print("<option value=\"-1\">". $msg->read($POSTIT_TOALL) ."</option>");
+
+					// affichage des statuts
+					$query  = "select _IDaccess, _ident from egroup_access ";
+					$query .= "where _IDaccess > '0' ";
+					$query .= "AND _lang = '".$_SESSION["lang"]."' ";
+					$query .= "order by _IDaccess";
+
+					$result = mysql_query($query, $mysql_link);
+					$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+					while ( $row ) {
+						$ret = mysql_query("select _ID from egroup_user where _access = '$row[0]' AND _IDdata = '$IDgroup'", $mysql_link);
+						$nb  = ( $ret ) ? mysql_numrows($ret) : 0 ;
+
+						if ( $nb)
+							printf("<option value=\"$row[0]\" %s>$row[1] ($nb)</option>", ($IDdst == $row[0]) ? "selected=\"selected\"" : "");
+
+						$row = remove_magic_quotes(mysql_fetch_row($result));
+						}
+					}
+				else {
+					print("<option value=\"0\">". $msg->read($POSTIT_CHOOSEDEST) ."</option>");
+
+					// on sélectionne uniquement le personnel
+					// excepté les utilisateurs en liste brûlée
+					// et on interdit de s'écrire à soi-même
+					$query  = "select _ID, _name, _fname from user_id ";
+					$query .= "where _IDgrp = '$IDgrp' " ;
+					$query .= "AND (_IDcentre = '$IDcentre' OR _centre & pow(2, $IDcentre - 1)) " ;
+					$query .= "AND _ID <> '".$_SESSION["CnxID"]."' AND _adm AND _sexe != 'A' ";
+					$query .= "order by _name, _fname";
+
+					$res    = mysql_query($query, $mysql_link);
+					$row    = ( $res ) ? remove_magic_quotes(mysql_fetch_row($res)) : 0 ;
+
+					while ( $row ) {
+						$select = ( $IDdst == $row[0] ) ? "selected=\"selected\"" : "" ;
+
+						print("<option value=\"$row[0]\" $select>".formatUserName($row[1], $row[2])."</option>");
+
+						$row = remove_magic_quotes(mysql_fetch_row($res));
+						}
+					}
+				break;
+			}
+
+		print("    
+			  </select> $add $maj $del
+			  </label>
+			</td>
+		    </tr>");
+
+		switch ( $IDtype ) {
+			case 2 :	// fiche téléphonique
+				// saisie du sujet
+				if ( $error_name )
+					print("    
+					    <tr>
+			   			   <td class=\"valign-middle\" style=\"text-align: justify\" colspan=\"2\">
+					   	     <span style=\"color:#FF0000;\">". $msg->read($POSTIT_WARNING) ." ". $msg->read($POSTIT_ERRNAME) ."</span>
+						   </td>
+					    </tr>
+					    	");
+
+			    	print("
+			          <tr>
+			            <td class=\"align-right\">". $msg->read($POSTIT_NAME) ."</td>
+			            <td>
+						<label for=\"sex\">
+						<select id=\"sex\" name=\"sex\">");
+
+						$list = explode(",", $msg->read($POSTIT_SEX));
+
+						for ($i = 0; $i < count($list); $i++) {			
+							if ( $sex == $list[$i] )
+								print("<option selected=\"selected\" value=\"$list[$i]\">$list[$i]</option>");
+							else
+								print("<option value=\"$list[$i]\">$list[$i]</option>");
+							}				
+			    	print("
+						</select>
+						</label>
+
+						<label for=\"name\"><input type=\"text\" id=\"name\" name=\"name\" size=\"40\" value=\"".stripslashes($name)."\" /></label>
+					</td>
+			          </tr>
+
+			          <tr>
+			            <td class=\"align-right\">". $msg->read($POSTIT_COMPANY) ."</td>
+			            <td>
+						<label for=\"societe\"><input type=\"text\" id=\"societe\" name=\"societe\" size=\"40\" value=\"".stripslashes($societe)."\" /></label>
+					</td>
+			          </tr>
+
+			          <tr>
+			            <td class=\"align-right\">". $msg->read($POSTIT_ADDRESS) ."</td>
+			            <td>
+						<label for=\"address\"><textarea id=\"address\" name=\"address\" rows=\"2\" cols=\"50\"></textarea></label>
+					</td>
+			          </tr>
+
+			          <tr>
+			            <td class=\"align-right\">". $msg->read($POSTIT_TEL) ."</td>
+			            <td>
+						<label for=\"tel\"><input type=\"text\" id=\"tel\" name=\"tel\" size=\"20\" value=\"$tel\" /></label>
+					</td>
+			          </tr>
+
+			          <tr>
+			            <td class=\"align-right\">". $msg->read($POSTIT_EMAIL) ."</td>
+			            <td>
+						<label for=\"email\"><input type=\"text\" id=\"email\" name=\"email\" size=\"40\" value=\"$email\" /></label>
+					</td>
+			          </tr>
+
+			          <tr>
+			            <td class=\"align-right\">". $msg->read($POSTIT_PERSON) ."</td>
+			            <td>
+						<label for=\"motif\">
+						<select id=\"motif\" name=\"motif\">");
+
+						$list = explode(",", $msg->read($POSTIT_LIST));
+
+						for ($i = 0; $i < count($list); $i++) {			
+							if ( $motif == $list[$i] )
+								print("<option selected=\"selected\" value=\"$list[$i]\">$list[$i]</option>");
+							else
+								print("<option value=\"$list[$i]\">$list[$i]</option>");
+							}				
+			    	print("
+						</select>
+						</label>
+
+						<label for=\"priority\">
+					            ". $msg->read($POSTIT_URGENT) ."
+	             				<input type=\"checkbox\" id=\"priority\" name=\"priority\" value=\"2\" />
+						</label>
+					</td>
+			          </tr>
+
+				    <tr>
+				      <td class=\"align-right valign-top\">
+				        ". $msg->read($POSTIT_MESSAGE) ." <a href=\"#\" onclick=\"popWin('".$_SESSION["ROOTDIR"]."/spip_typo.php?lang=".$_SESSION["lang"]."', '450', '350'); return false;\">
+				        <img src=\"".$_SESSION["ROOTDIR"]."/images/spip/aide.gif\" title=\"".$msg->read($POSTIT_HELP)."\" alt=\"".$msg->read($POSTIT_HELP)."\" /></a> :
+				      </td>
+				      <td><label for=\"texte\"><textarea id=\"texte\" name=\"texte\" rows=\"4\" cols=\"50\">".stripslashes($texte)."</textarea></label></td>
+				    </tr>
+				    	");
+				break;
+
+			default :
+				// saisie du sujet
+				if ( $error_subject )
+					print("    
+					    <tr>
+			   			   <td class=\"valign-middle\" style=\"text-align: justify\" colspan=\"2\">
+					   	     <span style=\"color:#FF0000;\">". $msg->read($POSTIT_WARNING) ." ". $msg->read($POSTIT_ERRSUBJECT) ."</span>
+						   </td>
+					    </tr>
+					    	");
+
+				print("    
+				    <tr>
+				      <td class=\"valign-middle align-right\">". $msg->read($POSTIT_SUBJECT) ."</td>
+				      <td><label for=\"subject\"><input type=\"text\" id=\"subject\" name=\"subject\" size=\"45\" value=\"".stripslashes($subject)."\" /></label></td>
+				    </tr>
+				    	");
+
+				// saisie du message à poster
+				if ( $error_texte )
+					print("    
+					    <tr>
+					   	   <td class=\"valign-middle\" style=\"text-align: justify\" colspan=\"2\">
+					   	     <span style=\"color:#FF0000;\">". $msg->read($POSTIT_WARNING) ." ". $msg->read($POSTIT_ERRMSG) ."</span>
+						   </td>
+					    </tr>
+					    	");
+
+			    	print("
+				    <tr>
+				      <td class=\"align-right valign-top\">
+				        ". $msg->read($POSTIT_MESSAGE) ." <a href=\"#\" onclick=\"popWin('".$_SESSION["ROOTDIR"]."/spip_typo.php?lang=".$_SESSION["lang"]."', '450', '350'); return false;\">
+				        <img src=\"".$_SESSION["ROOTDIR"]."/images/spip/aide.gif\" title=\"".$msg->read($POSTIT_HELP)."\" alt=\"".$msg->read($POSTIT_HELP)."\" /></a> :
+				      </td>
+				      <td><label for=\"texte\"><textarea id=\"texte\" name=\"texte\" rows=\"10\" cols=\"50\">".stripslashes($texte)."</textarea></label></td>
+				    </tr>
+				    	");
+
+				// affichage des smileys d'édition
+			    	print("
+				    <tr>
+				      <td class=\"valign-middle align-right\"><strong>Smileys :</strong></td>
+				      <td class= \"valign-middle\">
+					");
+
+				$res   = mysql_query("select _code, _ident from smileys where _type = 'T'", $mysql_link);
+				$smile = ( $res ) ? mysql_fetch_row($res) : 0 ;
+
+				while ( $smile ) {
+					print("
+						<img src=\"".$_SESSION["ROOTDIR"]."/images/smiley/forum/$smile[1].gif\" title=\" code: $smile[0] \" 
+						onclick=\"Javascript:ajoutsmile('$smile[0]')\" style=\"cursor: hand;\" alt=\"".$smile[0]."\" />
+						");
+				
+					$smile = ( $res ) ? mysql_fetch_row($res) : 0 ;
+					}
+
+			    	print("
+				      </td>
+				    </tr>
+				    	");
+
+				// saisie Pièce Jointe sur un message
+				if ( $_SESSION["CnxAdm"] == 255 OR ($auth[1] & pow(2, $_SESSION["CnxGrp"] - 1)) ) {
+				    	print("
+					    <tr>
+					      <td class=\"align-right valign-top\">
+							". $msg->read($POSTIT_ATTACHMENT) ."<br />
+							<span style=\"cursor: pointer;\" onclick=\"$('more')._display.toggle(); return false;\"><img src=\"".$_SESSION["ROOTDIR"]."/images/ajouter.gif\" title=\"\" alt=\"\" /></span>
+						</td>
+						<td>");
+
+					print("
+						<fieldset style=\"width:80%; border:#cccccc solid 1px;\">
+						<legend>". $msg->read($POSTIT_ATTNUMBER, "1") ."</legend>
+							<p class=\"hidden\"><input type=\"hidden\" name=\"MAX_FILE_SIZE\" value=\"$FILESIZE\" /></p>
+							<input type=\"file\" name=\"UploadPJ[]\" style=\"font-size:9px; margin-bottom:5px;\" /><br />
+							<label for=\"PJdesc_1\"><input type=\"text\" id=\"PJdesc_1\" name=\"PJdesc[]\" size=\"50\" />
+							". $msg->read($POSTIT_ATTDESCRIPTION) ."
+							</label>
+						</fieldset>");
+
+					print("<div id=\"more\" style=\"display:none;\">");
+
+					for ($i = 2; $i <= 5; $i++) {
+						print("
+							<fieldset style=\"width:80%; border:#cccccc solid 1px;\">
+							<legend>". $msg->read($POSTIT_ATTNUMBER, strval($i)) ."</legend>
+								<p class=\"hidden\"><input type=\"hidden\" name=\"MAX_FILE_SIZE\" value=\"$FILESIZE\" /></p>
+								<input type=\"file\" name=\"UploadPJ[]\" style=\"font-size:9px; margin-bottom:5px;\" /><br />
+								<label for=\"PJdesc_$i\"><input type=\"text\" id=\"PJdesc_$i\" name=\"PJdesc[]\" size=\"50\" />
+								". $msg->read($POSTIT_ATTDESCRIPTION) ."
+								</label>
+							</fieldset>");
+						}
+
+					print("</div>");
+
+					print("
+					      </td>
+					    </tr>");
+					}
+
+				// message urgent
+				print("
+				    <tr>
+				      <td class=\"align-right valign-top\">". $msg->read($POSTIT_PRIORITY) ."</td>
+				      <td class=\"valign-top\">
+						<label for=\"priority\">
+						<select id=\"priority\" name=\"priority\">");
+
+						$list = explode(",", $msg->read($POSTIT_PRIORITYLEVEL));
+
+						for ($i = 0; $i < count($list); $i++) {			
+							if ( $priority == $i )
+								print("<option selected=\"selected\" value=\"$i\">$list[$i]</option>");
+							else
+								print("<option value=\"$i\">$list[$i]</option>");
+							}				
+			    	print("
+						</select>
+						</label>
+					</td>
+				    </tr>");
+
+				// la signature
+				print("
+				    <tr>
+				      <td class=\"align-right valign-top\">". $msg->read($POSTIT_INCLUDE) ."</td>
+				      <td class=\"valign-top\">
+						<label for=\"sign\">
+						<input type=\"checkbox\" id=\"sign\" name=\"sign\" value=\"O\" checked=\"checked\" />". $msg->read($POSTIT_SIGNATURE) ."
+						</label>
+					</td>
+				    </tr>");
+				break;
+			}	// end switch
+
+	    	print("
+			</table>
+
+			<hr style=\"width:80%;\" />
+
+		         <table class=\"width100\">
+		           <tr>
+		              <td style=\"width:20%;\" class=\"valign-middle align-right\">
+              			<input type=\"image\" src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/valid.gif\" name=\"valid\" alt=\"".$msg->read($POSTIT_INPUTOK)."\" />
+		              </td>
+		              <td class= \"valign-middle\">". $msg->read($POSTIT_SENDPOST) ."</td>
+		           </tr>
+		           <tr>
+		              <td class=\"valign-middle align-right\">
+		              	<a href=\"".myurlencode("index.php?item=$item&IDroot=$IDroot&sort=$sort")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/cancel.gif\" title=\"\" alt=\"".$msg->read($POSTIT_INPUTCANCEL)."\" /></a>
+		              </td>
+		              <td class= \"valign-middle\">". $msg->read($POSTIT_QUIT) ."</td>
+		           </tr>
+		         </table>
+
+			</form>
+			");
+		}
+?>
+
+</div>

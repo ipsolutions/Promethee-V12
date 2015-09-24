@@ -1,0 +1,213 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2006-2007 by Dominique Laporte(C-E-D@wanadoo.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : liaison_show.htm
+ *		projet   : la page de visualisation du cahier de liaison élève
+ *
+ *		version  : 1.0
+ *		auteur   : laporte
+ *		creation : 19/11/06
+ *		modif    : 
+ */
+
+
+$IDcentre = ( @$_POST["IDcentre"] )		// Identifiant du centre
+	? (int) $_POST["IDcentre"]
+	: (int) @$_GET["IDcentre"] ;
+$IDeleve  = ( @$_POST["IDeleve"] )		// Identifiant de l'élève
+	? (int) $_POST["IDeleve"]
+	: (int) @$_GET["IDeleve"] ;
+$IDclass  = ( @$_POST["IDclass"] )		// Identifiant de la classe
+	? (int) $_POST["IDclass"]
+	: (int) @$_GET["IDclass"] ;
+$name     = ( @$_POST["name"] )		// ordre alphabétique
+	? $_POST["name"]
+	: @$_GET["name"] ;
+$period   = ( @$_POST["period"] )		// trimestre
+	? (int) $_POST["period"]
+	: (int) @$_GET["period"] ;
+
+$pglink   = "IDcentre=$IDcentre&amp;name=$name&amp;IDclass=$IDclass";
+?>
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($LIAISON_TITLE)); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+
+		<form id="formulaire" action="index.php" method="post">
+		<?php
+			print("
+				<p class=\"hidden\"><input type=\"hidden\" name=\"item\"     value=\"$item\" /></p>
+				<p class=\"hidden\"><input type=\"hidden\" name=\"cmde\"     value=\"$cmde\" /></p>
+				<p class=\"hidden\"><input type=\"hidden\" name=\"IDcentre\" value=\"$IDcentre\" /></p>
+				<p class=\"hidden\"><input type=\"hidden\" name=\"IDeleve\"  value=\"$IDeleve\" /></p>
+				<p class=\"hidden\"><input type=\"hidden\" name=\"IDclass\"  value=\"$IDclass\" /></p>
+				<p class=\"hidden\"><input type=\"hidden\" name=\"name\"     value=\"$name\" /></p>
+				");
+		?>
+
+		<table class="width100">
+		  <tr>
+                <td>
+			<?php
+				$Query   = "select user_id._name, user_id._fname, campus_classe._ident, user_id._IDclass ";
+				$Query  .= "from user_id, campus_classe ";
+				$Query  .= "where _ID = '$IDeleve' AND _IDgrp = '1' ";
+				$Query  .= "AND user_id._IDclass = campus_classe._IDclass "; 
+				$Query  .= "limit 1"; 
+
+				$result  = mysql_query($Query, $mysql_link);
+				$row     = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+				$myclass = $row[3];
+
+				print($msg->read($LIAISON_STUDENT) ." $row[0] $row[1]<br/>");
+				print($msg->read($LIAISON_CLASS) ." $row[2]");
+			?>
+                </td>
+		  </tr>
+		</table>
+
+		<hr style="width:80%;" />
+
+	<?php
+		require_once "include/smileys.php";
+		require_once "include/spip.php";
+
+		// lecture du droit de lecture
+		$Query  = "select _IDgrprd, _PJ, _IDmod from liaison ";
+		$Query .= "where _IDcentre = '$IDcentre' AND _IDclass = '$row[3]' ";
+		$Query .= "limit 1";
+
+		$result = mysql_query($Query, $mysql_link);
+		$auth   = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+		// vérification des autorisations
+		verifySessionAccess($auth[2], $auth[0]);
+
+		// si pas d'autorisation => bye, bye
+		if ( getAccess() != 2 AND $_SESSION["CnxID"] != $IDeleve )
+			logSessionAccess();
+
+		// lecture des paramètres de configuration
+		$query  = "select config_theme._bgcolor from config_theme, config ";
+		$query .= "where config._ident = '".$_SESSION["CfgIdent"]."' ";
+		$query .= "AND config._lang = '".$_SESSION["lang"]."' ";
+		$query .= "AND config_theme._IDtheme = config._IDtheme";
+
+		$result = mysql_query($query, $mysql_link);
+		$bgcol  = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+		print("
+			<table class=\"width100\">
+			  <tr>
+	                <td class=\"align-center\" style=\" width:25%;background-color:#C0C0C0;\">
+				". $msg->read($LIAISON_QUATER) ."
+				<label for=\"period\">
+			  	<select id=\"period\" name=\"period\" onchange=\"document.forms.formulaire.submit()\">
+			");
+
+		// les trimestres
+		printf("<option value=\"\" %s>". $msg->read($LIAISON_ALL) ."</option>", ($period == 0) ? "selected=\"selected\"" : "");
+		for ($i = 1; $i < 4; $i++)
+			printf("<option value=\"$i\" %s>". $msg->read($LIAISON_Q, strval($i)) ."</option>", ($i == $period) ? "selected=\"selected\"" : "");
+
+		print("
+			  	</select>
+			  	</label>
+	                </td>
+	                <td class=\"align-center\" style=\"width:25%;background-color:#C0C0C0;\">
+				". $msg->read($LIAISON_BEHAVIOR) ."
+	                </td>
+	                <td class=\"align-center\" style=\"width:25%;background-color:#C0C0C0;\">
+				". $msg->read($LIAISON_PRESENCE) ."
+	                </td>
+	                <td class=\"align-center\" style=\"width:25%;background-color:#C0C0C0;\">
+				". $msg->read($LIAISON_INVEST) ."
+	                </td>
+			");
+
+		// affichage des compte rendus
+		$query  = "select _ID, _IP, _date, _text1, _text2, _text3, _IDparent, _period ";
+		$query .= "from liaison_items, liaison_data ";
+		$query .= "where liaison_items._IDdata = liaison_data._IDdata ";
+		$query .= ( $auth[1] == "O" ) ? "" : "AND _IDparent = '0' ";
+		$query .= "AND liaison_data._IDeleve = '$IDeleve' ";
+		$query .= ( $period ) ? "AND liaison_data._period = '$period' " : "" ;
+		$query .= "order by liaison_items._IDitem, liaison_data._period asc";
+
+		// détermination du nombre de pages
+		$result = mysql_query($query, $mysql_link);
+		$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+		$j = 0;
+		while ( $row ) {
+			$bgcolor = ( $row[6] )
+				? "background-color:$bgcol[0];"
+				: ($j++ % 2 ? "background-color:#eeeeee;" : "");
+
+			$text    = "<strong>".getUserName($row[0])."</strong><br/>";
+			$text   .= date2longfmt($row[2]) ." ". _getHostName($row[1]);
+
+			// autorisation des commentaires
+			$reply  = ( $auth[1] == "O" AND $row[6] == 0 )
+				? "[<a href=\"".myurlencode("index.php?item=$item&cmde=post&$pglink&IDeleve=$IDeleve&myclass=$myclass&parent=$row[0]&period=$row[7]")."\">". $msg->read($LIAISON_REPLY) ."</a>]<br/>"
+				: "" ;
+
+			print("
+				  <tr onmouseover=\"style.backgroundColor='#DEDEDE';\" onmouseout=\"style.backgroundColor='';\">
+		                <td style=\"width:25%;$bgcolor\">$text</td>
+		                <td style=\"width:25%;$bgcolor\">$reply". replace_smile(find_typo($row[3], $note)) ."</td>
+		                <td style=\"width:25%;$bgcolor\">$reply". replace_smile(find_typo($row[4], $note)) ."</td>
+		                <td style=\"width:25%;$bgcolor\">$reply". replace_smile(find_typo($row[5], $note)) ."</td>
+				  </tr>
+				");
+
+			$row = remove_magic_quotes(mysql_fetch_row($result));
+			}
+
+		print("
+			<tr>
+	              <td colspan=\"4\"><hr/></td>
+			</tr>
+	          </table>
+			");
+
+	    	print("
+	          <table class=\"width100\">
+			<tr>
+	              <td style=\"width:10%;\" class=\"valign-middle align-center\">
+	              	<a href=\"index.php?item=$item&amp;$pglink&amp;period=$period\"><img src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/cancel.gif\" title=\"\" alt=\"".$msg->read($LIAISON_INPUTCANCEL)."\" /></a>
+	              </td>
+	              <td class= \"valign-middle\">". $msg->read($LIAISON_GOBACK) ."</td>
+			</tr>
+                </table>
+
+	          </form>
+			");
+	?>
+
+</div>

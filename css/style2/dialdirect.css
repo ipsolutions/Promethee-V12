@@ -1,0 +1,259 @@
+/*
+LE STYLE POUR LES DIALOGUES
+*/
+
+/* tempo pour la page */
+body {
+	font-family: Verdana, Helvetica, Arial, sans-serif, monospace;
+	color: #000;
+	background: #FFF;
+}
+td{
+	vertical-align: middle;
+}
+/* fin tempo */
+
+
+/* la box contenant les dialogues  */
+.dialdirect2 {
+	font-family: Verdana, Helvetica, Arial, sans-serif, monospace;
+}
+
+/* la bar du titre */
+.dialdirect2 .bartitre{
+	height: 26px;
+}
+
+/* titre des dialogues */
+.dialdirect2 .titre {
+	display: block;
+	text-decoration: none;
+	color: #000;
+	height: 18px;
+	font-size: 12px;
+	font-weight: bold;
+	line-height: 22px;
+	padding-left: 3px;
+}
+
+
+/* etat connexion inactive */
+.dialdirect2 .etat{
+	display: block;
+	text-decoration: none;
+	float: left;
+	width: 28px;
+	height: 24px;
+	background-image: url("img/etat.png");
+	background-repeat: no-repeat;
+	margin: 0px;
+}
+.dialdirect2 .etat:hover{
+	background-image: url("img/etat2.png");
+}
+
+/* etat connexion active */
+.dialdirect2 .etat2{
+	display: block;
+	text-decoration: none;
+	float: left;
+	width: 28px;
+	height: 24px;
+	background-image: url("img/etat3.png");
+	background-repeat: no-repeat;
+	margin: 0px;
+}
+
+/* zone de lecture des messages */
+.dialdirect2 .lecture{
+	width: 100%;
+	height: 300px;
+	overflow: auto;
+	font-size: 11px;
+	border: 1px solid #aaa;
+	background: #fff;
+}
+
+/* zone des elements de saisies */
+.dialdirect2 .zenvoie{
+	/*border: 1px solid #000;*/
+}
+
+/* zone de l'interlocuteur */
+.dialdirect2 .envoie{
+	color: #000;
+	font-size: 11px;
+	text-align: center;
+}
+
+/* zone de l'interlocuteur vide*/
+.dialdirect2 .rien{
+	display: none;
+}
+
+/* input texte de saisie */
+.dialdirect2 .saisie{
+	width: 370px;
+	margin-top: 2px;
+	line-height: 20px;
+	border: 1px solid #aaa;
+}
+
+/* input  bouton de validation */
+.dialdirect2 .ok{
+	float: right;
+	display: block;
+	text-decoration: none;
+	background-image: url("img/ok.png");
+	background-repeat: no-repeat;
+	width: 22px;
+	height: 22px;
+}
+.dialdirect2 .ok:hover{
+	background-image: url("img/ok2.png");
+}
+
+/* bouton de fermeture message prive */
+.dialdirect2 .fermeture{
+	float: right;
+	display: block;
+	text-decoration: none;
+	background-image: url("img/close.png");
+	background-repeat: no-repeat;
+	width: 12px;
+	height: 12px;
+}
+.dialdirect2 .fermeture:hover{
+	background-image: url("img/close2.png");
+}
+
+/********************\
+|* Pour les dialogues *|
+\********************/
+
+.dialdirect2 .message{
+	clear: both;
+	/*background: #FEFFCE ;*/
+	padding-top: 0px;
+}
+
+.dialdirect2 .messageprive{
+	clear: both;
+	/*background: #FFB6B9 ;*/
+	background: #FEFFE3 ;
+	padding-top: 0px;
+}
+
+.dialdirect2 .erreur{
+	padding: 4px;
+	clear: both;
+	background: #FF6B72 ;
+}
+
+.dialdirect2 .prof{
+	width:24px;
+	height:22px;
+	float:left;
+	background-image: url("img/prof.png");
+	/*background-image: url("img/eleve.png");*/
+	background-repeat: no-repeat;
+}
+
+.dialdirect2 .eleve{
+	width:24px;
+	height:22px;
+	float:left;
+	background-image: url("img/eleve.png");
+	background-repeat: no-repeat;
+}
+
+.dialdirect2 .admin{
+	width:24px;
+	height:22px;
+	float:left;
+	background-image: url("img/admin.png");
+	background-repeat: no-repeat;
+}
+
+.dialdirect2 .autre{
+	width:24px;
+	height:22px;
+	float:left;
+	background-image: url("img/autre.png");
+	background-repeat: no-repeat;
+}
+
+.dialdirect2 .prive{
+	width:24px;
+	height:24px;
+	float:right;
+	background-image: url("img/prive.png");
+	background-repeat: no-repeat;
+}
+
+
+
+/* boite de deco */
+.dialdirectbox {
+	width: 100%;
+}
+.dialdirectbox .no{
+	background-image: url("img/boite/no.png");
+	width: 7px;
+	height: 7px;
+	background-repeat: no-repeat;
+	background-position: top left;
+	float:left;
+}
+.dialdirectbox .nn{
+	background-image: url("img/boite/nn.png");
+	height: 7px;
+	background-repeat: repeat-x;
+	background-position: top;
+}
+.dialdirectbox .ne{
+	background-image: url("img/boite/ne.png");
+	width: 11px;
+	height: 7px;
+	background-repeat: no-repeat;
+	background-position: top right;
+	float:right;
+}
+.dialdirectbox .so{
+	background-image: url("img/boite/so.png");
+	width: 7px;
+	height: 11px;
+	background-repeat: no-repeat;
+	background-position: top left;
+	float:left;
+}
+.dialdirectbox .ss{
+	background-image: url("img/boite/ss.png");
+	height: 11px;
+	background-repeat: repeat-x;
+	background-position: top;
+}
+.dialdirectbox .se{
+	background-image: url("/css/style2/img/boite/se.png");
+	width: 11px;
+	height: 11px;
+	background-repeat: no-repeat;
+	background-position: top right;
+	float:right;
+}
+.dialdirectbox .oo{
+	background-image: url("img/boite/oo.png");
+	background-repeat: repeat-y;
+	background-position: left;
+}
+.dialdirectbox .ee{
+	background-image: url("img/boite/ee.png");
+	background-repeat: repeat-y;
+	background-position: right;
+}
+.dialdirectbox .cc{
+
+	padding-left: 10px;
+	padding-right: 12px;
+}
+

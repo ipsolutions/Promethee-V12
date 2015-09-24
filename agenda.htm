@@ -1,0 +1,155 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2003-2009 by Dominique Laporte(C-E-D@wanadoo.fr)
+   Copyright (c) 2006 by Nordine Zetoutou (nordine.zetoutou@educagri.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : agenda.htm
+ *		projet   : la page des agendas
+ *
+ *		version  : 1.0
+ *		auteur   : laporte
+ *		creation : 29/10/03
+ *		modif    : 17/07/06 - Nordine Zetoutou
+ * 	                 migration des balises HTML en XHTML 1.0 strict
+ */
+
+
+$IDgroup = ( @$_POST["IDgroup"] )		// identifiant du e-groupe
+	? (int) $_POST["IDgroup"]
+	: (int) @$_GET["IDgroup"] ;
+$IDdata  = ( strlen(@$_POST["IDdata"]) )	// ID de l'agenda
+	? (int) $_POST["IDdata"]
+	: (int) (@$_GET["IDdata"] ? $_GET["IDdata"] : @$IDdata) ;
+
+$submit  = ( @$_POST["submit"] )		// bouton de validation
+	? $_POST["submit"]
+	: @$_GET["submit"] ;
+
+// réinitialisation
+if ( @$_GET["salon"] == "" )
+	$_SESSION["CampusName"] = "";
+?>
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($AGENDA_LIST)); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+
+	<?php
+		require_once "include/agenda.php";
+
+		// création d'un agenda pédagogique
+		switch ( $submit ) {
+			case "new" :
+				$result = mysql_query("select _IDmod from campus_data where _titre = '".$_SESSION["CampusName"]."' limit 1", $mysql_link);
+				$row    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+				if ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $row[0] ) {
+					$ag     = new diary();
+
+					$IDdata = $ag->create($_SESSION["CampusName"], $msg->read($AGENDA_PEDAGO, $_SESSION["CampusName"]));
+					if ( $IDdata )
+						$ag->perms($_SESSION["CnxID"], 255, pow(2, $_SESSION["CnxGrp"] - 1));
+					else
+						mysql_error($mysql_link);
+					}
+				break;
+			default :
+				break;
+			}
+
+		// recherche d'un agenda par défaut, pédagogique ou privé
+		if ( !$IDdata ) {
+			// agenda par défaut
+			$query  = "select _IDdata from agenda ";
+			$query .= "where _private = 'O' AND _lang = '".$_SESSION["lang"]."' ";
+			$query .= "limit 1";
+
+			$result = mysql_query($query, $mysql_link);
+			$row    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+			// agenda pédagogique ou privé
+			$ag     = new diary($IDgroup);
+
+			$IDdata = $ag->exist($_SESSION["CnxID"], $_SESSION["CampusName"]);
+			$IDdata = ( $IDdata ) ? $row[0] : $IDdata ;
+
+			// l'agenda personnalisé supplante l'agenda par défaut
+			$query  = "select _default, _weekly from agenda_user ";
+			$query .= "where _IDdata = '".$_SESSION["CnxID"]."' ";
+			$query .= "limit 1";
+
+			$result = mysql_query($query, $mysql_link);
+			$row    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+			// on supplante l'agenda par défaut
+			$IDdata = ( $row[0] ) ? $row[0] : $IDdata ;
+			$weekly = ( $row[1] == "O" ) ? 1 : 2 ;
+			}
+
+		// l'agenda est trouvé, on l'affiche
+		if ( $IDdata )
+			require_once "agenda.php";
+		// sinon on va créer des agendas
+		else {
+			// C'est un nouvel agenda pour un campus virtuel, on demande la création
+			if ( @$_SESSION["CampusName"] ) {
+				$result = mysql_query("select _IDmod from campus_data where _titre = '".$_SESSION["CampusName"]."' limit 1", $mysql_link);
+				$row    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+				if ( $_SESSION["CnxAdm"] == 255 OR $row[0] == $_SESSION["CnxID"] )
+					print("
+						<table class=\"width100\">
+						  <tr>
+						    <td style=\"width:25%;\" class=\"align-right\"><img src=\"".$_SESSION["ROOTDIR"]."/images/warning.png\" title=\"\" alt=\"\" /></td>
+						    <td style=\"width:75%;\">
+						      ". $msg->read($AGENDA_DOESNTEXIST, Array($_SESSION["CampusName"], myurlencode("index.php?item=$item&salon=".$_SESSION["CampusName"]."&submit=new"))) ."
+						    </td>
+						  </tr>
+						</table>
+						");
+				}
+			// c'est un agenda personnel ou d'un e-groupe
+			// on le crée automatiquement
+			else {
+				$idgrp  = ( $IDgroup ) ? 255 : pow(2, $_SESSION["CnxGrp"] - 1) ;
+				$priv   = ( $IDgroup ) ? 0 : $_SESSION["CnxID"];
+				$titre  = ( $IDgroup ) ? $_SESSION["eGroupName"] : $msg->read($AGENDA_PERSDIARY, $_SESSION["CnxName"]) ;
+				$texte  = ( $IDgroup ) ? "" : $msg->read($AGENDA_CREATEON, date2longfmt($date)) ;
+
+				$ag     = new diary($IDgroup);
+
+				$IDdata = $ag->create($titre, $texte, $priv);
+				if ( $IDdata )
+					$ag->perms($_SESSION["CnxID"], $idgrp, $idgrp);
+				else
+					mysql_error($mysql_link);
+
+				require_once "agenda.php";
+				}
+			}
+	?>
+
+</div>

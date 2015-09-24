@@ -1,0 +1,343 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2003-2008 by Dominique Laporte(C-E-D@wanadoo.fr)
+   Copyright (c) 2006 by Didier Roy (miraceti@free.fr)     
+   Copyright (c) 2006 by Nordine Zetoutou (nordine.zetoutou@educagri.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : campus_visu.htm
+ *		projet   : la page d'accès au campus virtuel
+ *
+ *		version  : 1.0
+ *		auteur   : laporte
+ *		creation : 4/10/03
+ *		modif    : 08/06/06 - par Didier Roy
+ *		           migration PHP5 
+ *		modif    : 17/07/06 - Nordine Zetoutou
+ * 	                 migration des balises HTML en XHTML 1.0 strict
+ */
+
+
+$IDcentre = ( @$_POST["IDcentre"] )		// ID du centre
+	? (int) $_POST["IDcentre"]
+	: (int) (@$_GET["IDcentre"] ? $_GET["IDcentre"] : $_SESSION["CnxCentre"]) ;
+$IDmat    = ( @$_POST["IDmat"] )		// ID de la matière
+	? (int) $_POST["IDmat"]
+	: (int) @$_GET["IDmat"] ;
+
+$submit   = @$_GET["submit"];			// bouton de validation
+?>
+
+
+<?php
+	// gestion des ACL pour e-campus privés
+	require_once "include/user.php";
+	$acl = new user_acl("ecampus");
+
+	// recherche du campus
+	$query  = "select _table from campus ";
+	$query .= "where _visible = 'O' AND _lang = '".$_SESSION["lang"]."' ";
+	$query .= "limit 1";
+
+	$result = mysql_query($query, $mysql_link);
+	$table  = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+	// recherche du modérateur du campus
+	if ( $table[0] == "campus_data" ) {
+		$Query  = "select _IDmat, _IDmod, _IDgrprd, _texte, _IDgrpwr, _private, _auto from campus_data ";
+		$Query .= "where _titre = '".$_SESSION["CampusName"]."' ";
+		$Query .= "AND _visible = 'O' AND _lang = '".$_SESSION["lang"]."' ";
+		$Query .= "limit 1";
+		}
+	else {
+		$Query  = "select _IDclass, _IDmod, _IDgrprd, _text, _IDgrpwr, _private, _auto from campus_classe ";
+		$Query .= "where _ident = '".$_SESSION["CampusName"]."' ";
+		$Query .= "AND _IDcentre = '$IDcentre' ";
+		$Query .= "limit 1";
+		}
+
+	$result = mysql_query($Query, $mysql_link);
+	$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+	$IDmod  = $row[1] ;
+
+	// identificant du campus virtuel
+	$IDmat              = ( $table[0] == "campus_data" ) ? $row[0] : -$row[0] ;
+	$_SESSION["egroup"] = -$row[0];
+
+	// lecture du modérateur
+	if ( $IDmod ) {
+		$result = mysql_query("select _sexe from user_id where _ID = '$IDmod' limit 1", $mysql_link);
+		$who    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+						
+		$mod    = ( $who[0] == "F" )
+			? $msg->read($CAMPUS_MODOF)
+			: $msg->read($CAMPUS_MODOM) ;
+		$mod   .= " : " . getUserName($row[1]);
+		}
+	else
+		$mod    = $msg->read($CAMPUS_NOMODO);
+
+	// lecture du centre
+	$result = mysql_query("select _ident from config_centre where _IDcentre = '$IDcentre' AND _lang = '".$_SESSION["lang"]."' limit 1", $mysql_link);
+	$centre = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+	// commandes de l'utilisateur
+	switch ( $submit ) {
+		case "del" :
+			$query  = "delete from campus_user ";
+			$query .= "where _IDmat = '$IDmat' ";
+			$query .= "AND _ID = '".$_SESSION["CnxID"]."' ";
+			$query .= "limit 1";
+
+			mysql_query($query, $mysql_link);
+			break;
+
+		case "revoke" :
+			$query  = "delete from campus_user ";
+			$query .= "where _IDmat = '$IDmat' ";
+			$query .= "AND _ID <> '".$_SESSION["CnxID"]."' ";
+
+			if ( mysql_query($query, $mysql_link) ) {
+				$query  = "delete from user_acl ";
+				$query .= "where _ident = 'ecampus' ";
+				$query .= "AND _IDident = '$IDmat' ";
+
+				mysql_query($query, $mysql_link);
+				}
+			break;
+
+		case "add" :
+			// date d'inscription
+			$date   = date("Y-m-d H:i:s");
+
+			$access = ( $row[6] == "O" OR $_SESSION["CnxID"] == $row[1] ) ? 1 : -1 ;
+
+			$query  = "insert into campus_user ";
+			$query .= "values('', '$IDmat', '".$_SESSION["CnxID"]."', '$access', '$date', '', '', '0')";
+
+			if ( mysql_query($query, $mysql_link) )
+				if ( $access == -1 ) {
+					$subject = $msg->read($CAMPUS_SUBJECT, $_SESSION["CampusName"]);
+					$body    = $msg->read($CAMPUS_REQUEST, Array($_SESSION["CnxName"], $_SESSION["CampusName"], $_SESSION["CampusName"], myurlencode("index.php?item=$item&cmde=user&IDcentre=$IDcentre&IDmat=$IDmat")));
+
+					sendAlertMessage($row[1], $subject, $body);
+					}
+			break;
+
+		case "invite" :
+			// date d'inscription
+			$date   = date("Y-m-d H:i:s");
+
+			// pour les cours privés
+			$result = mysql_query("select _ID from user_acl where _IDident = '$IDmat' AND _ident = 'ecampus' AND _visible = 'O'", $mysql_link);
+			$users  = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+			while ( $users ) {
+				$query  = "insert into campus_user ";
+				$query .= "values('', '$IDmat', '$users[0]', '1', '$date', '', '', '0')";
+
+				if ( mysql_query($query, $mysql_link) ) {
+					$subject = $msg->read($CAMPUS_SUBJECT2, $_SESSION["CampusName"]);
+					$body    = $msg->read($CAMPUS_REQUEST2, Array(getUserName($row[1], false), $_SESSION["CampusName"], $_SESSION["CampusName"], myurlencode("index.php?item=$item&cmde=visu&IDcentre=$IDcentre&IDmat=$IDmat")));
+
+					sendAlertMessage($users[0], $subject, $body);
+					}
+
+				$users  = mysql_fetch_row($result);
+				}
+			break;
+
+		default :
+			break;
+		}
+
+	// la ligne de commande sur les liens
+	$cmdStr = "index.php?IDcentre=$IDcentre&IDmat=$IDmat&IDres=2&salon=::".@$_SESSION["CampusName"];
+?>
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat; height: 25px;\">
+	<div style="text-align: center;"><?php print($msg->read($CAMPUS_ECAMPUS, $_SESSION["CampusName"])); ?></div>
+	<div class="x-small" style="float: left;"><em><?php echo $mod; ?></em></div>
+	<div class="x-small" style="float: right;"><?php echo $centre[0]; ?></div>
+</div>
+
+<div class="maincontent">
+	<table class="width100">
+	<?php
+		// pour e-campus privé
+		if ( $row[5] == "O" ) {
+			// pour savoir le nombre de membres
+			$res = mysql_query("select _IDuser from campus_user where _IDmat = '$IDmat' AND _access > 0", $mysql_link);
+			$nbf = ( $res ) ? mysql_numrows($res) : 0 ;
+				
+			$msg->isPlural = (bool) ( $nbf > 1 ) ;				
+
+			print("
+		        <tr>
+		          <td>
+				". $msg->read($CAMPUS_MEMBERACCESS, Array(strval($nbf), myurlencode("$cmdStr&item=$item&cmde=user"))) ."
+		          </td>
+		          <td class=\"align-right\">");
+
+			// invitation par le modérateur
+			if ( $row[6] == "O" ) {
+				if ( $row[1] == $_SESSION["CnxID"] ) {
+					print("[ ");
+					print("<a href=\"".myurlencode("$cmdStr&item=$item&cmde=show&submit=invite")."\">".$msg->read($CAMPUS_INVITATION)."</a>|");
+					print("<a href=\"".myurlencode("$cmdStr&item=$item&cmde=show&submit=revoke")."\">".$msg->read($CAMPUS_REVOKE)."</a>");
+					print(" ]");
+					}
+				}
+			// sinon demande inscription
+			else
+				switch ( iscampusRegistered($IDmat) ) {
+					case "-1000" :
+						print("[ <a href=\"".myurlencode("$cmdStr&item=$item&cmde=show&submit=add")."\">".$msg->read($CAMPUS_REGISTER)."</a> ]");
+						break;
+
+					case "-1" :
+						print("[ ".$msg->read($CAMPUS_WAITING)." ]");
+						break;
+
+					case "0" :
+						// liste brûlée
+						break;
+
+					default :
+						print("[ ");
+						print("<a href=\"".myurlencode("$cmdStr&item=$item&cmde=show&submit=del")."\">".$msg->read($CAMPUS_UNREGISTER)."</a>");
+
+						if ( $row[1] == $_SESSION["CnxID"] )
+							print("|<a href=\"".myurlencode("$cmdStr&item=$item&cmde=show&submit=revoke")."\">".$msg->read($CAMPUS_REVOKE)."</a>");
+
+						print(" ]");
+						break;
+					}
+
+			print("
+		          </td>
+			  </tr>
+
+		        <tr>
+				<td colspan=\"2\"><hr/></td>
+			  </tr>");
+			}
+	?>
+
+	  <tr>
+		<td colspan="2">
+	<?php
+		// description du e-campus
+         	if ( strlen($row[3]) )
+	     		print("<div style=\"background-color:#eeeeee; padding:2px;\">". replace_smile(find_typo($row[3], $note)) ."</div>");
+
+		// on vérifie si la photo existe
+		$photo = ( file_exists("$DOWNLOAD/campus/$IDmat.gif") ) 
+			? "$DOWNLOAD/campus/$IDmat.gif"
+			: "" ;
+
+         	if ( strlen($photo) )
+	     		print("<img src=\"$photo\" title=\"$photo\" alt=\"$photo\" style=\"float: left; margin: 10px 10px 0px 0px;\" />");
+
+		print("<p style=\"float: left; margin: 10px 0px 0px 0px; border-left-style:dotted; padding: 10px 10px 10px 10px; text-align:justify;\">");
+
+		if ( $IDmat )
+			print($msg->read($CAMPUS_OPTIONS) ."<br/>");
+		else
+			print($msg->read($CAMPUS_PROMPT));
+
+		$Query  = "select distinctrow campus_menu._IDmenu, campus_menu._text, campus_menu._link, campus_items._visible ";
+		$Query .= "from campus_menu, campus_items ";
+		$Query .= "where campus_menu._visible = 'O' AND campus_menu._lang = '".$_SESSION["lang"]."' ";
+		$Query .= "AND campus_items._IDcentre = '$IDcentre' ";
+		$Query .= "AND campus_items._IDmat = '$IDmat' ";
+		$Query .= "AND campus_items._IDmenu = campus_menu._IDmenu ";
+
+		// lecture des modules autorisés
+		if ( @$_SESSION["CampusName"] AND ($_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $row[1]) ) {
+			$Query .= "order by campus_items._IDmenu";
+
+			$result = mysql_query($Query, $mysql_link);
+			$myrow  = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+			while ( $myrow ) {
+				// validation d'une rubrique
+				$image   = ( $myrow[3] == 'O' ) ? "visible" : "invisible" ;
+
+				// message d'avertissement
+				$req     = ( $myrow[3] == 'O' )
+					? $msg->read($CAMPUS_INVISIBLE)
+					: $msg->read($CAMPUS_VISIBLE) ;
+
+				// action sur le lien
+				$link    = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $IDmod )
+					? "<a href=\"".myurlencode("$cmdStr&item=9&IDmenu=$myrow[0]&submit=$image")."\" onclick=\"return confirmLink(this, '$req');\"><img src=\"".$_SESSION["ROOTDIR"]."/images/$image.gif\" title=\"$req\" alt=\"$req\" /></a>"
+					: ($myrow[3] == 'O'
+						? "<img src=\"".$_SESSION["CfgPuce"]."\" title=\"\" alt=\"*\" />"
+						: "<img src=\"".$_SESSION["ROOTDIR"]."/images/close.gif\" title=\"\" alt=\"X\" />") ;
+
+				// lien externe
+				$mylink = ( strstr($myrow[2], "http://") OR strstr($myrow[2], "https://") )
+					? $myrow[2]
+					: "$cmdStr&$myrow[2]&IDmenu=$myrow[0]" ;
+
+				$target = ( strstr($myrow[2], "http://") OR strstr($myrow[2], "https://") )
+					? "onclick=\"window.open(this.href, '_blank'); return false;\" "
+					: "" ;
+
+				print("$link <a href=\"".myurlencode($mylink)."\" $target>$myrow[1]</a><br/>");
+
+				$myrow  = remove_magic_quotes(mysql_fetch_row($result));
+				}
+			}
+		else {
+			$Query .= "AND campus_items._visible = 'O' ";
+			$Query .= "order by campus_items._IDmenu";
+
+			$result = mysql_query($Query, $mysql_link);
+			$myrow  = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+			while ( $myrow ) {
+				// lien externe
+				$mylink = ( strstr($myrow[2], "http://") OR strstr($myrow[2], "https://") )
+					? $myrow[2]
+					: "$cmdStr&$myrow[2]&IDmenu=$myrow[0]" ;
+
+				$target = ( strstr($myrow[2], "http://") OR strstr($myrow[2], "https://") )
+					? "onclick=\"window.open(this.href, '_blank'); return false;\" "
+					: "" ;
+
+				if( iscampusRegistered($IDmat) > 0 OR $row[5] != "O" OR $acl->isMember($IDmat, $_SESSION["CnxID"]) )
+					print("<img src=\"".$_SESSION["ROOTDIR"]."/images/spip/puce.gif\" title=\"\" alt=\"*\" /> <a href=\"".myurlencode($mylink)."\" $target>$myrow[1]</a><br/>");
+				else
+					print("<img src=\"".$_SESSION["ROOTDIR"]."/images/spip/puce.gif\" title=\"\" alt=\"*\" /> $myrow[1]<br/>");
+
+				$myrow  = remove_magic_quotes(mysql_fetch_row($result));
+				}
+			}
+
+		print("</p>");
+	?>
+		</td>
+	  </tr>
+	</table>
+</div>

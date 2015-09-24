@@ -1,0 +1,379 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2003-2008 by Dominique Laporte(C-E-D@wanadoo.fr)
+   Copyright (c) 2006 by Didier Roy (miraceti@free.fr)
+   Copyright (c) 2006 by Nordine Zetoutou (nordine.zetoutou@educagri.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : campus_gestion.htm
+ *		projet   : la page de gestion du campus virtuel
+ *
+ *		version  : 1.1
+ *		auteur   : laporte
+ *		creation : 4/10/03
+ *		modif    : 08/06/06 - par Didier Roy
+ *		           migration PHP5  
+ *		modif    : 17/07/06 - Nordine Zetoutou
+ * 	                 migration des balises HTML en XHTML 1.0 strict
+ */
+
+
+$IDcentre = ( strlen(@$_POST["IDcentre"]) )		// ID du centre
+	? (int) $_POST["IDcentre"]
+	: (int) (@$_GET["IDcentre"] ? $_GET["IDcentre"] : $_SESSION["CnxCentre"]) ;
+$IDmat    = ( @$_POST["IDmat"] )				// ID matière ou formation
+	? (int) $_POST["IDmat"]
+	: (int) @$_GET["IDmat"] ;
+$IDcampus = (int) @$_POST["IDcampus"];
+$IDmod    = (int) @$_POST["IDmod"];
+$cbwr     = @$_POST["cbwr"];
+$cbrd     = @$_POST["cbrd"];
+$visible  = ( @$_POST["visible"] ) ? "N" : "O" ;
+
+$submit   = @$_POST["valid_x"];				// bouton de validation
+?>
+
+
+<?php
+	// l'utilisateur a validé la saisie
+	if ( $submit ) {
+		$status = $msg->read($CAMPUS_MODIFICATION) ." ";
+
+		$grpwr = $grprd = 0;
+		for ($i = 0; $i < count($cbwr); $i++)
+			$grpwr += ( @$cbwr[$i] ) ? $cbwr[$i] : 0 ;
+		for ($i = 0; $i < count($cbrd); $i++)
+			$grprd += ( @$cbrd[$i] ) ? $cbrd[$i] : 0 ;
+
+		// recherche des campus
+		$query  = "select _table from campus ";
+		$query .= "where _IDcampus = '$IDcampus' AND _lang = '".$_SESSION["lang"]."' ";
+		$query .= "limit 1";
+
+		$result = mysql_query($query, $mysql_link);
+		$row    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+		// modification du campus
+		if ( $row[0] == "campus_data" ) {
+			$Query  = "update campus_data ";
+			$Query .= "set _IDmod = '$IDmod', _IDgrpwr = '$grpwr', _IDgrprd= '$grprd', _visible = '$visible' ";
+			$Query .= "where _IDmat = '$IDmat' AND _lang = '".$_SESSION["lang"]."' ";
+			$Query .= ( $_SESSION["CnxAdm"] == 255 ) ? "" : "AND _IDmod = '".$_SESSION["CnxID"]."' ";
+			$Query .= "limit 1";
+			}
+		else {
+			$Query  = "update campus_classe ";
+			$Query .= "set _IDmod = '$IDmod', _IDgrpwr = '$grpwr', _IDgrprd= '$grprd', _visible = '$visible' ";
+			$Query .= "where _IDclass = abs($IDmat) ";
+			$Query .= ( $_SESSION["CnxAdm"] == 255 ) ? "" : "AND _IDmod = '".$_SESSION["CnxID"]."' ";
+			$Query .= "limit 1";
+			}
+
+		if ( !mysql_query($Query, $mysql_link) ) {
+			$status .= "<img src=\"".$_SESSION["ROOTDIR"]."/images/bad.gif\" title=\"\" alt=\"\" />";
+			sql_error($mysql_link);
+			}
+		else
+			$status .= "<img src=\"".$_SESSION["ROOTDIR"]."/images/ok.gif\" title=\"\" alt=\"\" />";
+		}
+	// initialisation
+	else
+		$status = "-";
+?>
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($CAMPUS_MANAGEMENT)); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+
+	<p><?php print($msg->read($CAMPUS_STATUS) . " $status"); ?></p>
+
+	<form id="formulaire" action="index.php" method="post">
+	<?php
+		print("
+			<p class=\"hidden\"><input type=\"hidden\" name=\"item\"     value=\"$item\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"cmde\"     value=\"$cmde\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"mycentre\" value=\"$IDcentre\" /></p>
+			");
+	?>
+
+	<div style="border:#cccccc solid 1px; padding:4px;">
+
+		  <table class="width100">
+		    <tr style="background-color:#eeeeee;">
+		      <td style="width:33%;"><?php print($msg->read($CAMPUS_CENTER)); ?></td>
+		      <td style="width:33%;"><?php print($msg->read($CAMPUS_ACCESSBY)); ?></td>
+		      <td style="width:33%;"></td>
+		    </tr>
+
+		    <tr>
+		      <td>
+				<label for="IDcentre"> 
+				<select id="IDcentre" name="IDcentre" onchange="document.forms.formulaire.submit()" >
+				<?php
+					// on sélectionne les centres
+					$Query  = "select _IDcentre, _ident from config_centre ";
+					$Query .= "where _visible = 'O' AND _lang = '".$_SESSION["lang"]."' " ;
+					$Query .= "order by _ident";
+
+					$result = mysql_query($Query, $mysql_link);
+					$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+					while ( $row ) {
+						$check = ( $IDcentre == $row[0] ) ? "selected=\"selected\"" : "" ;
+
+						print("<option value=\"$row[0]\" $check >$row[1]</option>");
+
+						$row   = remove_magic_quotes(mysql_fetch_row($result));
+						}
+
+					if ( $IDcentre != @$_POST["mycentre"] )
+						$IDmat = 0;
+				?>
+				</select>
+				</label>
+		      </td>
+		      <td>
+			<?php
+				// mise à jour
+				if ( $IDcampus ) {
+					$query  = "update campus ";
+					$query .= "set _visible = 'N' ";
+					$query .= "where _lang = '".$_SESSION["lang"]."' ";
+
+					if ( mysql_query($query, $mysql_link) ) {
+						$query  = "update campus ";
+						$query .= "set _visible = 'O' ";
+						$query .= "where _lang = '".$_SESSION["lang"]."' AND _IDcampus = '$IDcampus' ";
+						$query .= "limit 1";
+
+						mysql_query($query, $mysql_link);
+						}
+					}
+
+				// recherche des campus
+				$query  = "select _IDcampus, _ident, _visible, _table from campus ";
+				$query .= "where _IDcentre = '$IDcentre' AND _visible = 'O' ";
+				$query .= "AND _lang = '".$_SESSION["lang"]."' ";
+				$query .= "order by _ident asc";
+
+				$result = mysql_query($query, $mysql_link);
+				$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+				// initialisation
+				$table  = $row[3];
+
+				while ( $row ) {
+					$table   = ( $row[2] == "O" ) ? $row[3] : $table ;
+					$checked = ( $row[2] == "O" ) ? "checked=\"checked\"" : "" ;
+
+					print("
+						<label for=\"IDcampus_$row[0]\">
+						<input type=\"radio\" id=\"IDcampus_$row[0]\" name=\"IDcampus\" value=\"$row[0]\" onchange=\"document.forms.formulaire.submit()\" $checked /> $row[1]
+						</label>
+						<br/>");
+
+					$row   = remove_magic_quotes(mysql_fetch_row($result));
+					}
+			?>
+		      </td>
+		      <td></td>
+		    </tr>
+
+		    <tr>
+		      <td style="height:10px;" colspan="3"></td>
+		    </tr>
+
+		    <tr style="background-color:#eeeeee;">
+		      <td><?php print($msg->read($CAMPUS_IDENT)); ?></td>
+		      <td><?php print($msg->read($CAMPUS_CLOSE)); ?></td>
+		      <td></td>
+		    </tr>
+
+		    <tr>
+		      <td>
+			<label for="IDmat">
+			<select id="IDmat" name="IDmat" onchange="document.forms.formulaire.submit()">
+			<?php
+				// recherche des ressources
+				if ( $table == "campus_data" ) {
+					$query  = "select _IDmat, _titre, _IDmod from campus_data ";
+					$query .= "where _lang = '".$_SESSION["lang"]."' ";
+					$query .= "order by _titre asc";
+					}
+				else {
+					$query  = "select _IDclass, _ident, _IDmod from campus_classe ";
+					$query .= "where _IDcentre = '$IDcentre' ";
+					$query .= "order by _ident asc";
+					}
+
+				$result = mysql_query($query, $mysql_link);
+				$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+				// initialisation
+				if ( !$IDmat )
+					$IDmat = $row[0];
+
+				while ( $row ) {
+					$select = ( abs($IDmat) == $row[0] ) ? "selected=\"selected\"" : "" ;
+
+					// seul le webmaster peut accéder à tous les campus
+					if ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $row[2] )
+						print("<option value=\"$row[0]\" $select>$row[1]</option>");
+
+					$row = remove_magic_quotes(mysql_fetch_row($result));
+					}
+
+   				// recherche du campus
+				if ( $table == "campus_data" ) {
+					$query  = "select _IDmod, _titre, _IDgrpwr, _IDgrprd, _visible from campus_data ";
+					$query .= "where _IDmat = '$IDmat' AND _lang = '".$_SESSION["lang"]."' ";
+					$query .= "limit 1";
+					}
+				else {
+					$query  = "select _IDmod, _ident, _IDgrpwr, _IDgrprd, _visible from campus_classe ";
+					$query .= "where _IDclass = abs($IDmat) ";
+					$query .= "limit 1";
+					}
+
+				$result = mysql_query($query, $mysql_link);
+				$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+				// initialisation
+				$IDmod  = $row[0];
+				$title  = $row[1];
+				$grpwr  = $row[2];
+				$grprd  = $row[3];
+				$check  = ( $row[4] == "N" ) ? "checked=\"checked\"" : "" ;
+			?>
+			</select>
+			</label>
+		      </td>
+		      <td>
+             		<label for="visible"><input type="checkbox" id="visible" name="visible" value="O" <?php print("$check"); ?> /></label>
+		      </td>
+		      <td></td>
+		    </tr>
+
+		    <tr>
+		      <td style="height:10px;" colspan="3"></td>
+		    </tr>
+
+		    <tr style="background-color:#eeeeee;">
+		      <td><?php print($msg->read($CAMPUS_MODO)); ?> *</td>
+		      <td><?php print($msg->read($CAMPUS_WRITER)); ?></td>
+		      <td><?php print($msg->read($CAMPUS_READER)); ?></td>
+		    </tr>
+	    
+		    <tr>
+		      <td class="valign-top">
+				<label for="IDmod">
+				<select id="IDmod" name="IDmod">
+				<?php
+					print("<option value=\"0\">".$msg->read($CAMPUS_NOMODO)."</option>");
+
+					// recherches des modérateurs
+					$result = mysql_query("select _ID, _name, _fname from user_id where _adm & 4 order by _name asc", $mysql_link);
+					$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+					while ( $row ) {
+						$select = ( $IDmod == $row[0] ) ? "selected=\"selected\"" : "" ;
+
+						print("<option value=\"$row[0]\" $select>".formatUserName($row[1], $row[2])."</option>");
+
+						$row = remove_magic_quotes(mysql_fetch_row($result));
+						}
+				?>
+				</select>
+				</label>
+		      </td>
+		      <td class="valign-top">
+	      		<?php
+					// recherche des groupes
+					$query  = "select _IDgrp, _ident from user_group ";
+					$query .= "where _visible = 'O' AND _lang = '".$_SESSION["lang"]."' ";
+					$query .= "order by _IDgrp asc";
+
+					$result = mysql_query($query, $mysql_link);
+					$row    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+					while ( $row ) {
+						$check = ( $grpwr & pow(2, $row[0] - 1) ) ? "checked=\"checked\"" : "" ;
+
+	             			print("<label for=\"cbrw_$row[0]\"><input type=\"checkbox\" id=\"cbrw_$row[0]\" name=\"cbwr[]\" value=\"". pow(2, $row[0] - 1) ."\" $check /></label>$row[1]<br/>");
+
+						$row   = remove_magic_quotes(mysql_fetch_row($result));
+						}
+             	?>
+		      </td>
+		      <td class="valign-top">
+	      		<?php
+					// recherche des groupes
+					mysql_data_seek($result, 0);
+					$row = mysql_fetch_row($result);
+
+					while ( $row ) {
+						$check = ( $grprd & pow(2, $row[0] - 1) ) ? "checked=\"checked\"" : "" ;
+
+	             			print("<label for=\"cbrd_$row[0]\"><input type=\"checkbox\" id=\"cbrd_$row[0]\" name=\"cbrd[]\" value=\"". pow(2, $row[0] - 1) ."\" $check /></label>$row[1]<br/>");
+
+						$row = remove_magic_quotes(mysql_fetch_row($result));
+						}
+             		?>
+		      </td>
+		    </tr>
+
+		    <tr>
+		      <td style="height:10px;" colspan="3"></td>
+		    </tr>
+		  </table>
+
+	</div>
+
+	<div class="x-small">* <?php print($msg->read($CAMPUS_DECLARE)); ?></div>
+
+	<hr style="width:80%;" />
+
+         <table width="100%"  cellspacing="0" cellpadding="2">
+           <tr>
+              <td style="width:10%;" class="valign-middle align-center">
+              	<?php print("<input type=\"image\" src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/valid.gif\" name=\"valid\" alt=\"".$msg->read($CAMPUS_INPUTOK)."\" />"); ?>
+              </td>
+              <td class="valign-middle">
+              	<?php print($msg->read($CAMPUS_UPDATECAMPUS)); ?>
+              </td>
+           </tr>
+           <tr>
+              <td class="valign-middle align-center">
+              	<a href="index.php"><?php print("<img src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/cancel.gif\" title=\"\" alt=\"".$msg->read($CAMPUS_INPUTCANCEL)."\" />"); ?></a>
+              </td>
+              <td class="valign-middle">
+              	<?php print($msg->read($CAMPUS_QUIT)); ?>
+              </td>
+           </tr>
+         </table>
+
+	</form>
+
+</div>

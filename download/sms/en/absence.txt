@@ -1,0 +1,5 @@
+We inform you that your child %1 %2
+Absent has been reported thus far: 3%
+And has not attended the course: 4%
+
+Sincerely.

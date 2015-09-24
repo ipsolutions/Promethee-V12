@@ -1,0 +1,843 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2002-2008 by Dominique Laporte(C-E-D@wanadoo.fr)
+   Copyright (c) 2006 by Nordine Zetoutou (nordine.zetoutou@educagri.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : resource_ftp.htm
+ *		projet   : la page d'affichage des ressources ftp
+ *
+ *		version  : 1.4
+ *		auteur   : laporte
+ *		creation : 30/03/03
+ *		modif    : 18/09/05 - par F.G. Ribreau & D. Laporte
+ *                     résolution d'une faille de sécurité par variable $currdir
+ *		           25/01/06 - par J. Lamure & D. Laporte
+ *                     résolution du problème de suppression et de renommage des fichers
+ *		           17/07/06 - Nordine Zetoutou
+ * 	                 migration des balises HTML en XHTML 1.0 strict
+ */
+
+
+$IDftp     = ( @$_POST["IDftp"] )		// ID du serveur
+	? (int) $_POST["IDftp"]
+	: (int) @$_GET["IDftp"] ;
+$IDroot    = ( @$_POST["IDroot"] )		// ID du serveur
+	? (int) $_POST["IDroot"]
+	: (int) @$_GET["IDroot"] ;
+$currdir   = ( @$_POST["currdir"] )		// répertoire courant
+	? $_POST["currdir"]
+	: @$_GET["currdir"] ;
+$mydir     = ( @$_POST["mydir"] )		// nouveau dossier
+	? $_POST["mydir"]
+	: @$_GET["mydir"] ;
+$myfile    = ( @$_POST["myfile"] )		// nouveau fichier
+	? $_POST["myfile"]
+	: @$_GET["myfile"] ;
+
+$ftp_cmde  = ( @$_POST["ftp_cmde"] )
+	? $_POST["ftp_cmde"]
+	: @$_GET["ftp_cmde"] ;
+$ftp_cmde  = ( @$_POST["del_x"] )		// bouton de suppression
+	? "delete"
+	: $ftp_cmde ;
+$form_cmde = ( @$_POST["form_cmde"] )
+	? $_POST["form_cmde"]
+	: @$_GET["form_cmde"] ;
+
+$sort      = (int) (empty($_GET["sort"]) ? -1 : $_GET["sort"]);
+
+
+//---------------------------------------------------------------------------
+function mkTree($openup)
+{
+/*
+ * fonction :	création de l'arborescence d'un répertoire
+ * in :		base de l'arborescence
+ * out :		arborescence
+ */
+
+	$tree  = Array();
+	$myDir = @opendir($openup);
+
+	// lecture des répertoires
+	while ( $entry = readdir($myDir) )
+		switch ( $entry ) {
+			case "." :
+			case ".." :
+				break;
+
+			default :
+				if ( is_dir("$openup/$entry") ) {
+					array_push($tree, "$openup/$entry");
+					array_merge($tree, mkTree("$openup/$entry"));
+					}
+			}
+
+	closedir($myDir);
+
+	@sort($tree);
+
+	return $tree;
+}
+//---------------------------------------------------------------------------
+?>
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($RESOURCE_RESTITLE)); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+
+<?php
+	// petite protection
+	if ( strstr($currdir, "..") )
+		$currdir = "";
+
+	// affichage des serveurs
+	$query  = "select _texte, _IDmod, _IDgrpwr, _IDgrprd, _IDftp, _sort from ftp ";
+	$query .= "where _lang = '".$_SESSION["lang"]."' AND _visible = 'O' ";
+	$query .= ( $IDftp ) ? "AND _IDftp = '$IDftp' " : "" ;
+	$query .= "order by _IDftp limit 1";
+
+	$result = mysql_query($query, $mysql_link);
+	$ftp    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+	// vérification des autorisations
+	verifySessionAccess($ftp[1], $ftp[3]);
+
+	$IDftp  = (int) @$ftp[4];
+
+     	if ( strlen($ftp[0]) )
+     		print("<div style=\"background-color:#eeeeee; text-align:justify\">". nltobr($ftp[0]) ."</div>");
+
+	print("<p>". $msg->read($RESOURCE_AVAILFORMAT) ."</p>");
+
+	// RAZ des visualisations
+	if ( @$_POST["clear_x"] )
+		if ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $ftp[1] ) {
+			// lecture du répertoire
+			$query   = "select _path from ftp ";
+			$query  .= "where _lang = '".$_SESSION["lang"]."' AND _visible = 'O' ";
+			$query  .= "AND _IDftp = '$IDftp' ";
+			$query  .= "limit 1";
+
+			$result  = mysql_query($query, $mysql_link);
+			$pathDir = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+			$openup  = strlen($currdir) ? "$pathDir[0]/$currdir" : $pathDir[0] ;
+			$myDir   = @opendir($openup);
+
+			while ( $entry = readdir($myDir) )
+				switch ( $entry ) {
+					case "." :
+					case ".." :
+					case "index.php" :
+						break;
+
+					default :
+						$myfile = "$openup/$entry";
+						if ( is_file($myfile) ) {
+							$return = mysql_query("select _IDdown from download_data where _file = '$myfile' limit 1", $mysql_link);
+							$myrow  = ( $return ) ? mysql_fetch_row($return) : 0 ;
+
+							// RAZ du compteur des téléchargements
+							if ( mysql_query("delete from download where _IDdown = '$myrow[0]' ", $mysql_link) )
+								mysql_query("delete from download_data where _IDdown = '$myrow[0]' ", $mysql_link);
+							}
+					break;
+					}
+			}
+?>
+
+	<form id="select" action="index.php" method="post">
+	<?php
+		print("
+			<p class=\"hidden\"><input type=\"hidden\" name=\"item\"    value=\"$item\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"currdir\" value=\"\" /></p>
+			");
+	?>
+
+		<hr style="width:80%; text-align:center;" />
+
+		<div class="center">
+			<?php print($msg->read($RESOURCE_CHOOSESERVER)); ?>
+			<label for="IDftp">
+		  	<select id="IDftp" name="IDftp" onchange="document.forms.select.submit()">
+			<?php
+				// affichage des serveurs
+				$query  = "select _IDftp, _ident, _path from ftp ";
+				$query .= "where _lang = '".$_SESSION["lang"]."' AND _visible = 'O' ";
+				$query .= "order by _IDftp";
+
+				$result = mysql_query($query, $mysql_link);
+				$row    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+				// initialisation
+				if ( !$IDftp )
+					$IDftp = (int) $row[0];
+				$rootdir = $row[2];
+
+				while ( $row ) {
+					if ( $IDftp == $row[0] )
+						$rootdir = $row[2];
+
+					printf("<option value=\"$row[0]\" %s>$row[1]</option>", ($IDftp == $row[0]) ? "selected=\"selected\"" : "");
+
+					$row = mysql_fetch_row($result);
+					}	// endwhile serveurs
+			?>
+			</select> <img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/server.gif" title="" alt="" />
+			</label>
+		</div>
+
+		<hr style="width:80%; text-align:center;" />
+
+	</form>
+
+	<?php
+		// cartable numérique
+		$ftp_cmde = ( @$_POST["mybag_x"] AND count(@$_POST["bag"]) )
+			? "addbag"
+			: $ftp_cmde ;
+
+		// les commandes de manipulation de fichiers (prioritaires)
+		$ftp_cmde = ( @$_POST["move_x"] AND count(@$_POST["mv"]) )
+			? "move"
+			: ((@$_POST["copy_x"] AND count(@$_POST["cp"]))
+				? "copy"
+				: $ftp_cmde) ;
+	?>
+
+	<form id="formulaire" action="index.php" method="post" enctype="multipart/form-data">
+	<?php
+		print("
+			<p class=\"hidden\"><input type=\"hidden\" name=\"item\"    value=\"$item\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"IDftp\"   value=\"$IDftp\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"currdir\" value=\"$currdir\" /></p>");
+	?>
+
+            <table class="width100">
+		<?php
+			$currdir = stripslashes($currdir);
+			$root    = ( strlen($currdir) ) ? $currdir : $msg->read($RESOURCE_ROOTDIR, $currdir) ;
+
+			// lecture du répertoire de travail
+			$query   = "select _path, _lock from ftp ";
+			$query  .= "where _lang = '".$_SESSION["lang"]."' AND _IDftp = '$IDftp' ";
+			$query  .= "limit 1";
+
+			$result  = mysql_query($query, $mysql_link);
+			$pathDir = ( $result ) ? mysql_fetch_row($result) : 0 ;
+			$openup  = strlen($currdir) ? "$pathDir[0]/$currdir" : $pathDir[0] ;
+
+			switch ( $ftp_cmde ) {
+				case "addbag" :	// ajout au cartable numérique
+					$cb = @$_POST["bag"];
+					$id = @$_POST["path"];
+
+					for ($i = 0; $i < count($cb); $i++)
+						if ( @$cb[$i] ) {
+							$query  = "insert into resource_bag ";
+							$query .= "values('', '".$_SESSION["CnxID"]."', '".date("Y-m-d H:i:s")."', '".addslashes($cb[$i])."', '".addslashes($id[$i])."')";
+
+							mysql_query($query, $mysql_link);
+							}
+					break;
+
+				case "move" :	// déplacement ressource
+				case "copy" :	// copie ressource
+					$value   = ( $ftp_cmde == "move" ) ? $msg->read($RESOURCE_MOVE) : $msg->read($RESOURCE_COPY) ;
+					$list    = mkTree($openup);
+
+					$select  = "<label for=\"newdir\">" ;
+					$select .= "<select id=\"newdir\" name=\"newdir\">" ;
+
+					$select .= strlen($currdir) ? "<option value=\"..\">..</option>" : "<option value=\".\">.</option>" ;
+					for ($i = 0; $i < count($list); $i++)
+						$select .= "<option value=\"$list[$i]\">". substr($list[$i], strlen($rootdir) + 1, 80) ."</option>";
+
+					$select .= "</select>";
+					$select .= "</label>";
+
+					print("
+						<tr>
+							<td colspan=\"3\">
+								<img src=\"".$_SESSION["ROOTDIR"]."/images/mvcopy.gif\" title=\"\" alt=\"\" />
+								". $msg->read($RESOURCE_SELECTION, $value) ." $select
+								<input type=\"submit\" value=\"$value\" name=\"form_cmde\" style=\"font-size: 9px;\" />
+								". $msg->read($RESOURCE_OR) ."
+								<input type=\"submit\" value=\"".$msg->read($RESOURCE_INPUTCANCEL)."\" name=\"form_cancel\" style=\"font-size: 9px;\" />
+							</td>
+						</tr>
+						");
+					break;
+
+				case "createDir" :
+					$value = ( $mydir ) ? $msg->read($RESOURCE_MODIFY) : $msg->read($RESOURCE_CREAT) ;
+
+					if ( $_SESSION["CnxAdm"] == 255 OR $ftp[1] == $_SESSION["CnxID"] )
+						print("
+							<tr>
+								<td colspan=\"3\">
+									<img src=\"".$_SESSION["ROOTDIR"]."/images/folder-add.gif\" title=\"". $msg->read($RESOURCE_ADDIR) ."\" alt=\"". $msg->read($RESOURCE_ADDIR) ."\" />
+									<label for=\"newdir\">
+										<input type=\"hidden\" name=\"mydir\" value=\"$mydir\" />
+										<input type=\"text\" id=\"newdir\" name=\"newdir\" size=\"30\" value=\"$mydir\" />
+									</label>
+									<input type=\"submit\" value=\"$value\" name=\"form_cmde\" style=\"font-size:9px;\" />
+								</td>
+							</tr>
+							");
+					break;
+
+				case "delete" :	// suppression ressource
+					$cb = @$_POST["rm"];
+
+					for ($i = 0; $i < count($cb); $i++)
+						if ( @$cb[$i] )
+							@unlink("$openup/$cb[$i]");
+					// break; (on enchaine...)
+
+				default :		// traitement des commandes
+					if ( $_SESSION["CnxAdm"] == 255 OR $ftp[1] == $_SESSION["CnxID"] OR ($ftp[2] & pow(2, $_SESSION["CnxGrp"] - 1)) ) {
+						// initalisation des erreurs
+						$errmsg = "";
+
+						switch ( $form_cmde ) {
+							case "lock" :	// on verrouille la ressource
+								$date   = date("Y-m-d H:i:s", time() + ($pathDir[1] * 3600));
+
+								$query  = "update ftp_note ";
+								$query .= "set _modify = '$date' " ;
+								$query .= "where _IDnote = '".@$_GET["IDnote"]."' ";
+								$query .= "limit 1";
+
+								mysql_query($query, $mysql_link);
+								// on enchaine...
+
+							case "unlock" :	// on déverrouille la ressource
+								$query  = "update ftp_note ";
+								$query .= ( $form_cmde == "lock" ) ? "set _lock = '".$_SESSION["CnxID"]."' " : "set _lock = '-1' " ;
+								$query .= "where _IDnote = '".@$_GET["IDnote"]."' ";
+								$query .= ( $form_cmde == "unlock" ) ? "AND _lock = '".$_SESSION["CnxID"]."' " : "" ;
+								$query .= "limit 1";
+
+								mysql_query($query, $mysql_link);
+								break;
+
+							case "rmDir" :	// suppression du répertoire
+								$rmdir = @$_GET["rmdir"];
+								if ( is_dir("$openup/$rmdir") ) {
+									@unlink("$openup/$rmdir/index.php");
+
+									if ( @rmdir("$openup/$rmdir") == false )
+										$errmsg = $msg->read($RESOURCE_ERRDELDIR, "$openup/$rmdir");
+									}
+								break;
+
+							case "rmFile" :	// suppression du fichier
+								$rmfile = @$_GET["rmfile"];
+								if ( is_file("$openup/$rmfile") AND $rmfile != "index.php" )
+									if ( @unlink("$openup/$rmfile") == false )
+										$errmsg = $msg->read($RESOURCE_ERRDELFILE, "$openup/$rmfile");
+								break;
+
+							default :
+								$files   = ( $form_cmde == $msg->read($RESOURCE_COPY) ) ? @$_POST["cp"] : @$_POST["mv"] ;
+								$newfile = @$_POST["newfile"];
+								$newdir  = @$_POST["newdir"];
+
+								// création du répertoire
+								if ( $form_cmde == $msg->read($RESOURCE_CREAT) AND $newdir )
+									mymkdir("$openup/$newdir", $CHMOD);
+
+								// modification du nom d'un répertoire
+								if ( $form_cmde == $msg->read($RESOURCE_MODIFY) AND $newdir )
+									if ( @rename("$openup/$mydir", "$openup/$newdir") == false )
+										$errmsg = $msg->read($RESOURCE_ERRENDIR, "$openup/$mydir");
+
+								// téléchargement de fichier
+								if ( $form_cmde == $msg->read($RESOURCE_SENDCMD) ) {
+									$file = @$_FILES["UploadFile"]["tmp_name"];
+
+									for ($j = 0; $j < count($file); $j++)
+										if (  @$file[$j] AND authfile(@$_FILES["UploadFile"]["name"][$j]) ) {
+											// fichier destination
+											$dest = "$openup/" . @$_FILES["UploadFile"]["name"][$j];
+
+											// copie du fichier temporaire -> répertoire de stockage
+											if ( move_uploaded_file($file[$j], $dest) )
+												mychmod($dest, $CHMOD);
+											}
+									}
+
+								// modification du nom du fichier
+								if ( $form_cmde == $msg->read($RESOURCE_RENCMD) AND $newfile )
+									if ( @rename("$openup/$myfile", "$openup/$newfile") == false )
+										$errmsg = $msg->read($RESOURCE_ERRENFILE, "$openup/$myfile");
+
+								// copie du fichier
+								if ( $form_cmde == $msg->read($RESOURCE_COPY) AND $newdir != "." ) {
+									if ( $newdir == ".." )
+										$newdir = substr($openup, 0, strrpos($openup, "/"));
+
+									for ($i = 0; $i < count($files); $i++)
+										if ( @copy("$openup/$files[$i]", "$newdir/$files[$i]") == false )
+											$errmsg = $msg->read($RESOURCE_ERRENFILE, "$newdir/$files[$i]<br/>");
+									}
+
+								// déplacement du fichier
+								if ( $form_cmde == $msg->read($RESOURCE_MOVE) AND $newdir != "." ) {
+									if ( $newdir == ".." )
+										$newdir = substr($openup, 0, strrpos($openup, "/"));
+
+									for ($i = 0; $i < count($files); $i++)
+										if ( @rename("$openup/$files[$i]", "$newdir/$files[$i]") == false )
+											$errmsg = $msg->read($RESOURCE_ERRENFILE, "$newdir/$files[$i]<br/>");
+									}
+								break;
+							}
+
+						if ( $errmsg )
+							print("
+								<tr>
+								  <td colspan=\"3\">
+									<img src=\"".$_SESSION["ROOTDIR"]."/images/forbidden.gif\" title=\"\" alt=\"\" />
+									$errmsg
+								  </td>
+								</tr>
+								");
+						}
+
+					// affichage en-tête tableau
+					$icon = ( $_SESSION["CnxAdm"] == 255 OR $ftp[1] == $_SESSION["CnxID"] )
+						? "<img src=\"".$_SESSION["ROOTDIR"]."/images/folder-add.gif\" title=\"". $msg->read($RESOURCE_ADDIR) ."\" alt=\"". $msg->read($RESOURCE_ADDIR) ."\" />"
+						: "" ;
+					$add  = ( $_SESSION["CnxAdm"] == 255 OR $ftp[1] == $_SESSION["CnxID"] )
+						? "<a href=\"".myurlencode("index.php?item=$item&IDftp=$IDftp&IDroot=$IDroot&currdir=$currdir&ftp_cmde=createDir")."\">". $msg->read($RESOURCE_ADDIR) ."</a>."
+						: "" ;
+					$home = "<a href=\"".myurlencode("index.php?item=$item&IDftp=$IDftp")."\">". $msg->read($RESOURCE_ROOTDIR) ."</a>";
+
+					print("
+				              <tr>
+				                <td style=\"width:1%\" class=\"valign-middle align-left\">$icon</td>
+				                <td class=\"valign-middle align-left\">$add</td>
+				                <td class=\"valign-middle align-right\">[$home]</td>
+				              </tr>
+		              		");
+					break;
+				}
+		?>
+            </table>
+
+            <?php
+		$query   = "select _path, _ident, _open, _close from ftp ";
+		$query  .= "where _lang = '".$_SESSION["lang"]."' AND _visible = 'O' ";
+		$query  .= "AND _IDftp = '$IDftp' ";
+		$query  .= "limit 1";
+
+		$result  = mysql_query($query, $mysql_link);
+		$pathDir = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+		// ouverture du répertoire
+		$openup  = strlen($currdir) ? "$pathDir[0]/$currdir" : $pathDir[0] ;
+		$myDir   = @opendir($openup);
+
+		// autorisation d'accès au répertoire (pour CCF)
+		if ( $_SESSION["CnxAdm"] != 255 AND !($ftp[3] & pow(2, $_SESSION["CnxGrp"] - 1)) )
+			$access = 0;
+		else
+			$access = ( $pathDir[2] != "0000-00-00 00:00:00" )
+				? ( $pathDir[2] < date("Y-m-d H:i:00") AND $pathDir[3] > date("Y-m-d H:i:00") )
+				: 1 ;
+
+		// lecture du répertoire
+		$ArrayDir  = Array();
+		$ArrayFile = Array();
+		while ( $entry = readdir($myDir) AND $access )
+			switch ( $entry ) {
+				case "." :
+				case ".." :
+				case "index.php" :
+					break;
+
+				default :
+					$file   = "$openup/$entry";
+					if ( is_dir($file) )
+						array_push($ArrayDir, $entry);
+					else
+						array_push($ArrayFile, $entry);
+					break;
+				}
+
+		// tri ordre croissant ou décroissant
+		if ( $sort < 0 )
+			$sort = ( $ftp[5] == "D" ) ? 1 : 0 ;
+
+		if ( $sort ) {
+			@rsort($ArrayDir);
+			@rsort($ArrayFile);
+			}
+		else {
+			@sort($ArrayDir);
+			@sort($ArrayFile);
+			}
+
+		//---- en-tête du tableau
+		$title  = "<strong>$root</strong> [";
+
+		$msg->isPlural = (bool) ( count($ArrayDir) > 1 );
+		$title .= count($ArrayDir) . " " . $msg->read($RESOURCE_NBDIR);
+		$title .= " - ";
+
+		$msg->isPlural = (bool) ( count($ArrayFile) > 1 );
+		$title .= count($ArrayFile) . " " . $msg->read($RESOURCE_NBFILE);
+		$title .= "]";
+
+		$sort   = 1 - $sort;
+		$mysort = "<a href=\"#\" onclick=\"ts_resortTable(this); return false;\"><img src=\"".$_SESSION["ROOTDIR"]."/images/updown.gif\" title=\"\" alt=\"\" /></a>";
+
+		// cartable électronique
+		$mybag    = ( $_SESSION["CnxAdm"] == 255 OR ($ftp[3] & pow(2, $_SESSION["CnxGrp"] - 1)) )
+			? "<input type=\"image\" src=\"".$_SESSION["ROOTDIR"]."/images/bag.png\" name=\"mybag\" title=\"". $msg->read($RESOURCE_ADDSCHOOLBAG) ."\" alt=\"". $msg->read($RESOURCE_ADDSCHOOLBAG) ."\" />"
+			: "<img src=\"".$_SESSION["ROOTDIR"]."/images/bag.png\" title=\"\" alt=\"*\" />" ;
+
+		// suppression des ressources
+		$delete   = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $ftp[1] OR ($ftp[2] & pow(2, $_SESSION["CnxGrp"] - 1)) )
+			? "<input type=\"image\" src=\"".$_SESSION["ROOTDIR"]."/images/corb.gif\" name=\"del\" title=\"". $msg->read($RESOURCE_DELFILE) ."\" alt=\"". $msg->read($RESOURCE_DELFILE) ."\" />"
+			: "<img src=\"".$_SESSION["ROOTDIR"]."/images/corb.gif\" title=\"\" alt=\"*\" />" ;
+
+		// déplacement des ressources
+		$move     = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $ftp[1] OR ($ftp[2] & pow(2, $_SESSION["CnxGrp"] - 1)) )
+			? "<input type=\"image\" src=\"".$_SESSION["ROOTDIR"]."/images/mv.gif\" name=\"move\" title=\"". $msg->read($RESOURCE_MVFILE) ."\" alt=\"". $msg->read($RESOURCE_MVFILE) ."\" />"
+			: "<img src=\"".$_SESSION["ROOTDIR"]."/images/mv.gif\" title=\"\" alt=\"*\" />" ;
+
+		// copie des ressources
+		$copy     = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $ftp[1] OR ($ftp[2] & pow(2, $_SESSION["CnxGrp"] - 1)) )
+			? "<input type=\"image\" src=\"".$_SESSION["ROOTDIR"]."/images/add.gif\" name=\"copy\" title=\"". $msg->read($RESOURCE_CPFILE) ."\" alt=\"". $msg->read($RESOURCE_CPFILE) ."\" />"
+			: "<img src=\"".$_SESSION["ROOTDIR"]."/images/add.gif\" title=\"\" alt=\"*\" />" ;
+
+		// raz des fichiers vus
+		$reset  = ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $ftp[1] )
+			? "<input type=\"image\" src=\"".$_SESSION["ROOTDIR"]."/images/corb.gif\" name=\"clear\" title=\"". $msg->read($RESOURCE_RESET) ."\" alt=\"". $msg->read($RESOURCE_RESET) ."\" />"
+			: "" ;
+
+		print("
+	            <table class=\"width100\">
+	              <tr style=\"background-color:#c0c0c0;\">
+	                <td style=\"width:1%;\" class=\"align-center\"><img src=\"".$_SESSION["ROOTDIR"]."/images/folder-opened.gif\" title=\"\" alt=\"\" /></td>
+	                <td style=\"width:66%;\">$mysort $title</td>
+	                <td style=\"width:1%;\" class=\"align-center\">$mybag</td>
+	                <td style=\"width:1%;\" class=\"align-center\">$delete</td>
+	                <td style=\"width:1%;\" class=\"align-center\">$move</td>
+	                <td style=\"width:1%;\" class=\"align-center\">$copy</td>
+	                <td style=\"width:12%;\" class=\"align-center\">". $msg->read($RESOURCE_DATE) ."</td>
+	                <td style=\"width:12%;\" class=\"align-center\">". $msg->read($RESOURCE_SIZE) ."</td>
+	                <td style=\"width:5%;\" class=\"align-center\"><img src=\"".$_SESSION["ROOTDIR"]."/images/ressources.png\" title=\"\" alt=\"\" /> $reset</td>
+	              </tr>
+			");
+
+		// répertoire parent
+		if ( strlen($currdir) ) {
+			$pos    = strrpos($currdir, "/");
+			$newdir = ( $pos ) ? substr($currdir, 0, $pos) : "" ;
+
+			$logo   = "<img src=\"".$_SESSION["ROOTDIR"]."/images/folder-up.gif\" title=\"". $msg->read($RESOURCE_PARENTDIR) ."\" alt=\"". $msg->read($RESOURCE_PARENTDIR) ."\" />";
+			$link   = "[<a href=\"index.php?item=$item&amp;IDftp=$IDftp&amp;currdir=".rawurlencode($newdir)."\">". $msg->read($RESOURCE_PARENTDIR) ."</a>]";
+
+			// affichage tableau
+			print("
+				<tr class=\"item\">
+     		    			<td class=\"align-center\">$logo</td>
+					<td>$link</td>
+					<td></td>
+					<td></td>
+					<td></td>
+					<td></td>
+					<td></td>
+					<td></td>
+					<td></td>
+       			</tr>
+				");
+			}
+
+		// initialisation affichage
+		switch ( $ftp_cmde ) {
+			case "moveFile" :
+			case "copyFile" :
+			case "createFile" :
+			case "renameFile" :
+				$display = "none";
+				break;
+
+			default :
+				$display = "block";
+				break;
+			}
+
+		//---- affichage des répertoires
+		$count = 0;
+		for ($i = 0; $i < count($ArrayDir); $i++) {
+			$bgcol = ( $count++ % 2 ) ? "item" : "menu" ;
+
+			// initialisation
+			$file  = "$openup/".$ArrayDir[$i];
+
+			$del   = $maj = "";
+			$date  = date("Y-m-d H:i:s", filemtime($file));
+
+			$logo  = "<img src=\"".$_SESSION["ROOTDIR"]."/images/folder-closed.gif\" title=\"\" alt=\"\" />";
+
+			// suppression du répertoire
+			$req   = $msg->read($RESOURCE_DELDIR, str_replace('"', '&quot;', $ArrayDir[$i]));
+			$del   = ( $_SESSION["CnxAdm"] == 255 OR $ftp[1] == $_SESSION["CnxID"] )
+				? "<a href=\"".myurlencode("index.php?item=$item&IDftp=$IDftp&IDroot=$IDroot&currdir=$currdir&rmdir=$ArrayDir[$i]&form_cmde=rmDir")."\" onclick=\"return confirmLink(this, '$req');\"><img src=\"".$_SESSION["ROOTDIR"]."/images/corb.gif\" title=\"$req\" alt=\"$req\" /></a>"
+				: "" ;
+
+			// modification du répertoire
+			$maj   = ( $_SESSION["CnxAdm"] == 255 OR $ftp[1] == $_SESSION["CnxID"] )
+				? "<a href=\"".myurlencode("index.php?item=$item&IDftp=$IDftp&IDroot=$IDroot&currdir=$currdir&mydir=$ArrayDir[$i]&ftp_cmde=createDir")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/stats/post.gif\" title=\"". $msg->read($RESOURCE_UPDATING) ."\" alt=\"". $msg->read($RESOURCE_UPDATING) ."\" /></a>"
+				: "" ;
+
+			// note associée
+			$path   = "$currdir/". $ArrayDir[$i];
+
+			$result = mysql_query("select _text, _IDnote, _ID, _IP, _date from resource_ftp where _path = '$path' limit 1", $mysql_link);
+			$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+			if ( strlen($row[0]) ) {
+				$txt  = getUserName($row[2]) ." ". _getHostName($row[3], false) ."<br/><strong>". date2longfmt($row[4]) ."</strong><br/>";
+				$txt .= $row[0];
+
+				$over = "<span>". str_replace(Array("\r", "\n"), Array("", "<br/>"), $txt) ."</span>";
+				}
+			else
+				$over = "";
+
+			$click  = ( $_SESSION["CnxAdm"] == 255 OR $ftp[1] == $_SESSION["CnxID"] )
+				? "onclick=\"popWin('".$_SESSION["ROOTDIR"]."/ftp_note.php?sid=".$_SESSION["sessID"]."&amp;item=$item&amp;IDftp=$IDftp&amp;IDnote=$row[1]&amp;path=$path&amp;lang=".$_SESSION["lang"]."', '450', '305'); return false;\""
+				: "" ;
+
+			$note   = ( $_SESSION["CnxAdm"] == 255 OR $ftp[1] == $_SESSION["CnxID"] OR $over != "" )
+				? "<a href=\"#\" class=\"overlib\" $click><img src=\"".$_SESSION["ROOTDIR"]."/images/document.gif\" title=\"". $msg->read($RESOURCE_COMMENTS) ."\" alt=\"". $msg->read($RESOURCE_COMMENTS) ."\" />$over</a>"
+				: "" ;
+
+			$newdir = ( strlen($currdir) ) ? "$currdir/".$ArrayDir[$i] : $ArrayDir[$i] ;
+			$link   = "<a href=\"index.php?item=$item&amp;IDftp=$IDftp&amp;currdir=".rawurlencode($newdir)."\">$ArrayDir[$i]</a>";
+
+			// affichage tableau
+			print("
+				<tr class=\"$bgcol\">
+     		    			<td class=\"align-center\">$logo</td>
+					<td>$link $del $maj $note</td>
+					<td></td>
+					<td></td>
+					<td></td>
+					<td></td>
+					<td class=\"x-small align-center\">$date</td>
+					<td></td>
+					<td class=\"align-center\">[-]</td>
+       			</tr>
+				");
+			}
+
+		//---- affichage des documents
+		for ($i = 0; $i < count($ArrayFile); $i++) {
+			$bgcol = ( $count++ % 2 ) ? "item" : "menu" ;
+
+			// initialisation
+			$file  = "$openup/".$ArrayFile[$i];
+
+			// mise à jour du fichier
+			$maj   = ( $_SESSION["CnxAdm"] == 255 OR $ftp[1] == $_SESSION["CnxID"] )
+				? "<a href=\"".myurlencode("index.php?item=$item&IDftp=$IDftp&IDroot=$IDroot&currdir=$currdir&myfile=$ArrayFile[$i]&ftp_cmde=renameFile")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/stats/post.gif\" title=\"". $msg->read($RESOURCE_UPDATING) ."\" alt=\"". $msg->read($RESOURCE_UPDATING) ."\"/></a>"
+				: "" ;
+
+			// note associée
+			$path   = "$currdir/". $ArrayFile[$i];
+
+			$result = mysql_query("select _text, _IDnote, _ID, _IP, _date, _modify, _lock from ftp_note where _path = '$path' limit 1", $mysql_link);
+			$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+			if ( strlen($row[0]) ) {
+				$txt  = getUserName($row[2], false) ." ". _getHostName($row[3], false) ."<br/>";
+				$txt .= "<strong>". date2longfmt($row[4]) ."</strong><br/>";
+				$txt .= $row[0];
+
+				$over = "<span>". str_replace(Array("\r", "\n"), Array("", "<br/>"), $txt) ."</span>";
+				}
+			else
+				$over = "";
+
+			$click = ( $row[6] <= 0 AND ($_SESSION["CnxAdm"] == 255 OR $ftp[1] == $_SESSION["CnxID"]) )
+				? "onclick=\"popWin('".$_SESSION["ROOTDIR"]."/ftp_note.php?sid=".$_SESSION["sessID"]."&amp;item=$item&amp;IDftp=$IDftp&amp;IDnote=$row[1]&amp;path=$path&amp;lang=".$_SESSION["lang"]."', '450', '305'); return false;\""
+				: "" ;
+
+			$note  = ( $_SESSION["CnxAdm"] == 255 OR $ftp[1] == $_SESSION["CnxID"] OR $over )
+				? "<a href=\"#\" class=\"overlib\" $click><img src=\"".$_SESSION["ROOTDIR"]."/images/document.gif\" title=\"". $msg->read($RESOURCE_COMMENTS) ."\" alt=\"". $msg->read($RESOURCE_COMMENTS) ."\" />$over</a>"
+				: "" ;
+
+			// document collaboratif
+			$req   = ( $row[6] < 0 )
+				? $msg->read($RESOURCE_LOCK)
+				: $msg->read($RESOURCE_LOCKBY, Array(getUserName($row[6]), date2longfmt($row[5]))) ;
+			$lock  = ( $row[6] )
+				? ($row[6] < 0
+					? "<a href=\"".myurlencode("index.php?item=$item&IDftp=$IDftp&currdir=$currdir&IDnote=$row[1]&form_cmde=lock")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/unlocked.gif\" title=\"$req\" alt=\"$req\" /></a>"
+					: ($row[6] == $_SESSION["CnxID"] 
+						? "<a href=\"".myurlencode("index.php?item=$item&IDftp=$IDftp&currdir=$currdir&IDnote=$row[1]&form_cmde=unlock")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/locked.gif\" title=\"$req\" alt=\"$req\" /></a>"
+						: "<img src=\"".$_SESSION["ROOTDIR"]."/images/locked.gif\" title=\"$req\" alt=\"$req\" />"))
+				: "" ;
+
+			// lecture de l'icone associée à l'extension
+			$ext   = extension($ArrayFile[$i]);
+
+			$res   = mysql_query("select _mime from config_mime where _ext = '$ext' AND _lang = '".$_SESSION["lang"]."' limit 1", $mysql_link);
+			$alt   = ( $res ) ? mysql_fetch_row($res) : 0 ;
+
+			if ( !mysql_affected_rows($mysql_link) )
+				$ext = "-";
+
+			$date  = date("Y-m-d H:i:s", filemtime($file));
+			$size  = (int) filesize($file);
+			$lien  = "index.php?file=".stripaccent($file, true);
+			$logo  = ( $row[6] <= 0 )
+				? "<a href=\"$lien\" onclick=\"window.open(this.href, '_blank'); return false;\"><img src=\"".$_SESSION["ROOTDIR"]."/images/mime/$ext.gif\" title=\"$alt[0]\" alt=\"$alt[0]\" /></a>"
+				: "<img src=\"".$_SESSION["ROOTDIR"]."/images/mime/$ext.gif\" title=\"$alt[0]\" alt=\"$alt[0]\" />" ;
+
+			// cartable électronique
+			$res   = mysql_query("select _IDitem from resource_bag where _file = '".addslashes(stripaccent($file, true))."' AND _ID = '".$_SESSION["CnxID"]."' limit 1", $mysql_link);
+			$myrow = ( $res ) ? mysql_fetch_row($res) : 0 ;
+
+			$isbag = ( $_SESSION["CnxAdm"] == 255 OR ($ftp[3] & pow(2, $_SESSION["CnxGrp"] - 1)) )
+				? ($myrow ? "checked=\"checked\"" : "")
+				: "disabled=\"disabled\"" ;
+
+			// suppression des ressources
+//			$isrm  = ( ($_SESSION["CnxAdm"] == 255 OR $ftp[1] == $_SESSION["CnxID"]) AND is_writeable($ArrayFile[$i]) )
+			$isrm  = ( $_SESSION["CnxAdm"] == 255 OR $ftp[1] == $_SESSION["CnxID"] )
+				? ""
+				: "disabled=\"disabled\"" ;
+
+			// déplacement des ressources
+//			$ismv  = ( ($_SESSION["CnxAdm"] == 255 OR $ftp[1] == $_SESSION["CnxID"]) AND is_writeable($ArrayFile[$i]) )
+			$ismv  = ( $_SESSION["CnxAdm"] == 255 OR $ftp[1] == $_SESSION["CnxID"] )
+				? ((@$_POST["move_x"] AND @in_array($ArrayFile[$i], @$_POST["mv"])) ? "checked=\"checked\"" : "")
+				: "disabled=\"disabled\"" ;
+
+			// copie des ressources
+			$iscp  = ( $_SESSION["CnxAdm"] == 255 OR $row[7] == $_SESSION["CnxID"] )
+				? ((@$_POST["copy_x"] AND @in_array($ArrayFile[$i], @$_POST["cp"])) ? "checked=\"checked\"" : "")
+				: "disabled=\"disabled\"" ;
+
+			// pour indiquer les nouvelles ressources (moins de 7 jours)
+			$new   = ( $date > date("Y-m-d H:i:s", (time() - 7 * $TIMEFORUM)) )
+				? " <img src=\"".$_SESSION["ROOTDIR"]."/images/new.gif\" title=\"\" alt=\"\" />"
+				: "" ;
+
+			// lecture du compteur des téléchargements
+			$res   = mysql_query("select _IDdown, _count, _date from download_data where _file = '$file' limit 1", $mysql_link);
+			$down  = ( $res ) ? mysql_fetch_row($res) : 0 ;
+
+			$load  = ( $down[0] )
+				? "<a href=\"#\" onclick=\"popWin('".$_SESSION["ROOTDIR"]."/user_list.php?IDdown=$down[0]&amp;cmde=dwload&amp;lang=".$_SESSION["lang"]."', '450', '200'); return false;\">$down[1]</a>"
+				: "0" ;
+
+			// affichage tableau
+			print("            
+				<tr class=\"$bgcol\">
+          				<td class=\"align-center\">$logo</td>
+					<td>
+						$ArrayFile[$i] $new $maj $note<br/>$lock
+						<span class=\"x-small\">". $msg->read($RESOURCE_LASTDOWNLOAD) ." ". date2longfmt($down[2]). "</span>
+					</td>
+		       	      <td class=\"align-center\">
+						<input type=\"checkbox\" id=\"bag_$i\" name=\"bag[]\" value=\"$ArrayFile[$i]\" $isbag />
+						<input type=\"hidden\" name=\"path[]\" value=\"".stripaccent($file, true)."\" />
+					</td>
+		       	      <td class=\"align-center\"><label for=\"rm_$i\"><input type=\"checkbox\" id=\"rm_$i\" name=\"rm[]\" value=\"$ArrayFile[$i]\" $isrm /></label></td>
+			       	<td class=\"align-center\"><label for=\"mv_$i\"><input type=\"checkbox\" id=\"mv_$i\" name=\"mv[]\" value=\"$ArrayFile[$i]\" $ismv /></label></td>
+			       	<td class=\"align-center\"><label for=\"cp_$i\"><input type=\"checkbox\" id=\"cp_$i\" name=\"cp[]\" value=\"$ArrayFile[$i]\" $iscp /></label></td>
+					<td class=\"x-small align-center\">$date</td>
+					<td class=\"align-center\">". number_format($size, 0, ",", " ") ."</td>
+					<td class=\"align-center\">[$load]</td>
+	       		</tr>
+       		       ");
+			}
+
+            print("</table>");
+
+            print("<hr/>");
+
+		if ( $_SESSION["CnxAdm"] == 255 OR $ftp[1] == $_SESSION["CnxID"] OR ($ftp[2] & pow(2, $_SESSION["CnxGrp"] - 1)) )
+			switch ( $ftp_cmde ) {
+				case "createFile" :
+					print("
+						<p style=\"margin:0px;\">
+							<img src=\"".$_SESSION["ROOTDIR"]."/images/item-add.gif\" title=\"". $msg->read($RESOURCE_ADD) ."\" alt=\"". $msg->read($RESOURCE_ADD) ."\" />
+							<input type=\"hidden\" name=\"MAX_FILE_SIZE\" value=\"$FILESIZE\" />
+							<input type=\"file\" name=\"UploadFile[]\" size=\"50\" style=\"font-size:9px;\" />
+							<input type=\"submit\" name=\"form_cmde\" value=\"". $msg->read($RESOURCE_SENDCMD) ."\" style=\"font-size:9px;\" />
+							<span style=\"cursor: pointer;\" onclick=\"$('uploaded')._display.toggle(); return false;\"><img src=\"".$_SESSION["ROOTDIR"]."/images/updown.png\" title=\"". $msg->read($RESOURCE_MORE) ."\" alt=\"". $msg->read($RESOURCE_MORE) ."\" /></span>
+						</p>");
+
+					print("<div id=\"uploaded\" style=\"display:none;\">");
+
+					for ($k = 1; $k < 5; $k++)
+						print("
+							<img src=\"".$_SESSION["ROOTDIR"]."/images/item-add.gif\" title=\"". $msg->read($RESOURCE_ADD) ."\" alt=\"". $msg->read($RESOURCE_ADD) ."\" />
+							<input type=\"file\" name=\"UploadFile[]\" size=\"50\" style=\"font-size:9px;\" /><br/>");
+
+					print("</div>");
+					break;
+
+				case "renameFile" :
+					print("
+						<p style=\"margin:0px;\">
+							<img src=\"".$_SESSION["ROOTDIR"]."/images/item-add.gif\" title=\"\" alt=\"\" />
+								<input type=\"hidden\" name=\"myfile\" value=\"$myfile\" />
+								<input type=\"text\" id=\"newfile\" name=\"newfile\" size=\"30\" value=\"$myfile\" />
+							<input type=\"submit\" value=\"". $msg->read($RESOURCE_RENCMD) ."\" name=\"form_cmde\" style=\"font-size:9px;\" />
+							". $msg->read($RESOURCE_OR) ."
+							<input type=\"submit\" value=\"".$msg->read($RESOURCE_INPUTCANCEL)."\" name=\"form_cancel\" style=\"font-size: 9px;\" />
+						</p>
+						");
+					break;
+
+				default :
+					print("
+						<p style=\"margin:0px;\">
+							<img src=\"".$_SESSION["ROOTDIR"]."/images/item-add.gif\" title=\"". $msg->read($RESOURCE_ADD) ."\" alt=\"". $msg->read($RESOURCE_ADD) ."\" />
+							<a href=\"".myurlencode("index.php?item=$item&IDftp=$IDftp&IDroot=$IDroot&currdir=$currdir&ftp_cmde=createFile")."\">". $msg->read($RESOURCE_ADDOC) ."</a>.
+						</p>
+						");
+					break;
+				}
+
+		closedir($myDir);
+            ?>
+
+	</form>
+
+</div>

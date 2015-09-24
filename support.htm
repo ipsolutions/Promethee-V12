@@ -1,0 +1,233 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2009 by Dominique Laporte(C-E-D@wanadoo.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : support.htm
+ *		projet   : registre des incidents techniques
+ *
+ *		version  : 1.0
+ *		auteur   : laporte
+ *		creation : 25/01/09
+ *		modif    : 
+ */
+
+
+$IDcentre = ( @$_POST["IDcentre"] ) 	// ID du centre
+	? (int) $_POST["IDcentre"]
+	: (int) $_SESSION["CnxCentre"] ;
+$IDitem   = ( @$_POST["IDitem"] ) 		// ID du commentaire dans le RIT
+	? (int) $_POST["IDitem"]
+	: (int) @$_GET["IDitem"] ;
+$skpage  = ( @$_GET["skpage"] )		// n° de la page affichée
+	? (int) $_GET["skpage"]
+	: 1 ;
+$skshow  = ( @$_GET["skshow"] )		// n° du commentaire
+	? (int) $_GET["skshow"]
+	: 1 ;
+?>
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($SUPPORT_TITLE)); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+
+ 		<form id="formulaire" action="index.php" method="post">
+		<?php
+		  print("
+			<p class=\"hidden\"><input type=\"hidden\" name=\"item\"    value=\"$item\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"IDitem\"  value=\"$IDitem\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"cmde\"    value=\"$cmde\" /></p>
+			");
+		?>
+
+		<table class="width100">
+		  <tr>
+			<td style="width:50%;" class="align-right">
+			    	<?php print($msg->read($SUPPORT_CHOOSECENTER)); ?> 
+			</td>
+			<td style="width:50%;">
+				<label for="IDcentre">
+			  	<select id="IDcentre" name="IDcentre" onchange="document.forms.formulaire.submit()">
+				<?php
+					// lecture des centres constitutifs
+					$query  = "select _IDcentre, _ident from config_centre ";
+					$query .= "where _visible = 'O' AND _lang = '".$_SESSION["lang"]."' ";
+					$query .= "order by _IDcentre";
+
+					$result = mysql_query($query, $mysql_link);
+					$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+					while ( $row ) {			
+						printf("<option value=\"$row[0]\" %s>$row[1]</option>", ($IDcentre == $row[0]) ? "selected=\"selected\"" : "");
+
+						$row = remove_magic_quotes(mysql_fetch_row($result));
+						}				
+				?>
+				</select> <img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/home.gif" title="" alt="" />
+				</label>
+			</td>
+		  </tr>
+		</table>
+
+ 		</form>
+
+		<hr/>
+
+		<?php
+		// lecture des droits
+		$Query  = "select _IDgrpwr, _IDgrprd, _IDmod from support ";
+		$Query .= "where _IDcentre = '$IDcentre'";
+
+		$result = mysql_query($Query, $mysql_link);
+		$auth   = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+		// vérification des autorisations
+		verifySessionAccess($auth[2], $auth[1]);
+
+		// autorisation d'écriture
+		if ( $auth[0] & pow(2, $_SESSION["CnxGrp"] - 1) )
+			print("
+		            <table class=\"width100\">
+	      	        <tr>
+		                <td style=\"width:10%;\" class=\"valign-middle\">
+		                	<a href=\"index.php?item=$item&amp;IDcentre=$IDcentre&amp;cmde=post\"><img src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/post.gif\" title=\"". $msg->read($SUPPORT_ADDPOST) ."\" alt=\"\" />
+		                </td>
+		                <td class= \"valign-middle\">". $msg->read($SUPPORT_WRITEPOST) ."</td>
+		                <td style=\"width:50%;\" colspan=\"3\" class=\"valign-middle align-right\">
+		                  ". $msg->read($SUPPORT_NEXTPREV) ."
+		                </td>
+		              </tr>
+		            </table>
+		            ");
+		?>
+
+            <table class="width100">
+              <tr style="background-color:#c0c0c0;">
+                <td class="align-center" style="width:60%;" colspan="2"><?php print($msg->read($SUPPORT_MESSAGE)); ?></td>
+                <td class="align-center" style="width:20%;"><?php print($msg->read($SUPPORT_WRITE)); ?></td>
+                <td class="align-center" style="width:20%;"><?php print($msg->read($SUPPORT_ACK)); ?></td>
+              </tr>
+
+            <?php
+		// lecture des notes
+		$Query  = "select _IDitems, _ID1, _titre, _date1, _date2, _priority from support_items ";
+		$Query .= "order by _IDitems desc";
+
+		$result = mysql_query($Query, $mysql_link);
+		$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+		// détermination du nombre de pages
+		$result = mysql_query($Query, $mysql_link);
+		$nbelem = ( $result ) ? mysql_affected_rows($mysql_link) : 0 ;
+
+		$page   = $nbelem;
+		$show   = 1;
+
+		if ( $nbelem ) {
+			$page  = ( $page % $MAXPAGE )
+				? (int) ($page / $MAXPAGE) + 1
+				: (int) ($page / $MAXPAGE) ;
+
+			$show  = ( $page % $MAXSHOW )
+				? (int) ($page / $MAXSHOW) + 1
+				: (int) ($page / $MAXSHOW) ;
+
+			// initialisation
+			$i     = 1;
+			$first = 1 + (($skpage - 1) * $MAXPAGE);
+			$pos   = $first;
+				
+			// se positionne sur la page ad hoc
+			mysql_data_seek($result, $first - 1);
+			$row   = remove_magic_quotes(mysql_fetch_row($result));
+
+			while ( $row AND $i <= $MAXPAGE ) {
+				$bgcol = ( $i % 2 ) ? "item" : "menu" ;
+
+				// a-t-on répondu ?
+				$date  = ( $row[3] == $row[4] )
+					? ""
+					: date2longfmt($row[4]) ;
+
+				// incident urgent
+				$urgent = ( $row[5] == "O" )
+					? "<img src=\"".$_SESSION["ROOTDIR"]."/images/H.gif\" title=\"\" alt=\"\" />"
+					: "" ;
+
+				print("
+					<tr class=\"$bgcol\">
+          		    		    <td style=\"width:1%;\" class=\"valign-top\"><img src=\"".$_SESSION["ROOTDIR"]."/images/files.gif\" title=\"\" alt=\"\" /></td>
+          		    		    <td style=\"width:59%;\">
+          		    		  	<a href=\"index.php?item=$item&amp;IDitem=$row[0]&amp;IDcentre=$IDcentre&amp;cmde=visu\">$row[2]</a> $urgent<br/>
+          		    		  	<span class=\"x-small\">". $msg->read($SUPPORT_BY, getUserName($row[1])) ."</span>
+		       	          </td>
+			                <td style=\"width:20%;\" class=\"align-center\">". date2longfmt($row[3]) ."</td>
+			                <td style=\"width:20%;\" class=\"align-center\">$date</td>
+	       		       </tr>
+	       		       ");
+
+				$i++;
+				$row = remove_magic_quotes(mysql_fetch_row($result));
+				}
+			}
+            ?>
+            </table>
+
+		<?php
+		// bouton précédent
+		$where = $skshow - 1;
+		if ( $skshow == 1 )
+			$prev = "";
+		else {
+			$skpg = 1 + (($skshow - 2) * $MAXSHOW);
+			$prev = "[<a href=\"index.php?item=$item&amp;skpage=$skpg&amp;skshow=$where\">".$msg->read($SUPPORT_PREV)."</a>]";
+			}
+
+		// liens directs sur n° de page
+		$start = 1 + (($skshow - 1) * $MAXSHOW);
+		$end   = $skshow * $MAXSHOW;
+
+		$choix = ( $skpage == $start )
+			? "<img src=\"".$_SESSION["ROOTDIR"]."/images/nav_left.gif\" title=\"«\" alt=\"«\" /><strong>$start</strong><img src=\"".$_SESSION["ROOTDIR"]."/images/nav_right.gif\" title=\"»\" alt=\"»\" />"
+			: "<a href=\"index.php?item=$item&amp;skpage=$start&amp;skshow=$skshow\">$start</a>" ;
+
+		for ($j = $start + 1; $j <= $end AND $j <= $page; $j++)
+			$choix .= ( $skpage == $j )
+				? "|<img src=\"".$_SESSION["ROOTDIR"]."/images/nav_left.gif\" title=\"«\" alt=\"«\" /><strong>$j</strong><img src=\"".$_SESSION["ROOTDIR"]."/images/nav_right.gif\" title=\"»\" alt=\"»\" />"
+				: "|<a href=\"index.php?item=$item&amp;skpage=$j&amp;skshow=$skshow\">$j</a>" ;
+
+		// bouton suivant
+		$where = $skshow + 1;
+		if ( $skshow == $show )
+			$next = "";
+		else
+			$next = "[<a href=\"index.php?item=$item&amp;skpage=$j&amp;skshow=$where\">".$msg->read($SUPPORT_NEXT)."</a>]" ;
+		?>
+
+	      <hr/>
+
+		<?php if ( $nbelem ) print("<div style=\"text-align:center;\">$prev $choix $next</div>"); ?>
+
+</div>

@@ -1,0 +1,373 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2003-2007 by Dominique Laporte(C-E-D@wanadoo.fr)
+   Copyright (c) 2006 by Nordine Zetoutou (nordine.zetoutou@educagri.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : gallery_upload.htm
+ *		projet   : la page de chargement des images dans les galeries
+ *
+ *		version  : 1.0
+ *		auteur   : laporte
+ *		creation : 2/07/03
+ *		modif    : 17/07/06 - Nordine Zetoutou
+ * 	                 migration des balises HTML en XHTML 1.0 strict
+ */
+
+
+$IDgroup  = ( @$_POST["IDgroup"] )				// identifiant du e-groupe
+	? (int) $_POST["IDgroup"]
+	: (int) @$_GET["IDgroup"] ;
+$IDgal  = ( strlen(@$_POST["IDgal"]) )			// identifiant des galeries
+	? (int) $_POST["IDgal"]
+	: (int) @$_GET["IDgal"] ;
+$IDdata = ( @$_POST["IDdata"] )				// identifiant des répertoires des items des galeries
+	? (int) $_POST["IDdata"]
+	: (int) @$_GET["IDdata"] ;
+$IDitem = ( @$_POST["IDitem"] )				// ID de l'image
+	? (int) $_POST["IDitem"]
+	: (int) @$_GET["IDitem"] ;
+
+$titre  = addslashes(trim(@$_POST["titre"]));		// titre de l'image
+$texte  = addslashes(trim(@$_POST["texte"]));		// description de l'image
+$file   = @$_FILES["UploadedFile"]["tmp_name"];
+
+$submit = ( @$_POST["submit"] )				// bouton de validation
+	? $_POST["submit"]
+	: @$_GET["submit"] ;
+?>
+
+
+<?php
+	// initialisation des erreurs
+	$error   = 0;
+	$status  = "-";
+
+	// recherche de l'auteur
+	$auteur  = $_SESSION["CnxName"];
+
+	// recherche de la galerie
+	$result  = mysql_query("select _title, _wiki, _imgwidth from gallery_data where _IDdata = '$IDdata' limit 1", $mysql_link);
+	$row     = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : "" ;
+
+	$gallery = $row[0];
+	$iswiki  = $row[1];
+	$maxsize = $row[2];
+
+	// l'utilisateur a validé
+	switch ( $submit ) {
+		case "Valider" :
+			// pb de transfert
+			if ( $file == "" )
+	   			if ( @$_FILES["UploadedFile"]["name"] != "" AND @$_FILES["UploadedFile"]["size"] == 0 )
+		    			$error = 4;
+				else
+					$error = 1;
+
+			// test d'erreur sur fichier existant
+			if ( !$error ) {
+				$Query  = "select _IDitem from gallery_items ";
+				$Query .= "where _file = '".@$_FILES["UploadedFile"]["name"]."' AND _IDdata ='$IDdata'";
+
+				$result = mysql_query($Query, $mysql_link);
+				$error  = ( $result ) 
+					? ( mysql_numrows($result)
+						? 2
+						: 0
+						)
+					: 0 ;
+				}
+
+			// Vérification de l'extension du fichier à transférer				    
+			if ( !$error )
+   		 		switch ( extension(@$_FILES["UploadedFile"]["name"]) ) {
+    					case "gif" :
+    					case "jpg" :
+    					case "jpeg" :
+    					case "png" :
+    						break;
+    					default :
+	    					$error = 3;
+		    				break;
+					}
+
+			// on transfére le fichier si pas d'erreur
+    			if ( !$error AND $file ) {
+				$status = $msg->read($GALLERY_TRANSFERT) ." ";
+
+				// on détermine le répertoire de stockage des images
+				$dest   = "$DOWNLOAD/galerie/$IDdata";
+				if ( !is_dir($dest) )
+					mymkdir($dest, $CHMOD);
+
+				// on détermine le répertoire de stockage des vignettes
+				$small  = "$dest/vignettes";
+				if ( !is_dir($small) )
+					mymkdir($small, $CHMOD);
+
+				// fichier destination
+				$dest   = $dest . "/" . stripaccent( strtolower(@$_FILES["UploadedFile"]["name"]) );
+
+				// copie du fichier temporaire -> répertoire de stockage
+				if ( $maxsize ) {
+					imageSize("$file|".@$_FILES["UploadedFile"]["name"], $srcWidth, $srcHeight);
+
+					$ratio     = ( $srcWidth > $maxsize ) ? (float) ($maxsize / $srcWidth) : 1.0 ;
+					$maxWidth  = (int) ($srcWidth * $ratio);
+					$maxHeight = (int) ($srcHeight * $ratio);
+
+					$isOk = vignette(
+						"$file|".@$_FILES["UploadedFile"]["name"],
+						"$DOWNLOAD/galerie/$IDdata",
+						stripaccent( strtolower(@$_FILES["UploadedFile"]["name"]) ),
+						$srcWidth,
+						$srcHeight,
+						$maxWidth,
+						$maxHeight);
+					}
+				else
+					$isOk = move_uploaded_file($file, $dest);
+
+				if ( $isOk ) {
+					mychmod($dest, $CHMOD);
+
+					$status   = $msg->read($GALLERY_INSERT) ." ";
+
+					// initialisation des champs
+					$date     = date("Y-m-d H:i:s");
+					$filename = stripaccent( strtolower(@$_FILES["UploadedFile"]["name"]) );
+
+					// création de la vignette
+					require_once "include/gallery.php";
+
+					if ( vignette($dest, $small, $filename, $srcWidth, $srcHeight) ) {
+						// insertion d'une nouvelle image dans la base de données
+						$Query  = "insert into gallery_items ";
+						$Query .= "values('', '$IDdata', '".$_SESSION["CnxID"]."', '".$_SESSION["CnxIP"]."', '$date', '$filename', '".@$_FILES["UploadedFile"]["size"]."' , '$srcWidth', '$srcHeight', '0', '$titre', '$texte', 'O')";
+
+						if ( !mysql_query($Query, $mysql_link) ) {
+							$status .= "<img src=\"".$_SESSION["ROOTDIR"]."/images/bad.gif\" title=\"\" alt=\"\" />";
+							sql_error($mysql_link);
+							}
+						else {
+							require_once "include/wiki.php";
+
+							$wk = new wiki;
+
+							// initialisation des variables de l'objet wiki
+							$wk->tag     = "$gallery" . "_" . mysql_insert_id();
+							$wk->version = "$item.$IDroot";
+							$wk->owner   = $_SESSION["CnxName"];
+							$wk->version = 0;
+
+							$wk->insert($titre, $texte, $_SESSION["CnxName"]);
+
+							$status .= "<img src=\"".$_SESSION["ROOTDIR"]."/images/ok.gif\" title=\"\" alt=\"\" />";
+
+							// réinitialisation des champs de saisie
+							$titre = "";
+							$texte = "";
+							}
+						}
+					else
+						$status .= "<img src=\"".$_SESSION["ROOTDIR"]."/images/bad.gif\" title=\"\" alt=\"\" /> <span style=\"color:FF0000\">". $msg->read($GALLERY_ERRVIGNETTE) ."</span>";
+					}
+				else
+					$status .= "<img src=\"".$_SESSION["ROOTDIR"]."/images/bad.gif\" title=\"\" alt=\"\" /> <span style=\"color:FF0000\">". $msg->read($GALLERY_ERRFILE) ."</span>";
+				}
+			break;
+
+		case "Modifier" :
+			$status   = $msg->read($GALLERY_MODIFICATION) ." ";
+
+			if ( mysql_query("update gallery_items set _titre = '$titre', _texte = '$texte' where _IDitem = '$IDitem'", $mysql_link) )
+				$status .= "<img src=\"".$_SESSION["ROOTDIR"]."/images/ok.gif\" title=\"\" alt=\"\" />";
+			else
+				$status .= "<img src=\"".$_SESSION["ROOTDIR"]."/images/bad.gif\" title=\"\" alt=\"\" />";
+			break;
+
+		default :
+			// recherche de l'image
+			$result  = mysql_query("select _titre, _texte from gallery_items where _IDitem = '$IDitem'", $mysql_link);
+			$row     = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : "" ;
+
+			// initialisation des champs de saisie
+			$titre = $row[0];
+			$texte = $row[1];
+			break;
+		}
+?>				
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($GALLERY_MANAGEMENT2)); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+
+		  <table class="width100">
+		    <tr>
+		      <td style="width:15%;" class="align-right"><?php print($msg->read($GALLERY_STATUS)); ?></td>
+		      <td style="width:85%"><?php print("$status"); ?></td>
+		    </tr>
+
+		    <tr>
+		      <td class="align-right"><?php print($msg->read($GALLERY_AUTHOR)); ?></td>
+		      <td><?php print("$auteur"); ?></td>
+		    </tr>
+
+		    <tr>
+		      <td class="align-right"><?php print($msg->read($GALLERY_GALERY)); ?></td>
+		      <td><?php print("$gallery"); ?></td>
+		    </tr>
+		  </table>
+
+	<hr style="width:80%;" />
+
+	<form id="formulaire" action="index.php" method="post" enctype="multipart/form-data">
+	<?php
+		print("
+			<p class=\"hidden\"><input type=\"hidden\" name=\"item\"    value=\"$item\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"cmde\"    value=\"$cmde\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"IDgal\"   value=\"$IDgal\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"IDdata\"  value=\"$IDdata\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"IDitem\"  value=\"$IDitem\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"IDgroup\" value=\"$IDgroup\" /></p>
+			");
+
+		if ( $IDitem )
+			print("<p class=\"hidden\"><input type=\"hidden\" name=\"submit\" value=\"Modifier\" /></p>");
+		else
+			print("<p class=\"hidden\"><input type=\"hidden\" name=\"submit\" value=\"Valider\" /></p>");
+	?>
+
+	  <table class="width100">
+	   <tr>
+	     <td style="width:10%;"></td>
+	     <td style="width:80%;">
+
+		  <table class="width100">
+		    <tr style="background-color:#eeeeee;">
+			<td style="width:100%;" colspan="2">
+		        	<?php print($msg->read($GALLERY_TITLE)); ?>
+			</td>
+		    </tr>
+
+		    <tr>
+			<td style="width:100%;" colspan="2">
+				<?php print("<label for=\"titre\"><input type=\"text\" id=\"titre\" name=\"titre\" size=\"40\" value=\"$titre\" /></label>"); ?>
+			</td>
+		    </tr>
+
+		<?php
+//			if ( $iswiki == "N" )
+				print("
+				    <tr style=\"background-color:#eeeeee;\">
+					<td style=\"width:100%;\" colspan=\"2\">
+				        	". $msg->read($GALLERY_DESCRIPTION) ."
+					</td>
+				    </tr>
+
+				    <tr>
+					<td style=\"width:100%;\" colspan=\"2\">
+						<label for=\"texte\"><textarea id=\"texte\" name=\"texte\" rows=\"4\" cols=\"35\">$texte</textarea></label>
+					</td>
+				    </tr>
+					");
+
+			// test des erreurs
+			switch ( $error ) {
+			  	case 1 :	// nom de fichier non renseigné OU
+			  		$errmsg = $msg->read($GALLERY_DOWNLOAD);
+			  		break;
+			  	case 2 :	// fichier déjà existant OU
+			  		$errmsg = $msg->read($GALLERY_ERREXIST);
+			  		break;
+			  	case 3 :	// mauvaise extension du fichier OU
+			  		$errmsg = $msg->read($GALLERY_ERREXT);
+			  		break;
+			  	case 4 :	// fichier de taille trop importante
+			  		$errmsg = $msg->read($GALLERY_ERRSIZE, strval($FILESIZE));
+			  		break;
+			  	default :
+			  		$errmsg = "";
+			  		break;
+			  	}
+
+			if ( $errmsg != "" )
+			  	print("
+				    <tr>
+				      <td style=\"width:100%;\" colspan=\"2\" class=\"align-justify\">
+						<span style=\"color:#FF0000;\">". $msg->read($GALLERY_WARNING) ." $errmsg</span>
+				      </td>
+				    </tr>
+				    	");
+
+			if ( !$IDitem )
+				print("
+				    <tr style=\"background-color:#eeeeee;\">
+				      <td style=\"width:100%;\" colspan=\"2\">
+						". $msg->read($GALLERY_FILENAME) ."
+				      </td>
+				    </tr>
+
+				    <tr>
+				      <td style=\"width:100%;\" colspan=\"2\">
+						<p class=\"hidden\"><input type=\"hidden\" name=\"MAX_FILE_SIZE\" value=\"$FILESIZE\" /></p>
+				       	<input type=\"file\" name=\"UploadedFile\" />
+				      </td>
+				    </tr>
+					");
+		  ?>
+
+		  </table>
+
+	     </td>
+	     <td style="width:10%;">&nbsp;</td>
+	   </tr>
+	  </table>
+
+	<hr style="width:80%;" />
+
+         <table class="width100">
+           <tr>
+              <td style="width:10%;" class="valign-middle align-center">
+              	<?php print("<input type=\"image\" src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/valid.gif\" name=\"valid\" alt=\"".$msg->read($GALLERY_INPUTOK)."\" />"); ?>
+              </td>
+              <td class="valign-middle">
+              	<?php print($msg->read($GALLERY_ADDIMAGE)); ?>
+              </td>
+           </tr>
+           <tr>
+              <td class="valign-middle align-center">
+              	<?php print("<a href=\"".myurlencode("index.php?item=$item&IDgroup=$IDgroup&IDgal=$IDgal&IDdata=$IDdata&cmde=visu")."\">"); ?>
+              	<?php print("<img src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/cancel.gif\" title=\"\" alt=\"".$msg->read($GALLERY_INPUTCANCEL)."\" />"); ?></a>
+              </td>
+              <td class="valign-middle">
+              	<?php print($msg->read($GALLERY_GOBACK)); ?>
+              </td>
+           </tr>
+         </table>
+
+	</form>
+
+</div>

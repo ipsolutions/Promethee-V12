@@ -1,0 +1,454 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2008 by Dominique Laporte(C-E-D@wanadoo.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : admin_backup.htm
+ *		projet   : la page de gestion des sauvegardes de la base de données
+ *
+ *		version  : 1.0
+ *		auteur   : laporte
+ *		creation : 20/07/08
+ *		modif    : 
+ */
+
+
+$submit = ( @$_GET["submit"] )	// bouton de validation
+	? $_GET["submit"]
+	: @$_POST["valid_x"] ;
+
+//$max_time=min(get_cfg_var("max_execution_time"),get_cfg_var("max_input_time"));
+
+//---------------------------------------------------------------------------
+function stripslashes_deep($value) {
+/**
+* Strip slash  for variable & array
+*
+*
+*
+* @param $value item to stripslashes (array or string)
+* @return stripslashes item
+*
+*/
+       $value = is_array($value) ?
+                   array_map('stripslashes_deep', $value) :
+                   (is_null($value) ? NULL : stripslashes($value));
+                   
+       return $value;
+}
+//---------------------------------------------------------------------------
+function addslashes_deep($value) {
+/**
+*  Add slash for variable & array 
+*
+*
+*
+* @param $value value to add slashes (array or string)
+* @return addslashes value
+*
+*/
+       $value = is_array($value) ?
+                   array_map('addslashes_deep', $value) :
+                   (is_null($value) ? NULL : addslashes($value));
+       return $value;
+}
+//---------------------------------------------------------------------------
+function get_content($table, $from, $limit)
+{
+	require "globals.php";
+
+	$content = "";
+
+	$result  = mysql_query("SELECT * FROM $table LIMIT $from, $limit", $mysql_link);
+	$row     = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+	while ( $row ) {
+		$insert   = "INSERT INTO $table VALUES (";
+
+		for ($j = 0; $j < mysql_num_fields($result); $j++)
+			$insert .= ( is_null($row[$j]) )
+				? "NULL,"
+				: (($row[$j] != "") ? "'".addslashes($row[$j])."'," : "'',") ;
+
+		$insert   = preg_replace("/,$/", "", $insert);
+		$insert  .= ");\n";
+
+		$content .= $insert;
+
+		$row = remove_magic_quotes(mysql_fetch_row($result));
+		}
+
+     return $content;
+}
+//---------------------------------------------------------------------------
+function get_def($table)
+{
+	require "globals.php";
+
+	$def    = "### Dump table $table\n\n";
+	$def   .= "DROP TABLE IF EXISTS `$table`;\n";
+	$def   .= "CREATE TABLE `$table` (\n";
+
+	$result = mysql_query("SHOW FIELDS FROM $table", $mysql_link);
+
+	while( $line = mysql_fetch_array($result) ) {
+		$line = stripslashes_deep($line);
+
+		$def .= "    `$line[Field]` $line[Type]";
+		if (isset($line["Default"]) && $line["Default"] != "")
+			$def .= " DEFAULT '$line[Default]'";
+		if (isset($line["Null"]) && $line["Null"] != "YES")
+			$def .= " NOT NULL";
+       	if (isset($line["Extra"]) && $line["Extra"] != "")
+			$def .= " $line[Extra]";
+        	$def .= ",\n";
+		}
+
+	$def    = preg_replace("/,\n$/","", $def);
+
+	$result = mysql_query("SHOW KEYS FROM $table", $mysql_link);
+
+	while ( $line = mysql_fetch_array($result) ) {
+		$line  = stripslashes_deep($line);
+
+		$kname = $line["Key_name"];
+		if ( ($kname != "PRIMARY") && ($line["Non_unique"] == 0) )
+			$kname="UNIQUE|$kname";
+		if ( !isset($index[$kname]) )
+			$index[$kname] = array();
+
+		$index[$kname][] = $line["Column_name"];
+		}
+
+	while ( list($x, $columns) = @each($index) ) {
+		$def .= ",\n";
+
+		if ( $x == "PRIMARY" )
+			$def .= "   PRIMARY KEY (`" . implode($columns, "`, `") . "`)";
+		else
+			if ( substr($x,0,6) == "UNIQUE" )
+				$def .= "   UNIQUE ".substr($x,7)." (`" . implode($columns, "`, `") . "`)";
+			else
+				$def .= "   KEY $x (`" . implode($columns, "`, `") . "`)";
+		}
+
+	$def .= "\n) TYPE=MyISAM;\n\n";
+
+	return $def;
+}
+//---------------------------------------------------------------------------
+function restoreMySqlDump($dumpFile, $database)
+{
+// $dumpFile, fichier source
+// $database, nom de la base de données cible
+
+	require "globals.php";
+
+	if( !file_exists($dumpFile) )
+		return -1;
+
+	$fileHandle = fopen($dumpFile, "r");
+
+	if ( !$fileHandle )
+		return -1;
+
+	// initialisation
+	$count = 0;
+	$query = "";
+
+	while ( !feof($fileHandle) ) {
+		$buffer = fgets($fileHandle, 102400);
+
+		if ( substr($buffer, strlen($buffer), 1) == 0 )
+			$buffer = substr($buffer, 0, strlen($buffer)-1);
+    
+		if ( strlen($buffer) AND substr($buffer, 0, 1) != "#" ) {
+			$query .= $buffer;
+
+			if ( substr($query, -1) == ";" ) {
+				if ( get_magic_quotes_runtime() )
+					$query = stripslashes($query);
+
+				// réussie sinon continue à concaténer
+				if ( mysql_query($query, $mysql_link) )
+					$count++;
+
+				$query = "";
+				}
+			}
+		}
+
+	fclose($fileHandle);
+
+	return $count;
+}
+//---------------------------------------------------------------------------
+function backupMySql($dumpFile, $database)
+{
+// $dumpFile, fichier source
+// $database, nom de la base de données cible
+
+	require "globals.php";
+
+	$fileHandle = fopen($dumpFile, "w");
+
+	if ( !$fileHandle )
+		return -1;
+
+	// intialisation
+	$numtab      = 0;
+	$offsettable = 0;
+	$offsetrow   = -1;
+	$rowlimit    = 5;
+	$cur_time    = date("Y-m-d H:i:s");
+
+	$todump      = "#Prométhée Dump database on $cur_time\n";
+	fwrite($fileHandle, $todump);
+
+//	$result = mysql_list_tables($database, $mysql_link);
+	$result = mysql_query("show tables from $DATABASE");
+
+	while ( $t = mysql_fetch_array($result) ) {
+		$tables[$numtab] = $t[0];
+		$numtab++;
+		}
+
+	for (; $offsettable < $numtab; $offsettable++)
+		if ( $tables[$offsettable] != "admin_backup" ) {
+			// Dump de la structure table
+			if ( $offsetrow == -1 ) {
+				$todump = "\n" . get_def($tables[$offsettable]);
+				fwrite($fileHandle, $todump);
+
+				$offsetrow++;
+				}
+
+			do {
+				$todump    = get_content($tables[$offsettable], $offsetrow, $rowlimit);
+				$rowtodump = substr_count($todump, "INSERT INTO");
+
+				if ( $rowtodump > 0 ) {
+					fwrite($fileHandle, $todump);
+
+					$offsetrow += $rowlimit;
+					$fin = ( $rowtodump < $rowlimit ) ? true : false ;
+					} 
+				else {
+					$fin       = true;
+					$offsetrow = -1;
+					}
+				} while ( !$fin );
+
+			if ( $fin )
+				$offsetrow = -1;
+			}
+
+	fclose($fileHandle);
+
+	return $numtab + 1;
+}
+//---------------------------------------------------------------------------
+?>
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($ADMIN_TITLE)); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+
+	<p style="margin-top:0px; margin-bottom:10px; text-align:justify;">
+	<?php print($msg->read($ADMIN_DISCLAIMER)); ?>
+	</p>
+
+	<?php
+		// vérification des autorisations
+		admSessionAccess();
+
+		// on efface le post-it
+		if ( $submit )
+			switch ( $submit ) {
+				case "delete" :
+					// lecture des sauvegardes
+					$query  = "select _create from admin_backup ";
+					$query .= "where _IDbackup = '".@$_GET["IDbackup"]."' ";
+					$query .= "limit 1";
+
+					$result = mysql_query($query, $mysql_link);
+					$row    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+					if ( $row )
+						if ( mysql_query("delete from admin_backup where _IDbackup = '".@$_GET["IDbackup"]."' limit 1", $mysql_link) )
+							unlink("$DOWNLOAD/backup/". str_replace(Array(' ', ':'), Array('_', '-'), $row[0]) .".sql");
+					break;
+
+				case "restore" :
+					// lecture des sauvegardes
+					$query  = "select _create from admin_backup ";
+					$query .= "where _IDbackup = '".@$_GET["IDbackup"]."' ";
+					$query .= "limit 1";
+
+					$result = mysql_query($query, $mysql_link);
+					$row    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+					if ( $row ) {
+						// la création de la DB peut prendre du temps => on supprime le tps max d'exécution des requêtes
+						// attention : safe_mode doit être désactivé
+						$safe_mode  = ini_get("safe_mode");
+						$time_limit = ini_get("max_execution_time");
+
+						if ( $safe_mode != "1" )
+							set_time_limit(0);
+
+						$date  = date("Y-m-d H:i:s");
+						$file = "$DOWNLOAD/backup/". str_replace(Array(' ', ':'), Array('_', '-'), $row[0]) .".sql";
+						$sql  = restoreMySqlDump($file, $DATABASE);
+
+						if ( $sql < 0 )
+							print("<p style=\"color: #ff0000;\">". $msg->read($ADMIN_ERROPEN) ."</p>");
+						else {
+							$Query  = "update admin_backup ";
+							$Query .= "set _update = '$date' ";
+							$Query .= "where _IDbackup = '".@$_GET["IDbackup"]."' ";
+							$Query .= "limit 1";
+
+							mysql_query($Query, $mysql_link);
+							}
+
+						// réinitialisation du tps max d'exécution des requêtes
+						if ( $safe_mode != "1" )
+							set_time_limit($time_limit);
+						}
+					break;
+
+				default :
+					// la création de la DB peut prendre du temps => on supprime le tps max d'exécution des requêtes
+					// attention : safe_mode doit être désactivé
+					$safe_mode  = ini_get("safe_mode");
+					$time_limit = ini_get("max_execution_time");
+
+					if ( $safe_mode != "1" )
+						set_time_limit(0);
+
+					$date  = date("Y-m-d H:i:s");
+					$file  = "$DOWNLOAD/backup/". str_replace(Array(' ', ':'), Array('_', '-'), $date) .".sql";
+					$table = backupMySql($file, $DATABASE);
+
+					if ( $table < 0 )
+						print("<p style=\"color: #ff0000;\">". $msg->read($ADMIN_ERRCREATE) ."</p>");
+					else {
+						$Query  = "insert into admin_backup ";
+						$Query .= "values('', '".$_SESSION["CnxID"]."', '".$_SESSION["CnxIP"]."', '$VERSION', '$date', '', '".filesize($file)."', '$table')";
+
+						mysql_query($Query, $mysql_link);
+						}
+
+					// réinitialisation du tps max d'exécution des requêtes
+					if ( $safe_mode != "1" )
+						set_time_limit($time_limit);
+					break;
+				}
+	?>
+
+	<form id="formulaire" action="index.php" method="post">
+	<?php
+		print("
+			<p class=\"hidden\"><input type=\"hidden\" name=\"item\"   value=\"$item\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"cmde\"   value=\"$cmde\" /></p>
+			");
+	?>
+
+            <table class="width100">
+              <tr>
+			<td style="width:10%;" class="valign-middle">
+				<?php print("<input type=\"image\" src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/post.gif\" name=\"valid\" alt=\"".$msg->read($ADMIN_INPUTNEW)."\" />"); ?>
+			</td>
+			<td class="valign-middle"><?php print($msg->read($ADMIN_BACKUP)); ?></td>
+              </tr>
+            </table>
+
+            <table class="width100">
+              <tr class="align-center" style="background-color:#c0c0c0;">
+                <td style="width:1%;"></td>
+                <td style="width:1%;"></td>
+                <td style="width:48%;"><?php print($msg->read($ADMIN_FILE)); ?></td>
+                <td style="width:15%;"><?php print($msg->read($ADMIN_DATE)); ?></td>
+                <td style="width:10%;"><?php print($msg->read($ADMIN_TABLE)); ?></td>
+                <td style="width:15%;"><?php print($msg->read($ADMIN_SIZE)); ?></td>
+                <td style="width:10%;"><?php print($msg->read($ADMIN_VERSION)); ?></td>
+              </tr>
+
+		<?php
+			// lecture des sauvegardes
+			$query  = "select _IDbackup, _create, _ID, _IP, _update, _version, _size, _table ";
+			$query .= "from admin_backup ";
+			$query .= "order by _IDbackup desc";
+
+			$result = mysql_query($query, $mysql_link);
+			$row    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+			$line   = 0;
+			while ( $row ) {
+				$bgcolor = ( $line++ % 2 ) ? "item" : "menu" ;
+
+				$file    = "$DOWNLOAD/backup/". str_replace(Array(' ', ':'), Array('_', '-'), $row[1]) .".sql";
+
+				$link    = ( $row[5] == $VERSION )
+					? "<a href=\"".myurlencode("index.php?item=$item&cmde=$cmde&IDbackup=$row[0]&submit=restore")."\">$file</a>"
+					: $file ;
+				$check   = ( $row[5] == $VERSION )
+					? "<img src=\"".$_SESSION["ROOTDIR"]."/images/setup/check_on.png\" title=\"\" alt=\"O\" />"
+					: "<img src=\"".$_SESSION["ROOTDIR"]."/images/setup/check_off.png\" title=\"\" alt=\"X\" />" ;
+				$date    = ( $row[4] != "0000-00-00 00:00:00" )
+					? date2longfmt($row[4])
+					: "" ;
+
+				// suppression de la sauvegarde
+				$req     = $msg->read($ADMIN_DELFILE);
+				$del     = "<a href=\"".myurlencode("index.php?item=$item&cmde=$cmde&IDbackup=$row[0]&submit=delete")."\" onclick=\"return confirmLink(this, '$req');\"><img src=\"".$_SESSION["ROOTDIR"]."/images/corb.gif\" title=\"$req\" alt=\"$req\" /></a>";
+
+				print("
+					<tr class=\"$bgcolor\">
+					  <td class=\"align-center\">
+						<a href=\"$file\"><img src=\"".$_SESSION["ROOTDIR"]."/images/ressources.png\" title=\"".$msg->read($ADMIN_DOWNLOAD)."\" alt=\"".$msg->read($ADMIN_DOWNLOAD)."\" /></a>
+					  </td>
+					  <td class=\"align-center\">$del</td>
+					  <td>
+						$check $link<br/>
+						<span class=\"x-small\">". $msg->read($ADMIN_LASTRESTORE, $date) ."</span>
+					  </td>
+					  <td class=\"align-center\">". date2longfmt($row[1]) ."</td>
+					  <td class=\"align-center\">$row[7]</td>
+					  <td class=\"align-center\">". number_format($row[6], 0, ",", " ") ."</td>
+					  <td class=\"align-center\">$row[5]</td>
+					</tr>");
+
+				$row = mysql_fetch_row($result);
+				}
+		?>
+
+            </table>
+
+	</form>
+	<hr/>
+
+</div>

@@ -1,0 +1,804 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2002-2008 by Dominique Laporte(C-E-D@wanadoo.fr)
+   Copyright (c) 2006 by Nordine Zetoutou (nordine.zetoutou@educagri.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : config.htm
+ *		projet   : paramétrage de l'interface intranet
+ *
+ *		version  : 1.0
+ *		auteur   : laporte
+ *		creation : 25/01/03
+ *		modif    : 17/07/06 - Nordine Zetoutou
+ * 	                 migration des balises HTML en XHTML 1.0 strict
+ */
+
+
+$IDconf = ( @$_POST["IDconf"] )		// ID de la configuration
+	? (int) $_POST["IDconf"]
+	: (int) (@$_GET["IDconf"] ? $_GET["IDconf"] : $_SESSION["CfgID"]) ;
+$IDmime = ( @$_POST["IDmime"] )		// ID du mime
+	? (int) $_POST["IDmime"]
+	: (int) @$_GET["IDmime"] ;
+$mime   = @$_POST["mime"];			// description mime
+$ext    = @$_POST["ext"];			// extension mime
+$newdoc = (int) @$_GET["newdoc"];		// ajout d'un document
+
+$submit = @$_POST["submit"];			// bouton de validation
+?>
+
+
+<?php
+	// vérification des autorisations
+	admSessionAccess();
+
+	// l'utilisateur a validé
+	switch ( $submit ) {
+		case "Valider" :
+			require_once "include/rm.php";
+			require_once "include/config.php";
+
+			// connexion persistante
+			$persist = ( @$_POST["persist"] ) ? 1 : 0 ;
+
+			// création de comptes
+			$cb      = @$_POST["cbgrp"];			// groupes utilisateurs
+			$cbgrp   = 0;
+			for ($i = 0; $i < count($cb); $i++)
+				$cbgrp += (int) @$cb[$i];
+
+			$authusr = ( @$_POST["authusr"] ) ? 1 : 0 ;
+
+			// validité des comptes
+			$account = (int) @$_POST["account"];
+
+			// filtrage IP
+			$filtre  = ( @$_POST["filtre"] ) ? 1 : 0 ;
+
+			// mode Debug 
+			$debug   = ( @$_POST["debug"] ) ? 1 : 0 ;
+
+			// mode Demo 
+			$demo    = ( @$_POST["demo"] ) ? 1 : 0 ;
+
+			// longueur des mdp
+			$usrpwd  = (int) @$_POST["usrpwd"];
+
+			// expiration des pages
+			$delay   = @$_POST["delay"] * 60;
+
+			// taille des fichiers
+			$size    = @$_POST["size"] * 1000;
+
+			// taille du quotas utilisateur
+			$hdsz    = @$_POST["hdsz"] * 1000;
+
+			// durée des logs
+			$log     = @$_POST["log"] * 24 * 3600;
+
+			// durée des stats
+			$stats   = @$_POST["stats"] * 24 * 3600;
+
+			// durée des liens par mail
+			$link    = @$_POST["link"] * 24 * 3600;
+
+			// durée des post-it
+			$postit  = @$_POST["postit"] * 7 * 24 * 3600;
+
+			//---- mise à jour du fichier de configuration ----
+			writeconfigfile("config.ini", "config.php",
+				$SERVER, $USER, $PASSWD, $DATABASE, $SERVPORT, $_POST["charset"],
+				$DOWNLOAD, $persist, $filtre, $debug, $demo, $usrpwd, $delay, $size, $hdsz,
+				$log, $stats, @$_POST["data"], @$_POST["page"], @$_POST["recent"], $link, @$_POST["flash"], "$authusr:$cbgrp",
+				@$_POST["spacing"], @$_POST["menu"], $account, $postit, @$_POST["sms"], @$_POST["smspwd"],
+				@$_POST["timezone"], (int) @$_POST["archbit"]);
+
+			//---- mise à jour des documents autorisés ----
+			if ( mysql_query("update config_mime set _visible = 'N'", $mysql_link) ) {
+				$cb = @$_POST["cb"];
+				for ($i = 0; $i < count($cb); $i++)
+					if ( strlen($cb[$i]) )
+						mysql_query("update config_mime set _visible = 'O' where _IDmime = '".$cb[$i]."'", $mysql_link);
+				}
+
+			//---- mise à jour des langues autorisées ----
+			$list = Array();
+			$cb   = @$_POST["cblang"];
+
+			// ouverture du répertoire des langues
+			$myDir = @opendir("msg");
+
+			// lecture des répertoires
+			while ( $entry = @readdir($myDir) )
+				if ( is_dir("msg/$entry") AND strlen($entry) == 2 )
+					array_push($list, $entry);
+
+			// fermeture du répertoire
+			@closedir($myDir);
+
+			for ($i = 0; $i < count($list); $i++)
+				if ( !@in_array($list[$i], $cb) AND $list[$i] != $LANG ) {
+					// attention aux mises à jour
+					if ( is_dir("msg/#".$list[$i]) )
+						rm("msg/#".$list[$i]);
+
+					@rename("msg/".$list[$i], "msg/#".$list[$i]);
+					}
+
+			for ($i = 0; $i < count($cb); $i++)
+				if ( strlen($cb[$i]) )
+					@rename("msg/#".$cb[$i], "msg/".$cb[$i]);
+
+			print("<script type=\"text/javascript\"> window.location.replace('index.php?item=$item&IDconf=$IDconf', '_self'); </script>");
+			break;
+
+		default :
+			// création d'un document
+			if ( $submit == $msg->read($CONFIG_CREAT) ) {
+				$query  = "insert into config_mime ";
+				$query .= "values('', '$ext', '".addslashes($mime)."', 'O', '".$_SESSION["lang"]."')";
+
+				mysql_query($query, $mysql_link);
+				}
+
+			// modification d'un document
+			if ( $submit == $msg->read($CONFIG_MODIFY) ) {
+				$query  = "update config_mime ";
+				$query .= "set _ext = '$ext', _mime = '".addslashes($mime)."' ";
+				$query .= "where _IDmime = '$IDmime' ";
+				$query .= "limit 1";
+
+				mysql_query($query, $mysql_link);
+				}
+			break;
+		}
+
+	// initialisation
+	$persist  = $PERSISTENT;
+	$account  = $ACOUNTIME;
+	$filtre   = $IPFILTER;
+	$debug    = $DEBUG;
+	$demo     = $DEMO;
+	$charset  = $CHARSET;
+	$usrpwd   = $USERPWD;
+	$delay    = (int) $TIMELIMIT / 60;
+	$size     = (int) $FILESIZE  / 1000;
+	$hdsz     = (int) $HDQUOTAS  / 1000;
+	$log      = (int) $TIMELOG   / (24 * 3600);
+	$stats    = (int) $TIMESTAT  / (24 * 3600);
+	$spacing  = $TBLSPACING;
+	$menu     = $MENUSKIN;
+	$data     = $MAXPAGE;
+	$page     = $MAXSHOW;
+	$recent   = $MAXRECENT;
+	$link     = (int) $TIMELINK / (24 * 3600);
+	$mail     = $MAIL;
+	$flash    = $FLASH;
+	$postit   = (int) $MAXPOST  / (7 * 24 * 3600);
+	$sms      = $SMSPROVIDER;
+	$smspwd   = $SMSPWD;
+	$timezone = $TIMEZONE;
+	$archbit  = (int) $ARCHBIT;
+
+	list($authusr, $cbgrp) = explode(":", $AUTHUSER);
+?>
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($CONFIG_CONFIG)); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+
+	<form id="formulaire" action="index.php" method="post">
+	<?php
+		print("
+			<p class=\"hidden\"><input type=\"hidden\" name=\"item\"   value=\"$item\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"IDconf\" value=\"$IDconf\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"IDmime\" value=\"$IDmime\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"submit\" value=\"Valider\" /></p>
+			");
+	?>
+
+        <table class="width100">
+          <tr>
+            <td class="align-center">
+			<span style="margin:5px; padding:2px; border-style:solid; border-color:#000000; border-width:1px; background-color:#eeeeee;">
+			<img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/options.png" title="" alt="" /> <?php print($msg->read($CONFIG_OPTION)); ?>
+			</span>
+
+			<span class="menucfg">
+			<img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/config.png" title="" alt="" />
+			<?php print("<a href=\"index.php?item=$item&amp;cmde=skin&amp;IDconf=$IDconf\">". $msg->read($CONFIG_TUNE) ."</a>"); ?>
+			</span>
+
+			<span class="menucfg">
+			<img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/database.gif" title="" alt="" />
+			<?php print("<a href=\"index.php?item=$item&amp;cmde=dba&amp;IDconf=$IDconf\">". $msg->read($CONFIG_DATABASE) ."</a>"); ?>
+			</span>
+
+			<span class="menucfg">
+			<img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/personnaliser.gif" title="" alt="" />
+			<?php print("<a href=\"index.php?item=$item&amp;cmde=kwords&amp;IDconf=$IDconf\">". $msg->read($CONFIG_KEYWORDS) ."</a>"); ?>
+			</span>
+
+			<span class="menucfg">
+			<img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/liste.png" title="" alt="" />
+			<?php print("<a href=\"index.php?item=$item&amp;cmde=menu&amp;IDconf=$IDconf\">". $msg->read($CONFIG_MENU) ."</a>"); ?>
+			</span>
+
+			<span class="menucfg">
+			<img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/p2p.png" title="" alt="" />
+			<?php print("<a href=\"index.php?item=$item&amp;cmde=p2p&amp;IDconf=$IDconf\">". $msg->read($CONFIG_P2P) ."</a>"); ?>
+			</span>
+			
+			<span class="menucfg">
+			<?php print("<a href=\"index.php?item=$item&amp;cmde=edt&amp;IDconf=$IDconf\">". $msg->read($CONFIG_EDT) ."</a>"); ?>
+			</span>
+		</td>
+          </tr>
+        </table>
+
+	<hr />
+
+	<div class="tabbable"> <!-- Only required for left/right tabs -->
+		<ul class="nav nav-tabs" style="height: 37px; margin-bottom: 0px;">
+			<li class="active"><a href="#tab1" data-toggle="tab"><?php print($msg->read($CONFIG_SECURITY)); ?></a></li>
+			<li><a href="#tab2" data-toggle="tab"><?php print($msg->read($CONFIG_DATA)); ?></a></li>
+			<li><a href="#tab3" data-toggle="tab"><?php print($msg->read($CONFIG_SHOW)); ?></a></li>
+			<li><a href="#tab4" data-toggle="tab"><?php print($msg->read($CONFIG_SMS)); ?></a></li>
+			<li><a href="#tab5" data-toggle="tab"><?php print($msg->read($CONFIG_DOC)); ?></a></li>
+		</ul>
+	
+	<div class="tab-content">
+    <div class="tab-pane active" id="tab1" style="background-color: #ffffff; padding-top: 10px;">
+	
+	<p style="margin:0px; background-color:#eeeeee;">
+		<?php print($msg->read($CONFIG_SECURITY)); ?>
+		<span style="cursor: pointer;" onclick="$('security')._display.toggle(); return false;"><img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/updown.png" title="" alt="" /></span>
+	</p>
+
+	<div id="security" style="display:block;">
+        <table class="width100">
+          <tr>
+            <td style="width:30%;" class="align-right"><?php print($msg->read($CONFIG_PERSISTENT)); ?></td>
+            <td style="width:70%;"><?php printf("<label for=\"persist\"><input type=\"checkbox\" id=\"persist\" name=\"persist\" value=\"1\" %s />", $persist ? "checked=\"checked\"" : ""); ?></label></td>
+          </tr>
+
+          <tr>
+            <td class="align-right"><?php print($msg->read($CONFIG_CREATACCOUNT)); ?></td>
+            <td>
+ 			<label for="authusr">
+			<?php printf("<input type=\"checkbox\" id=\"authusr\" name=\"authusr\" value=\"1\" %s />", $authusr ? "checked=\"checked\"" : ""); ?>
+			<span style="cursor: pointer;" onclick="$('group')._display.toggle(); return false;"><img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/updown.png" title="" alt="" /></span>
+			<?php print($msg->read($CONFIG_BYUSER)); ?>
+			</label>
+
+			<div id="group" style="display:none;">
+			  <table>
+			    <tr>
+				<td style="border: #cccccc solid 1px;">
+				<?php
+					// recherche des groupes
+					$query  = "select _IDgrp, _ident from user_group ";
+					$query .= "where _visible = 'O' AND _lang = '".$_SESSION["lang"]."' ";
+					$query .= "order by _IDgrp asc";
+
+					$result = mysql_query($query, $mysql_link);
+					$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+					while ( $row ) {
+						$check = ( $cbgrp & pow(2, $row[0] - 1) ) ? "checked=\"checked\"" : "" ;
+
+		             		print("<label for=\"cbgrp_$row[0]\"><input type=\"checkbox\" id=\"cbgrp_$row[0]\" name=\"cbgrp[]\" value=\"". pow(2, $row[0] - 1) ."\" $check /></label> $row[1]<br/>");
+
+						$row   = remove_magic_quotes(mysql_fetch_row($result));
+						}
+				?>
+				</td>
+			    </tr>
+			  </table>
+			</div>
+		</td>
+          </tr>
+
+          <tr>
+            <td class="align-right"><?php print($msg->read($CONFIG_VALIDITY)); ?></td>
+            <td>
+			<?php print("<label for=\"account\"><input type=\"text\" id=\"account\" name=\"account\" size=\"20\" value=\"$account\" /></label>"); ?>
+			<?php print($msg->read($CONFIG_ACCOUNT)); ?>
+		</td>
+          </tr>
+
+          <tr>
+            <td class="align-right"><?php print("<a href=\"index.php?item=26&amp;cmde=filter\">". $msg->read($CONFIG_FILTER) ."</a>"); ?></td>
+            <td><?php printf("<label for=\"filtre\"><input type=\"checkbox\" id=\"filtre\" name=\"filtre\" value=\"1\" %s /></label>", $filtre ? "checked=\"checked\"" : ""); ?></td>
+          </tr>
+
+          <tr>
+            <td class="align-right"><?php print($msg->read($CONFIG_DEBUG)); ?></td>
+            <td><?php printf("<label for=\"debug\"><input type=\"checkbox\" id=\"debug\" name=\"debug\" value=\"1\" %s /></label>", $debug ? "checked=\"checked\"" : ""); ?></td>
+          </tr>
+
+          <tr>
+            <td class="align-right"><?php print($msg->read($CONFIG_DEMO)); ?></td>
+            <td>
+			<?php printf("<label for=\"demo\"><input type=\"checkbox\" id=\"demo\" name=\"demo\" value=\"1\" %s /></label>", $demo ? "checked=\"checked\"" : ""); ?>
+			<?php print($msg->read($CONFIG_MULTIPLE)); ?>
+		</td>
+          </tr>
+
+          <tr>
+            <td class="align-right"><?php print("<a href=\"index.php?item=1&amp;cmde=passwd\">". $msg->read($CONFIG_PASSWD) ."</a>"); ?></td>
+            <td>
+			<?php print("<label for=\"usrpwd\"><input type=\"text\" id=\"usrpwd\" name=\"usrpwd\" size=\"2\" value=\"$usrpwd\" /></label>"); ?>
+			<?php print($msg->read($CONFIG_CHAR)); ?>
+		</td>
+          </tr>
+
+          <tr>
+            <td class="align-right"><?php print($msg->read($CONFIG_DELAY)); ?></td>
+            <td>
+			<label for="delay">
+			<select id="delay" name="delay">
+			<?php
+			for ($i = 5; $i <= 60; $i += 5)
+				printf("<option value=\"$i\" %s>$i</option>", ($i == $delay) ? "selected=\"selected\"" : "");
+			?>
+			</select> <?php print($msg->read($CONFIG_MINUTES)); ?>
+			</label>
+		</td>
+          </tr>
+
+          <tr>
+            <td class="align-right"><?php print($msg->read($CONFIG_LINK)); ?></td>
+            <td >
+			<label for="link">
+			<select id="link" name="link">
+			<?php
+			for ($i = 1; $i <= 5; $i++)
+				printf("<option value=\"$i\" %s>$i</option>", ($i == $link) ? "selected=\"selected\"" : "");
+			?>
+			</select> <?php print($msg->read($CONFIG_DAYS)); ?>
+			</label>
+		</td>
+          </tr>
+        </table>
+	</div>
+
+	</div>
+	<div class="tab-pane" id="tab2" style="background-color: #ffffff; padding-top: 10px;">
+	
+	<p style="margin-top:5px; margin-bottom:0px; background-color:#eeeeee;">
+		<?php print($msg->read($CONFIG_DATA)); ?>
+		<span style="cursor: pointer;" onclick="$('data')._display.toggle(); return false;"><img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/updown.png" title="" alt="" /></span>
+	</p>
+
+	<div id="data" style="display:block;">
+        <table class="width100">
+          <tr>
+            <td style="width:30%;" class="align-right"><?php print($msg->read($CONFIG_SIZE)); ?></td>
+            <td>
+			<label for="size">
+			<select id="size" name="size">
+			<?php
+			for ($i = 1024, $j = 0; $i <= 18000; $i += (pow(2, $j) *1024), $j++)
+				printf("<option value=\"$i\" %s>$i</option>", ($i == $size) ? "selected=\"selected\"" : "");
+			?>
+			</select> <?php print($msg->read($CONFIG_KBYTE)); ?>
+			</label>
+		</td>
+          </tr>
+
+          <tr>
+            <td class="align-right"><?php print($msg->read($CONFIG_QUOTAS)); ?></td>
+            <td>
+			<label for="hdsz">
+			<select id="hdsz" name="hdsz">
+			<?php
+			for ($i = 1024, $j = 0; $i <= 66000; $i += (pow(2, $j) *1024), $j++)
+				printf("<option value=\"$i\" %s>$i</option>", ($i == $hdsz) ? "selected=\"selected\"" : "");
+			?>
+			</select> <?php print($msg->read($CONFIG_KBYTE)); ?>
+			</label>
+		</td>
+          </tr>
+
+          <tr>
+            <td class="align-right"><?php print($msg->read($CONFIG_LOGS)); ?></td>
+            <td>
+			<label for="log">
+			<select id="log" name="log">
+			<?php
+			for ($i = 10; $i <= 60; $i += 10)
+				printf("<option value=\"$i\" %s>$i</option>", ($i == $log) ? "selected=\"selected\"" : "");
+			?>
+			</select> <?php print($msg->read($CONFIG_DAYS)); ?>
+			</label>
+		</td>
+          </tr>
+
+          <tr>
+            <td class="align-right"><?php print($msg->read($CONFIG_STATS)); ?></td>
+            <td>
+			<label for="stats">
+			<select id="stats" name="stats">
+			<?php
+			for ($i = 10; $i <= 60; $i += 10)
+				printf("<option value=\"$i\" %s>$i</option>", ($i == $stats) ? "selected=\"selected\"" : "");
+			?>
+			</select> <?php print($msg->read($CONFIG_DAYS)); ?>
+			</label>
+		</td>
+          </tr>
+
+          <tr>
+            <td class="align-right"><?php print($msg->read($CONFIG_POSTIT)); ?></td>
+            <td>
+			<label for="postit">
+			<select id="postit" name="postit">
+			<?php
+			for ($i = 0; $i <= 10; $i++)
+				printf("<option value=\"$i\" %s>$i</option>", ($i == $postit) ? "selected=\"selected\"" : "");
+			?>
+			</select> <?php print($msg->read($CONFIG_WEEKS)); ?>
+			</label>
+		</td>
+          </tr>
+
+          <tr>
+            <td class="align-right"><?php print($msg->read($CONFIG_ARCHBIT)); ?></td>
+            <td>
+			<label for="archbit">
+			<select id="archbit" name="archbit">
+			<?php
+			for ($i = 32; $i <= 64; $i += 32)
+				printf("<option value=\"$i\" %s>$i</option>", ($i == $archbit) ? "selected=\"selected\"" : "");
+			?>
+			</select> <?php print($msg->read($CONFIG_BITS)); ?>
+			</label>
+		</td>
+          </tr>
+
+          <tr>
+            <td class="align-right"><?php print($msg->read($CONFIG_TIMEZONE)); ?></td>
+            <td>
+			<label for="timezone">
+			<select id="timezone" name="timezone">
+			<?php
+				$disabled = ( function_exists('date_default_timezone_set') ) ? "" : "disabled=\"disabled\"" ;
+
+				$return   = mysql_query("select _timezone from config_timezone order by _timezone", $mysql_link);
+				$myrow    = ( $return ) ? mysql_fetch_row($return) : 0 ;
+
+				while ( $myrow ) {
+					if ( $timezone == $myrow[0] )
+						print("<option selected=\"selected\" value=\"$myrow[0]\" $disabled>$myrow[0]</option>");
+					else
+						print("<option value=\"$myrow[0]\" $disabled>$myrow[0]</option>");
+
+					$myrow = mysql_fetch_row($return);
+					}
+			?>
+			</select>
+			</label>
+		</td>
+          </tr>
+        </table>
+	</div>
+
+	</div>
+	<div class="tab-pane" id="tab3" style="background-color: #ffffff; padding-top: 10px;">
+	
+	<p style="margin-top:5px; margin-bottom:0px; background-color:#eeeeee;">
+		<?php print($msg->read($CONFIG_SHOW)); ?>
+		<span style="cursor: pointer;" onclick="$('show')._display.toggle(); return false;"><img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/updown.png" title="" alt="" /></span>
+	</p>
+
+	<div id="show" style="display:block;">
+        <table class="width100">
+          <tr>
+            <td style="width:30%;" class="align-right"><?php print($msg->read($CONFIG_CHARSET)); ?></td>
+            <td>
+			<label for="charset">
+			<select id="charset" name="charset">
+			<?php
+				// affichage encodage
+				$return = mysql_query("select _charset from config_charset", $mysql_link);
+				$myrow  = ( $return ) ? mysql_fetch_row($return) : 0 ;
+
+				while ( $myrow ) {
+					if ( $charset == $myrow[0] )
+						print("<option selected=\"selected\" value=\"$myrow[0]\">$myrow[0]</option>");
+					else
+						print("<option value=\"$myrow[0]\">$myrow[0]</option>");
+
+					$myrow = mysql_fetch_row($return);
+					}
+			?>
+			</select>
+			</label>
+		</td>
+          </tr>
+
+          <tr>
+            <td style="width:30%;" class="align-right"></td>
+            <td>
+			<label for="menu" style="display: none">
+			<select id="menu" name="menu">
+			<?php
+				$menutype = explode(",", $msg->read($CONFIG_MENUTYPE));
+						
+				for ($i = 0; $i < count($menutype); $i++)
+					if ( $menu == $i )
+						print("<option selected=\"selected\" value=\"$i\">$menutype[$i]</option>");
+					else
+						print("<option value=\"$i\">$menutype[$i]</option>");
+			?>
+			</select>
+			</label>
+		</td>
+          </tr>
+
+          <tr>
+            <td class="align-right"><?php print($msg->read($CONFIG_SPACE)); ?></td>
+            <td>
+			<?php print("<input type=\"text\" name=\"spacing\" size=\"2\" value=\"$spacing\" />"); ?>
+			<?php print($msg->read($CONFIG_PIXEL)); ?>
+		</td>
+          </tr>
+
+          <tr>
+            <td class="align-right"><?php print($msg->read($CONFIG_HOMEPAGE)); ?></td>
+            <td>
+			<label for="flash">
+			<select id="flash" name="flash">
+			<?php
+				print("<option value=\"\">". $msg->read($CONFIG_CUSTOM) ."</option>");
+
+				// recherche des flash infos
+				$query  = "select _title from flash ";
+				$query .= "where _type = 'F' ";
+				$query .= "AND _visible = 'O' AND _lang = '".$_SESSION["lang"]."' ";
+				$query .= "order by _title asc";
+
+				$result = mysql_query($query, $mysql_link);
+				$row    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+				while ( $row ) {
+					printf("<option value=\"$row[0]\" %s>$row[0]</option>", ($row[0] == $flash) ? "selected=\"selected\"" : "");
+
+					$row = mysql_fetch_row($result);
+					}
+			?>
+			</select> <?php print($msg->read($CONFIG_FLASH)); ?>
+			</label>
+		</td>
+          </tr>
+
+          <tr>
+            <td class="align-right"><?php print($msg->read($CONFIG_NBDATA)); ?></td>
+            <td>
+			<label for="nbdata">
+			<select id="nbdata" name="data">
+			<?php
+				for ($i = 10; $i <= 50; $i += 10)
+					printf("<option value=\"$i\" %s>$i</option>", ($i == $data) ? "selected=\"selected\"" : "");
+			?>
+			</select>
+			</label>
+		</td>
+          </tr>
+
+          <tr>
+            <td class="align-right"><?php print($msg->read($CONFIG_NBPAGE)); ?></td>
+            <td>
+			<label for="page">
+			<select id="page" name="page">
+			<?php
+				for ($i = 1; $i <= 15; $i++)
+					printf("<option value=\"$i\" %s>$i</option>", ($i == $page) ? "selected=\"selected\"" : "");
+			?>
+			</select>
+			</label>
+		</td>
+          </tr>
+
+          <tr>
+            <td class="align-right"><?php print($msg->read($CONFIG_LASTMSG)); ?></td>
+            <td>
+			<label for="recent">
+			<select id="recent" name="recent">
+			<?php
+				for ($i = 1; $i <= 10; $i++)
+					printf("<option value=\"$i\" %s>$i</option>", ($i == $recent) ? "selected=\"selected\"" : "");
+			?>
+			</select> <?php print($msg->read($CONFIG_STYLE)); ?>
+			</label>
+		</td>
+          </tr>
+
+          <tr>
+            <td class="align-right"><?php print($msg->read($CONFIG_LANGLIST)); ?></td>
+            <td>
+			<?php
+			$list = Array();
+
+			// ouverture du répertoire des langues
+			$myDir = @opendir("msg");
+
+			// lecture des répertoires
+			while ( $entry = @readdir($myDir) )
+				if ( is_dir("msg/$entry") )
+					array_push($list, $entry);
+
+			// fermeture du répertoire
+			@closedir($myDir);
+
+			for ($i = 0; $i < count($list); $i++) {
+				$check = ( strlen($list[$i]) == 2 ) ? "checked=\"checked\"" : "" ;
+				$value = ( strlen($list[$i]) == 2 ) ? $list[$i] : substr($list[$i], 1, 2) ;
+
+				$input = ( $list[$i] == $LANG )
+					? "<img src=\"".$_SESSION["ROOTDIR"]."/images/checkbox_on.gif\" title=\"\" alt=\"\" />"
+					: "<label for=\"cblang_$i\"><input type=\"checkbox\" id=\"cblang_$i\" name=\"cblang[]\" value=\"$value\" $check /></label>" ;
+
+				if ( is_file($_SESSION["ROOTDIR"]."/images/lang/ico-$value.png") ) 
+					print("$input <img src=\"".$_SESSION["ROOTDIR"]."/images/lang/ico-$value.png\" title=\"$value\" alt=\"\" /> ");
+				}
+			?>
+		</td>
+          </tr>
+        </table>
+	</div>
+
+	</div>
+	<div class="tab-pane" id="tab4" style="background-color: #ffffff; padding-top: 10px;">
+	
+	<p style="margin-top:5px; margin-bottom:0px; background-color:#eeeeee;">
+		<?php print($msg->read($CONFIG_SMS)); ?>
+		<span style="cursor: pointer;" onclick="$('sms')._display.toggle(); return false;"><img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/updown.png" title="" alt="" /></span>
+	</p>
+
+	<div id="sms" style="display:block;">
+        <table class="width100">
+          <tr>
+            <td style="width:30%;" class="align-right"><?php print($msg->read($CONFIG_SMSPROVIDER)); ?></td>
+            <td>
+			<?php print("<label for=\"smsfai\"><input type=\"text\" id=\"smsfai\" name=\"sms\" size=\"20\" value=\"$sms\" /></label>"); ?>
+		</td>
+          </tr>
+
+          <tr>
+            <td class="align-right"><?php print($msg->read($CONFIG_PASSWD)); ?></td>
+            <td>
+			<?php print("<label for=\"smspwd\"><input type=\"text\" id=\"smspwd\" name=\"smspwd\" size=\"20\" value=\"$smspwd\" /></label>"); ?>
+		</td>
+          </tr>
+        </table>
+	</div>
+
+	</div>
+	<div class="tab-pane" id="tab5" style="background-color: #ffffff; padding-top: 10px;">
+	
+	<p style="margin-top:5px; margin-bottom:0px; background-color:#eeeeee;">
+		<?php print($msg->read($CONFIG_DOC)); ?>
+		<span style="cursor: pointer;" onclick="$('doc')._display.toggle(); return false;"><img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/updown.png" title="" alt="" /></span>
+	</p>
+
+	<div id="doc" style="display:block;">
+        <table class="width100">
+
+	<?php
+		$return = mysql_query("select _ext, _mime, _visible, _IDmime from config_mime where _lang = '".$_SESSION["lang"]."' order by _mime", $mysql_link);
+		$mydoc  = ( $return ) ? remove_magic_quotes(mysql_fetch_row($return)) : 0 ;
+
+		$i = 0;
+		while ( $mydoc ) {
+			if ( $i++ % 2 == 0 )
+				print("<tr>");
+
+			$check = ( $mydoc[2] == "O" ) ? "checked=\"checked\"" : "" ;
+
+			print("
+				<td style=\"width:50%;\">
+					<label for=\"cb_$i\">
+					<input type=\"checkbox\" id=\"cb_$i\" name=\"cb[]\" value=\"$mydoc[3]\" $check />
+					<a href=\"index.php?item=$item&amp;IDconf=$IDconf&amp;IDmime=$mydoc[3]&amp;newdoc=1\">
+					<img src=\"".$_SESSION["ROOTDIR"]."/images/mime/$mydoc[0].gif\" title=\"$mydoc[0].gif\" alt=\"$mydoc[0].gif\" />
+					</a>
+					$mydoc[1]
+					</label>
+				</td>
+				");
+
+			if ( $i % 2 == 0 )
+				print("</tr>");
+
+			$mydoc = mysql_fetch_row($return);
+			}
+
+		if ( $i % 2 )
+			print("
+				  <td style=\"width:50%;\">&nbsp;</td>
+				</tr>
+				");
+
+		if ( $newdoc ) {
+			$value = ( $IDmime ) ? $msg->read($CONFIG_MODIFY) : $msg->read($CONFIG_CREAT) ;
+
+			// affichage des types de documents
+			$result = mysql_query("select _mime, _ext from config_mime where _IDmime = '$IDmime' limit 1", $mysql_link);
+			$row    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+			print("
+		          <tr>
+		            <td colspan=\"2\" style=\"border: #cccccc solid 1px;\">
+					<label for=\"mime\"><input type=\"text\" id=\"mime\" name=\"mime\" size=\"40\" value=\"$row[0]\" /> ". $msg->read($CONFIG_EXT) ." </label>
+					<label for=\"ext\"><input type=\"text\" id=\"ext\"  name=\"ext\"  size=\"3\"  value=\"$row[1]\" /></label> <input type=\"submit\" value=\"$value\" name=\"submit\" />
+	            	</td>
+		          </tr>
+				");
+			}
+		else
+			print("
+		          <tr>
+		            <td colspan=\"2\" style=\"border: #cccccc solid 1px;\">
+					<img src=\"".$_SESSION["ROOTDIR"]."/images/ajouter.gif\" title=\"". $msg->read($CONFIG_ADDOC) ."\" alt=\"". $msg->read($CONFIG_ADDOC) ."\" />
+					<a href=\"index.php?item=$item&amp;IDconf=$IDconf&amp;newdoc=1\">". $msg->read($CONFIG_ADDOC) ."</a>.
+	            	</td>
+		          </tr>
+				");
+	?>
+        </table>
+	</div>
+
+			</div>
+		</div>
+	</div>
+	
+	<hr />
+
+        <table class="width100">
+          <tr>
+            <td style="width:10%;" class="valign-middle">
+			<?php print("<input type=\"image\" src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/valid.gif\" name=\"valid\" alt=\"".$msg->read($CONFIG_INPUTOK)."\" />"); ?>
+		</td>
+            <td class="valign-middle">
+			<?php print($msg->read($CONFIG_VALIDATE)); ?>
+		</td>
+          </tr>
+
+          <tr>
+            <td class="valign-middle">
+			<a href="index.php"><?php print("<img src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/cancel.gif\" title=\"\" alt=\"".$msg->read($CONFIG_INPUTCANCEL)."\" />"); ?></a>
+		</td>
+            <td class="valign-middle">
+			<?php print($msg->read($CONFIG_GOHOME)); ?>
+		</td>
+          </tr>
+        </table>
+        
+      </form>
+      
+</div>

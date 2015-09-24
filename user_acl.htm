@@ -1,0 +1,347 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2004-2007 by Dominique Laporte(C-E-D@wanadoo.fr)
+   Copyright (c) 2006 by Nordine Zetoutou (nordine.zetoutou@educagri.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : user_acl.htm
+ *		projet   : la page de gestion des ACL
+ *
+ *		version  : 1.0
+ *		auteur   : laporte
+ *		creation : 27/10/04
+ *		modif    : 17/07/06 - Nordine Zetoutou
+ * 	                 migration des balises HTML en XHTML 1.0 strict
+ */
+
+
+$IDcentre = ( @$_POST["IDcentre"] )		// identification du centre
+	? (int) $_POST["IDcentre"]
+	: (int) (@$_GET["IDcentre"] ? $_GET["IDcentre"] : $_SESSION["CnxCentre"]) ;
+$IDsel    = ( strlen(@$_POST["IDsel"]) )	// identification de la catégorie
+	? (int) $_POST["IDsel"]
+	: (int) @$_GET["IDsel"] ;
+$mysel    = ( strlen(@$_POST["mysel"]) )	// identification de la catégorie
+	? (int) $_POST["mysel"]
+	: (int) @$_GET["mysel"] ;
+$IDclass  = ( @$_POST["IDclass"] )		// identification de la classe
+	? (int) $_POST["IDclass"]
+	: (int) @$_GET["IDclass"] ;
+$IDident  = ( @$_POST["IDident"] )		// intitulé de l'ACL
+	? (int) $_POST["IDident"]
+	: (int) @$_GET["IDident"] ;
+$ident    = ( @$_POST["ident"] )		// identification de l'ACL
+	? $_POST["ident"]
+	: @$_GET["ident"] ;
+$IDalpha  = ( $IDsel != $mysel )
+	? ""
+	: (@$_POST["IDalpha"] ? $_POST["IDalpha"] : @$_GET["IDalpha"]) ;
+
+$allok    = (int) @$_POST["allok"];		// autoriser l'accés (tous)
+$allout   = (int) @$_POST["allout"];	// basculement en liste brûlée (tous)
+
+$ok       = @$_POST["ok"];			// autoriser l'accés
+$out      = @$_POST["out"];			// basculement en liste brûlée
+
+$valid    = @$_POST["valid_x"];		// bouton validation
+?>
+
+
+<?php
+	if ( @$_POST["idcat"] )
+		@list($IDsel, $IDclass) = explode(":", $_POST["idcat"]);
+
+	// modification des ACL
+//            if ( $valid AND $_SESSION["CnxAdm"] == 255 ) {
+	if ( $valid AND getAccess() == 2 ) {
+		// on classe par ordre alphabétique
+		$Query  = "select _ID from user_id ";
+		$Query .= "where _adm > '0' ";
+		$Query .= "AND _IDgrp = '$IDsel' ";
+		$Query .= ( $IDclass ) ? "AND _IDclass = '$IDclass' " : "" ;
+		$Query .= ( isset($IDalpha) ) ? "AND _name like '$IDalpha%' " : "" ;
+		$Query .= "order by _name, _fname";
+
+		$result = mysql_query($Query, $mysql_link);
+		$row    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+		$i = 0;
+		while ( $row ) {
+			$visible = ( @$out[$i] ) ? "N" : "O" ;
+
+	           	$Query   = ( @$ok[$i] )
+				? "update user_acl set _visible = '$visible' "
+				: "delete from user_acl " ;
+  			$Query  .= "where _ident = '$ident' AND _IDident = '$IDident' AND _ID = '$row[0]'";
+
+			mysql_query($Query, $mysql_link);
+
+			if ( !mysql_affected_rows($mysql_link) AND @$ok[$i] ) {
+				// il s'agit peut être d'une nouvelle ACL
+				$date   = date("Y-m-d H:i:s");
+
+				$Query  = "insert into user_acl ";
+				$Query .= "values('', '$ident', '$IDident', '$row[0]', '$date', '$visible')";
+
+				mysql_query($Query, $mysql_link);
+				}
+
+			$i++;
+			$row = mysql_fetch_row($result);
+			}
+           	}
+?>
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($USER_ACL, $ident)); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+
+	<form id="formulaire" action="index.php" method="post">
+	<?php
+		print("
+			<p class=\"hidden\"><input type=\"hidden\" name=\"item\"    value=\"$item\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"cmde\"    value=\"$cmde\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"ident\"   value=\"$ident\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"IDident\" value=\"$IDident\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"IDalpha\" value=\"$IDalpha\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"mysel\"   value=\"$mysel\" /></p>
+			");
+	?>
+
+		  <table class="width100">
+		    <tr>
+			<td style="width:50%;" class="align-right">
+			    	<?php print($msg->read($USER_CHOOSECENTER)); ?> 
+			</td>
+			<td style="width:50%;">
+				<label for="IDcentre">
+			  	<select id="IDcentre" name="IDcentre" onchange="document.forms.formulaire.submit()">
+				<?php
+					// lecture des centres constitutifs
+					$query  = "select _IDcentre, _ident from config_centre ";
+					$query .= "where _visible = 'O' AND _lang = '".$_SESSION["lang"]."' ";
+					$query .= "order by _IDcentre";
+
+					$result = mysql_query($query, $mysql_link);
+					$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+					while ( $row ) {			
+						$select = ( $IDcentre == $row[0] ) ? "selected=\"selected\"" : "" ;
+
+						print("<option value=\"$row[0]\" $select>$row[1]</option>");
+
+						$row    = remove_magic_quotes(mysql_fetch_row($result));
+						}				
+				?>
+				</select> <img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/home.gif" title="" alt="" />
+				</label>
+			</td>
+		    </tr>
+
+		    <tr>
+			<td class="align-right">
+			  <?php print($msg->read($USER_CHOOSECATEGORY)); ?> 
+			</td>
+			<td>
+			  <label for="idcat">
+			  <select id="idcat" name="idcat" onchange="document.forms.formulaire.submit()">
+			  <?php
+				// recherche des catégories
+				$query  = "select _IDcat, _ident from user_category ";
+				$query .= "where _lang = '".$_SESSION["lang"]."' ";
+				$query .= "order by _IDcat, _ident asc";
+
+				$result = mysql_query($query, $mysql_link);
+				$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+				print("<option value=\"0\">&nbsp;</option>");
+							
+				while ( $row ) {			
+					print("<optgroup label=\"$row[1]\">");
+
+					// recherche des groupes
+					$query  = "select _IDgrp, _ident from user_group ";
+					$query .= "where _IDcat = '$row[0]' ";
+					$query .= "AND _visible = 'O' AND _lang = '".$_SESSION["lang"]."' ";
+					$query .= "order by _ident";
+
+					$return = mysql_query($query, $mysql_link);
+					$cat    = ( $return ) ? remove_magic_quotes(mysql_fetch_row($return)) : 0 ;
+
+					while ( $cat ) {		
+						if ( getAccess($cat[0]) == 1 ) {
+							// intialisation
+							$query  = "select _IDclass, _ident from campus_classe ";
+							$query .= "where _visible = 'O' AND _IDcentre = '$IDcentre' ";
+							$query .= "order by _ident";
+
+							// affichage des classes
+							$ret = mysql_query($query, $mysql_link);
+							$sql = ( $ret ) ? remove_magic_quotes(mysql_fetch_row($ret)) : 0 ;
+
+							while ( $sql ) {			
+								$select = ( $IDclass == $sql[0] ) ? "selected=\"selected\"" : "" ;
+
+								print("<option value=\"$cat[0]:$sql[0]\" $select>$sql[1]</option>");
+
+								$sql    = remove_magic_quotes(mysql_fetch_row($ret));
+								}	// endwhile classes
+							}
+						else {
+							$select = ( $IDsel == $cat[0] ) ? "selected=\"selected\"" : "" ;
+
+							print("<option value=\"$cat[0]:0\" $select>$cat[1]</option>");
+							}
+
+						$cat    = remove_magic_quotes(mysql_fetch_row($return));
+						}	// endwhile catégorie
+
+					print("</optgroup>");
+
+					$row    = remove_magic_quotes(mysql_fetch_row($result));
+					}	// endwhile catégorie
+			  ?>
+			  </select> <img src="<?php echo $_SESSION["ROOTDIR"]; ?>/images/group.gif" title="" alt="" />
+			  </label>
+			</td>
+		    </tr>
+		  </table>
+
+		<hr style="width:80%;" />
+
+		<div style="text-align:center;">
+			  <?php
+				// accès par ordre alphabétique
+		            $alpha = "BCDEFGHIJKLMNOPQRSTUVWXYZ";
+		            $href  = "index.php?item=$item&cmde=$cmde&ident=$ident&IDsel=$IDsel&IDclass=$IDclass&mysel=$mysel&IDident=$IDident&IDcentre=$IDcentre";
+
+				if ( $mysel != $IDsel )
+					$mysel = $IDsel;
+
+		            print("<a href=\"".myurlencode("$href&IDalpha=A")."\">A</a>");
+		            for ($i = 0; $i < 25; $i++) {
+					$letter = ( $alpha[$i] == $IDalpha ) ? "<strong>$IDalpha</strong>" : $alpha[$i] ;
+
+		            	print("<strong>.</strong><a href=\"".myurlencode("$href&IDalpha=$alpha[$i]")."\">$letter</a>");
+					}
+			  ?>
+		</div>
+
+		<hr style="width:80%;" />
+
+	<?php
+		// on classe par ordre alphabétique
+		$Query  = "select distinctrow ";
+		$Query .= "user_id._name, user_id._ID, user_id._IDgrp, user_id._lang, user_id._fname, user_group._ident ";
+		$Query .= "from user_id, user_group ";
+		$Query .= "where user_id._adm > '0' ";
+		$Query .= "AND user_id._IDcentre = '$IDcentre' ";
+		$Query .= "AND user_id._IDgrp = '$IDsel' ";
+		$Query .= "AND user_group._IDgrp = user_id._IDgrp ";
+		$Query .= "AND user_group._lang = '".$_SESSION["lang"]."' ";
+		$Query .= ( $IDclass ) ? "AND user_id._IDclass = '$IDclass' " : "" ;
+		$Query .= ( $IDalpha ) ? "AND user_id._name like '$IDalpha%' " : "" ;
+		$Query .= "order by user_id._name, user_id._fname";
+
+		$result = mysql_query($Query, $mysql_link);
+		$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+		$chkok  = ( $allok )  ? "checked=\"checked\"" : "" ;
+		$chkout = ( $allout ) ? "checked=\"checked\"" : "" ;
+
+		print("
+			<table class=\"width100\">
+			  <tr style=\"background-color:#C0C0C0;\">
+	                <td style=\"width:40%;\">".$msg->read($USER_NAME)."</td>
+	                <td class=\"align-center\" style=\"width:40%;\">".$msg->read($USER_CATEGORY)."</td>
+	                <td class=\"align-center\" style=\"width:10%;\">
+				<img src=\"".$_SESSION["ROOTDIR"]."/images/hand.gif\" title=\"".$msg->read($USER_GRANTED)."\" alt=\"".$msg->read($USER_GRANTED)."\" />
+             		<label for=\"allok\"><input type=\"checkbox\" id=\"allok\" name=\"allok\" value=\"1\" onclick=\"document.forms.formulaire.submit()\" $chkok /></label>
+	                </td>
+	                <td class=\"align-center\" style=\"width:10%;\">
+				<img src=\"".$_SESSION["ROOTDIR"]."/images/forbidden.gif\" title=\"".$msg->read($USER_BLACKLIST)."\" alt=\"".$msg->read($USER_BLACKLIST)."\" />
+				<label for=\"allout\"><input type=\"checkbox\" id=\"allout\" name=\"allout\" value=\"1\" onclick=\"document.forms.formulaire.submit()\" $chkout /></label>
+	                </td>
+			  </tr>
+			");
+
+		$i = 0;
+		while ( $row ) {
+			$bgcolor = ( $i % 2 ) ? "item" : "menu" ;
+
+			$Query   = "select campus_classe._ident ";
+			$Query  .= "from user_id, campus_classe ";
+			$Query  .= "where user_id._ID = '$row[1]' AND user_id._IDgrp = '1' ";
+			$Query  .= "AND campus_classe._IDclass = user_id._IDclass ";
+			$Query  .= "limit 1";
+
+			$return  = mysql_query($Query, $mysql_link) ;
+			$myrow   = ( $return ) ? remove_magic_quotes(mysql_fetch_row($return)) : 0 ;
+
+			$return  = mysql_query("select _visible from user_acl where _ID = '$row[1]' AND _ident = '$ident' AND _IDident = '$IDident'", $mysql_link);
+			$valid   = ( $return ) ? mysql_fetch_row($return) : 0 ;
+
+			$nbret   = ( $return ) ? mysql_affected_rows($mysql_link) : 0 ;
+
+			$chkok   = ( $allok )  ? "checked=\"checked\"" : ($nbret ? "checked=\"checked\"" : "") ;
+			$chkout  = ( $allout ) ? "checked=\"checked\"" : (($valid[0] == "N") ? "checked=\"checked\"" : "") ;
+
+			print("
+				<tr class=\"$bgcolor\">
+		                <td>
+					[<img src=\"".$_SESSION["ROOTDIR"]."/images/smiley/$row[2].gif\" title=\"$row[5]\" alt=\"$row[5]\" />]
+					<img src=\"".$_SESSION["ROOTDIR"]."/images/spip/langues/$row[3].png\" title=\"\" alt=\"\" /> ".formatUserName($row[0], $row[4])."
+				    </td>
+		                <td>$row[5] $myrow[0]</td>
+		                <td class=\"align-center\"><label for=\"ok_$i\"><input type=\"checkbox\" id=\"ok_$i\" name=\"ok[".$i."]\" value=\"$row[1]\" $chkok /></label></td>
+		                <td class=\"align-center\"><label for=\"out_$i\"><input type=\"checkbox\" id=\"out_$i\" name=\"out[".$i."]\" value=\"$row[1]\" $chkout /></label></td>
+				</tr>
+				");
+
+			$i++;
+			$row = remove_magic_quotes(mysql_fetch_row($result));
+			}
+
+		print("
+	            </table>
+
+	            <hr/>
+
+			<table class=\"width100\">
+			  <tr>
+	                <td style=\"width:10%;\" class=\"valign-middle align-center\">
+				<input type=\"image\" src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/valid.gif\" name=\"valid\" alt=\"".$msg->read($USER_INPUTOK)."\" />
+	                </td>
+	                <td class= \"valign-middle\">
+				". $msg->read($USER_VALIDATE) ."
+	                </td>
+			  </tr>
+	            </table>
+			");
+	      ?>
+
+	</form>
+
+</div>

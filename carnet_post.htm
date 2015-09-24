@@ -1,0 +1,366 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2007 by Dominique Laporte(C-E-D@wanadoo.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : carnet_post.htm
+ *		projet   : la page de saisie du carnet à points
+ *
+ *		version  : 1.0
+ *		auteur   : laporte
+ *		creation : 10/02/07
+ *		modif    : 
+ */
+
+
+$IDcentre = ( @$_POST["IDcentre"] )				// Identifiant du centre
+	? (int) $_POST["IDcentre"]
+	: (int) $_SESSION["CnxCentre"] ;
+
+$IDdata   = ( @$_POST["IDdata"] )				// Identifiant du carnet
+	? (int) $_POST["IDdata"]
+	: (int) @$_GET["IDdata"] ;
+$IDclasse = (int) @$_POST["IDclasse"];			// ID de la classe
+$IDeleve  = (int) @$_POST["IDeleve"];			// ID de l'élève
+$IDtype   = (int) @$_POST["IDtype"];			// type de sanction
+$IDmat    = (int) @$_POST["IDmat"];				// ID de la matière
+$IDitem   = (int) @$_POST["IDitem"];			// ID de la sanction
+$texte    = addslashes(trim(@$_POST["texte"]));		// commentaires
+?>
+
+
+<?php
+	// initialisation
+	$statut = "-";
+
+	// lecture du droit d'écriture
+	$Query  = "select _IDgrpwr, _IDmod from carnet ";
+	$Query .= "where _IDcentre = '$IDcentre' ";
+	$Query .= "limit 1";
+
+	$result = mysql_query($Query, $mysql_link);
+	$auth   = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+	// vérification des autorisations
+	verifySessionAccess($auth[1], $auth[0]);
+
+	// l'utilisateur a validé son message
+	if ( @$_POST["valid_x"] ) {
+		// date de création du message
+		$date    = date("Y-m-d H:i:s");
+
+		$Query   = "insert into carnet_data ";
+		$Query  .= "values('', '$IDeleve', '".$_SESSION["CnxID"]."', '".$_SESSION["CnxIP"]."', '$date', '$IDmat', '$IDtype', '$IDitem', '$texte')";
+
+		$statut  = $msg->read($CARNET_ADD);
+		$statut .= ( mysql_query($Query, $mysql_link) )
+			? " <img src=\"".$_SESSION["ROOTDIR"]."/images/ok.gif\" title=\"\" alt=\"\" />"
+			: " <img src=\"".$_SESSION["ROOTDIR"]."/images/bad.gif\" title=\"\" alt=\"\" /> " . sql_error($mysql_link) ;
+
+		$texte   = stripslashes($texte);
+		}	// endif post
+?>
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($CARNET_TITLE)); ?><br/>
+		<?php print($msg->read($CARNET_FORMPOST)); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+
+		<?php
+		    	print("
+				<form id=\"formulaire\" action=\"index.php\" method=\"post\">
+					<p class=\"hidden\"><input type=\"hidden\" name=\"item\"    value=\"$item\" /></p>
+					<p class=\"hidden\"><input type=\"hidden\" name=\"cmde\"    value=\"$cmde\" /></p>
+					<p class=\"hidden\"><input type=\"hidden\" name=\"IDdata\"  value=\"$IDdata\" /></p>
+				");
+
+			print("
+				<table class=\"width100\">
+				  <tr>
+				    <td class=\"align-left\" colspan=\"3\">
+				    	". $msg->read($CARNET_MYSTATUS) ." $statut
+				    </td>
+				  </tr>
+
+				  <tr>
+				    <td class=\"align-left\" colspan=\"3\">
+					<hr style=\"width:80%; text-align:center;\" />
+				    </td>
+				  </tr>
+
+				  <tr>
+				    <td style=\"width:20%;\" class=\"align-right\">
+				    	". $msg->read($CARNET_MYCENTER) ."
+				    </td>
+				    <td class=\"align-left\">
+
+
+
+					<label for=\"IDcentre\">
+					<select id=\"IDcentre\" name=\"IDcentre\" onchange=\"document.forms.formulaire.submit()\">
+				");
+
+					// lecture des centres constitutifs
+					$query  = "select _IDcentre, _ident from config_centre ";
+					$query .= "where _visible = 'O' AND _lang = '".$_SESSION["lang"]."' ";
+					$query .= "order by _IDcentre";
+
+					$result = mysql_query($query, $mysql_link);
+					$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+					if ( !$IDcentre )
+						$IDcentre = $row[0];
+
+					while ( $row ) {			
+						if ( $IDcentre == $row[0] )
+							print("<option selected=\"selected\" value=\"$row[0]\">$row[1]</option>");
+						else
+							print("<option value=\"$row[0]\">$row[1]</option>");
+
+						$row = remove_magic_quotes(mysql_fetch_row($result));
+						}				
+
+			print("
+					</select> <img src=\"".$_SESSION["ROOTDIR"]."/images/home.gif\" title=\"\" alt=\"\" />
+					</label>
+				    </td>
+				  </tr>
+
+				  <tr>
+				    <td class=\"align-right\">
+				    	". $msg->read($CARNET_MYCLASS) ."
+				    </td>
+				    <td class=\"align-left\">
+
+
+
+					<label for=\"IDclasse\">
+					<select id=\"IDclasse\" name=\"IDclasse\" onchange=\"document.forms.formulaire.submit()\">
+				");
+
+					$query  = "select _IDclass, _ident from campus_classe ";
+					$query .= "where _IDcentre = '$IDcentre' ";
+					$query .= "AND _visible = 'O' ";
+					$query .= "order by _text";
+
+					$result = mysql_query($query, $mysql_link);
+					$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+					if ( !$IDclasse )
+						$IDclasse = $row[0];
+
+					while ( $row ) {			
+						if ( $IDclasse == $row[0] )
+							print("<option selected=\"selected\" value=\"$row[0]\">$row[1]</option>");
+						else
+							print("<option value=\"$row[0]\">$row[1]</option>");
+
+						$row = remove_magic_quotes(mysql_fetch_row($result));
+						}				
+
+		    	print("
+					</select> <img src=\"".$_SESSION["ROOTDIR"]."/images/group.gif\" title=\"\" alt=\"\" />
+					</label>
+				    </td>
+				  </tr>
+
+				  <tr>
+				    <td class=\"align-right\">
+				    	". $msg->read($CARNET_MYSTUDENT) ."
+				    </td>
+				    <td class=\"align-left\">
+
+
+
+					<label for=\"IDeleve\">
+					<select id=\"IDeleve\" name=\"IDeleve\">
+				");
+
+					$query  = "select _ID, _name, _fname from user_id ";
+					$query .= "where _IDclass = '$IDclasse' AND _IDgrp = '1' ";
+					$query .= "AND _visible = 'O' ";
+					$query .= "order by _name, _fname";
+
+					$result = mysql_query($query, $mysql_link);
+					$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+					while ( $row ) {			
+						if ( $IDeleve == $row[0] )
+							print("<option selected=\"selected\" value=\"$row[0]\">$row[1] $row[2]</option>");
+						else
+							print("<option value=\"$row[0]\">$row[1] $row[2]</option>");
+
+						$row = remove_magic_quotes(mysql_fetch_row($result));
+						}				
+
+		    	print("
+					</select> <img src=\"".$_SESSION["ROOTDIR"]."/images/whosonline.gif\" title=\"\" alt=\"\" />
+					</label>
+				    </td>
+				  </tr>
+
+				  <tr>
+				    <td class=\"align-right\">
+				    	". $msg->read($CARNET_MYCOURSE) ."
+				    </td>
+				    <td class=\"align-left\">
+
+
+
+					<label for=\"IDmat\">
+					<select id=\"IDmat\" name=\"IDmat\">
+					  <option value=\"0\">". $msg->read($CARNET_NOCOURSE) ."</option>
+				");
+
+					$query  = "select _IDmat, _titre from campus_data ";
+					$query .= "where _visible = 'O' AND _lang = '".$_SESSION["lang"]."' ";
+					$query .= "order by _titre";
+
+					$result = mysql_query($query, $mysql_link);
+					$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+					while ( $row ) {			
+						if ( $IDmat == $row[0] )
+							print("<option selected=\"selected\" value=\"$row[0]\">$row[1]</option>");
+						else
+							print("<option value=\"$row[0]\">$row[1]</option>");
+
+						$row = remove_magic_quotes(mysql_fetch_row($result));
+						}				
+
+		    	print("
+					</select>
+					</label>
+				    </td>
+				  </tr>
+
+				  <tr>
+				    <td class=\"align-right\">
+				    	". $msg->read($CARNET_MOTIF) ."
+				    </td>
+				    <td class=\"align-left\">
+
+
+
+				  	<label for=\"IDtype\">
+					<select id=\"IDtype\" name=\"IDtype\" onchange=\"document.forms.formulaire.submit()\">
+				");
+
+					// affichage des motifs
+					$query  = "select _IDtype, _ident from carnet_type ";
+					$query .= "where _lang = '".$_SESSION["lang"]."' ";
+					$query .= "order by _IDtype";
+
+					$result = mysql_query($query, $mysql_link);
+					$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+					if ( !$IDtype )
+						$IDtype = $row[0];
+
+					while ( $row ) {			
+						if ( $IDtype == $row[0] )
+							print("<option selected=\"selected\" value=\"$row[0]\">$row[1]</option>");
+						else
+							print("<option value=\"$row[0]\">$row[1]</option>");
+
+						$row = remove_magic_quotes(mysql_fetch_row($result));
+						}				
+
+			print("
+					</select>
+					</label>
+				    </td>
+				  </tr>
+
+				  <tr>
+				    <td class=\"align-right\">
+				    	". $msg->read($CARNET_SANCTION) ."
+				    </td>
+				    <td class=\"align-left\">
+
+
+
+					<label for=\"IDitem\">
+					<select id=\"IDitem\" name=\"IDitem\">
+				");
+
+					// affichage des sanctions
+					$query  = "select _IDitem, _texte from carnet_items ";
+					$query .= "where _IDtype = '$IDtype' ";
+					$query .= "AND _lang = '".$_SESSION["lang"]."' ";
+					$query .= "order by _IDitem";
+
+					$result = mysql_query($query, $mysql_link);
+					$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+					while ( $row ) {			
+						if ( $IDitem == $row[0] )
+							print("<option selected=\"selected\" value=\"$row[0]\">$row[1]</option>");
+						else
+							print("<option value=\"$row[0]\">$row[1]</option>");
+
+						$row = remove_magic_quotes(mysql_fetch_row($result));
+						}				
+
+			print("
+					</select>
+					</label>
+				    </td>
+				  </tr>
+
+				  <tr>
+				    <td class=\"align-right\">
+				    	". $msg->read($CARNET_COMMENT) ."
+				    </td>
+				    <td class=\"align-left\">
+
+
+
+					<label for=\"texte\"><textarea rows=\"5\" id=\"texte\" name=\"texte\" cols=\"50\">$texte</textarea></label>
+				    </td>
+				  </tr>
+
+				  <tr>
+				    <td style=\"width:100%;\" colspan=\"2\"><hr style=\"width:80%;\" /></td>
+				  </tr>
+
+				  <tr>
+				    <td class=\"valign-middle align-right\">
+					<input type=\"image\" src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/valid.gif\" name=\"valid\" alt=\"".$msg->read($CARNET_INPUTOK)."\" />
+				    </td>
+				    <td class=\"valign-middle\" colspan=\"2\">". $msg->read($CARNET_RECORD) ."</td>
+				  </tr>
+				  <tr>
+				    <td class=\"valign-middle align-right\">
+					<a href=\"".myurlencode("index.php?item=$item")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/cancel.gif\" title=\"\" alt=\"".$msg->read($CARNET_INPUTCANCEL)."\" /></a>
+				    </td>
+				    <td class=\"valign-middle\" colspan=\"2\">". $msg->read($CARNET_QUIT) ."</td>
+				  </tr>
+           			</table>
+				");
+
+			print("</form>");
+		?>
+
+</div>

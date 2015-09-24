@@ -1,0 +1,214 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2007 by Dominique Laporte(C-E-D@wanadoo.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : cours_monitor.htm
+ *		projet   : la page de suivi des cours en ligne
+ *
+ *		version  : 1.0
+ *		auteur   : laporte
+ *		creation : 27/10/07
+ *		modif    : 
+ */
+
+
+$IDcours  = ( @$_POST["IDcours"] )			// Identifiant du cours
+	? (int) $_POST["IDcours"]
+	: (int) @$_GET["IDcours"] ;
+$IDmat    = ( @$_POST["IDmat"] )			// Identifiant matière/formation
+	? (int) $_POST["IDmat"]
+	: (int) @$_GET["IDmat"] ;
+$IDdata   = ( @$_POST["IDdata"] )			// Identifiant de la matière
+	? (int) $_POST["IDdata"]
+	: (int) @$_GET["IDdata"] ;
+$IDroot   = ( @$_POST["IDroot"] )			// Identifiant du répertoire racine
+	? (int) $_POST["IDroot"]
+	: (int) @$_GET["IDroot"] ;
+?>
+
+
+<?php
+	require_once "include/user.php";
+
+	// lecture de la base de données
+	$Query  = "select _titre, _IDgrpwr, _IDgrprd, _texte, _private, _IDmod from cours ";
+	$Query .= "where _IDcours = '$IDcours' " ;
+	$Query .= "limit 1" ;
+
+	$result = mysql_query($Query, $mysql_link);
+	$dir    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+	// vérification des autorisations
+	verifySessionAccess($dir[5], $dir[2]);
+
+	// pour les cours privés (gestion par ACL)
+	$acl = new user_acl("course");
+
+	// test du droit de lecture
+	if ( $dir[4] == "O" AND !$acl->isMember($IDcours, $_SESSION["CnxID"]) )
+		logSessionAccess();
+?>
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print("<strong>".$_SESSION["CampusName"]."::$dir[0]</strong>"); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+
+	<?php
+	//---------------------------------------------------------------------------
+	function survey($IDcours, $IDroot)
+	{
+	/*
+	 * fonction :	affiche la liste des utilisateurs qui ont accéder aux ressources
+	 * in :		$IDcours : ID du cours, $IDroot : ID du répertoire 
+	 */
+
+		require "globals.php";
+
+		require "msg/cours.php";
+		require_once "include/TMessage.php";
+
+		$msg  = new TMessage($_SESSION["ROOTDIR"]."/msg/".$_SESSION["lang"]."/cours.php");
+
+		// lecture du dossier courant
+		$Query  = "select _titre from cours_data ";
+		$Query .= "where _IDdata = '$IDroot' ";
+		$Query .= "limit 1";
+
+		$result = mysql_query($Query, $mysql_link);
+		$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+		$mydir  = ( $row ) ? $row[0] : $msg->read($COURS_ROOTDIR) ;
+
+		print("
+			<p style=\"border:#cccccc solid 1px; text-align:justify; margin-top:0px; margin-bottom:5px; padding:2px;\">
+			<strong>. $mydir</strong>
+			<span style=\"cursor: pointer;\" onclick=\"$('id$IDroot')._display.toggle(); return false;\"><img src=\"".$_SESSION["ROOTDIR"]."/images/updown.png\" title=\"\" alt=\"\" /></span>
+			</p>");
+
+		print("
+			<div id=\"id$IDroot\" style=\"display:block; margin-bottom:10px;\">
+			<table class=\"width100\">
+	              <tr style=\"background-color:#C0C0C0;\">
+				<td style=\"width:40%;\">". $msg->read($COURS_NAME) ."</td>
+				<td style=\"width:50%;\">". $msg->read($COURS_PROGRESS) ."</td>
+				<td style=\"width:10%;\" class=\"align-center\">". $msg->read($COURS_HIT) ."</td>
+	              </tr>");
+
+		$Query  = "select _file, _size, _IDdata from cours_items ";
+		$Query .= "where _IDcours = '$IDcours' AND _IDdata = '$IDroot' ";
+
+		$result = mysql_query($Query, $mysql_link);
+		$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+		$nbfile = mysql_affected_rows($mysql_link);
+
+		$users  = Array();
+
+		while ( $row ) {
+			$myfile = ( $row[1] )
+				? "$DOWNLOAD/e-campus/".stripaccent($_SESSION["CampusName"])."/$IDcours/$row[2]-".stripaccent($row[0])
+				: stripaccent($row[0]) ;
+
+			// lecture du compteur des téléchargements
+			$query  = "select distinctrow download._ID ";
+			$query .= "from download, download_data, user_id ";
+			$query .= "where download._IDdown = download_data._IDdown ";
+			$query .= "AND download_data._file = '".addslashes($myfile)."' ";
+			$query .= "AND download._ID = user_id._ID ";
+			$query .= "order by user_id._name ";
+
+			$return = mysql_query($query, $mysql_link);
+			$myrow  = ( $return ) ? mysql_fetch_row($return) : 0 ;
+
+			while ( $myrow ) {
+				$users = array_merge($users, Array($myrow[0]));
+				$myrow = mysql_fetch_row($return);
+				}
+
+			$row = mysql_fetch_row($result);
+			}
+
+		$status = array_count_values($users);
+		$users  = Array();
+
+		foreach ($status as $clef => $valeur)
+			$users = array_merge($users, Array("id:$clef" => $valeur));
+
+		$i      = 0;
+		foreach ($users as $clef => $valeur) {
+			$bgcolor = ( $i++ % 2 ) ? "item" : "menu" ;
+
+			list($nil, $id) = explode(":", $clef);
+
+			$percent = number_format((100 * $valeur) / $nbfile, 0, ',', '.');
+
+			$dwload  = "<a href=\"#\" onclick=\"popWin('".myurlencode($_SESSION["ROOTDIR"]."/cours_list.php?ID=$id&IDcours=$IDcours&IDdata=$IDroot&campus=".$_SESSION["CampusName"]."&lang=".$_SESSION["lang"])."', '450', '500'); return false;\">$valeur</a>";
+
+			print("
+	              <tr class=\"$bgcolor\">
+				<td>".getUserName($id)."</td>
+				<td><img src=\"".$_SESSION["ROOTDIR"]."/images/stats/red.png\" title=\"\" alt=\"\" style=\"width:$percent%; height:6px;\" /></td>
+				<td class=\"align-center\">$dwload/$nbfile</td>
+	              </tr>");
+			}
+
+		print("
+			</table>
+			</div>");
+	}
+	//---------------------------------------------------------------------------
+
+	// répertoire racine
+	survey($IDcours, 0);
+
+	// répertoires des cours
+	$Query  = "select _IDdata from cours_data ";
+	$Query .= "where _IDcours = '$IDcours' ";
+	$Query .= "order by _IDdata";
+
+	$result = mysql_query($Query, $mysql_link);
+	$row    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+	while ( $row ) {
+		survey($IDcours, $row[0]);
+
+		$row = mysql_fetch_row($result);
+		}
+	?>
+
+	<hr/>
+
+	<table class="width100">
+	  <tr>
+		<td style="width:10%;" class="valign-middle align-center">
+			<?php print("<a href=\"".myurlencode("index.php?item=$item&cmde=visu&IDcours=$IDcours&IDmat=$IDmat&IDdata=$IDdata")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/cancel.gif\" title=\"\" alt=\"".$msg->read($COURS_INPUTCANCEL)."\" /></a>"); ?>
+		</td>
+		<td class="valign-middle">
+			<?php print($msg->read($COURS_BACK)); ?>
+		</td>
+	  </tr>
+	</table>
+
+</div>

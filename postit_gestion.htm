@@ -1,0 +1,343 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2002-2007 by Dominique Laporte(C-E-D@wanadoo.fr)
+   Copyright (c) 2006 by Hugues Lecocq(hugues.lecocq@laposte.net)
+   Copyright (c) 2006 by Nordine Zetoutou (nordine.zetoutou@educagri.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : postit_gestion.htm
+ *		projet   : la page de gestion des post-it
+ *
+ *		version  : 1.0
+ *		auteur   : laporte
+ *		creation : 30/12/05
+ *		modif    : 15/06/06 - par hugues lecocq
+ *                     migration PHP5 
+ *                     17/07/06 - Nordine Zetoutou
+ * 	                 migration des balises HTML en XHTML 1.0 strict
+ */
+
+
+$IDcentre = ( @$_POST["IDcentre"] )		// Identifiant du centre
+	? (int) $_POST["IDcentre"]
+	: (int) (@$_GET["IDcentre"] ? $_GET["IDcentre"] : $_SESSION["CnxCentre"]);
+
+$grpid    = @$_POST["grpid"];			// identification des groupes
+$cbwr     = @$_POST["cbwr"];			// droits des rédacteurs
+$cbrd     = @$_POST["cbrd"];			// droits des lecteurs
+$cbpj     = @$_POST["cbpj"];			// autorisation des PJ
+$hdsz     = @$_POST["hdsz"];			// droits des lecteurs
+$delay    = @$_POST["delay"];			// autorisation des PJ
+
+$submit   = @$_POST["valid_x"];		// bouton de validation
+?>
+
+
+<?php
+	// initialisation
+	$status = "-";
+
+	// vérification des autorisations
+	admSessionAccess();
+
+	// l'utilisateur a validé la saisie
+	if ( $submit AND $_SESSION["CnxAdm"] == 255 ) {
+		// droits des rédacteurs et des lecteurs
+		$grpwr = $grprd = $grppj = 0;
+		for ($i = 0; $i < count($cbwr); $i++)
+			$grpwr += ( @$cbwr[$i] ) ? $cbwr[$i] : 0 ;
+		for ($i = 0; $i < count($cbrd); $i++)
+			$grprd += ( @$cbrd[$i] ) ? $cbrd[$i] : 0 ;
+		for ($i = 0; $i < count($cbpj); $i++)
+			$grppj += ( @$cbpj[$i] ) ? $cbpj[$i] : 0 ;
+
+		// ajout
+		$Query  = "insert into postit ";
+		$Query .= "values('$IDcentre', '$grpwr', '$grprd', '$grppj')";
+
+		if ( !mysql_query($Query, $mysql_link) ) {
+			// modification
+			$Query  = "update postit ";
+			$Query .= "set _IDgrpwr = '$grpwr', _IDgrprd = '$grprd', _IDgrppj = '$grppj' ";
+			$Query .= "where _IDcentre = '$IDcentre' ";
+			$Query .= "limit 1";
+
+			if ( !mysql_query($Query, $mysql_link) ) {
+				$status = $msg->read($POSTIT_FAIL);
+				sql_error($mysql_link);
+				}
+			else
+				$status = $msg->read($POSTIT_MODIFICATION)." <img src=\"".$_SESSION["ROOTDIR"]."/images/ok.gif\" title=\"\" alt=\"\" />";
+			}
+		else
+			$status = $msg->read($POSTIT_APPEND)." <img src=\"".$_SESSION["ROOTDIR"]."/images/ok.gif\" title=\"\" alt=\"\" />";
+
+		// ajout
+		for ($i = 0; $i < count($grpid); $i++) {
+			$idgrp  = (int) @$grpid[$i];
+			$size   = (int) (strlen(@$hdsz[$idgrp]) ? pow(2, $hdsz[$idgrp]) * 1024000 : $HDQUOTAS) ;
+			$timer  = (int) (strlen(@$delay[$idgrp]) ? $delay[$idgrp] * 3600 * 24 * 7 : $MAXPOST) ;
+
+			$Query  = "insert into postit_quotas ";
+			$Query .= "values('-$idgrp', '$size', '0', '$timer')";
+
+			if ( !mysql_query($Query, $mysql_link) ) {
+				// modification
+				$Query  = "update postit_quotas ";
+				$Query .= "set _maxsize = '$size', _delay = '$timer' ";
+				$Query .= "where _IDuser = '-$idgrp' ";
+				$Query .= "limit 1";
+
+				if ( !mysql_query($Query, $mysql_link) )
+					sql_error($mysql_link);
+				}
+			}
+		}
+
+	$Query  = "select _IDcentre, _IDgrpwr, _IDgrprd, _IDgrppj from postit ";
+	$Query .= "where _IDcentre = '$IDcentre' ";
+
+	$result = mysql_query($Query, $mysql_link);
+	$row    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+	// initialisation des champs de saisie
+//	$IDcentre = $row[0];
+	$grpwr    = $row[1];
+	$grprd    = $row[2];
+	$grppj    = $row[3];
+?>
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($POSTIT_MANAGEMENT)); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+
+	<p><?php print($msg->read($POSTIT_STATUS) . " $status"); ?></p>
+
+	<form id="formulaire" action="index.php" method="post" enctype="multipart/form-data">
+	<?php
+		print("
+			<p class=\"hidden\"><input type=\"hidden\" name=\"item\"  value=\"$item\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"cmde\"  value=\"$cmde\" /></p>
+			");
+	?>
+
+	<div style="border:#cccccc solid 1px; padding:4px;">
+
+		  <table class="width100">
+		    <tr style="background-color:#eeeeee;">
+		      <td style="width:33%;"><?php print($msg->read($POSTIT_CENTER)); ?></td>
+		      <td style="width:33%;"></td>
+		      <td style="width:33%;"></td>
+		    </tr>
+
+		    <tr>
+		      <td class="valign-top">
+				<label for="IDcentre">
+				<select id="IDcentre" name="IDcentre" onchange="document.forms.formulaire.submit()">
+				<?php
+					// lecture des centres constitutifs
+					$query  = "select _IDcentre, _ident from config_centre ";
+					$query .= "where _visible = 'O' AND _lang = '".$_SESSION["lang"]."' ";
+					$query .= "order by _IDcentre";
+
+					$result = mysql_query($query, $mysql_link);
+					$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+					while ( $row ) {			
+						$select = ( $IDcentre == $row[0] ) ? "selected=\"selected\"" : "" ;
+
+						print("<option value=\"$row[0]\" $select>$row[1]</option>");
+
+						$row    = remove_magic_quotes(mysql_fetch_row($result));
+						}
+
+//					$mycentre = ( $IDcentre == $mycentre ) ? $mycentre : $IDcentre ;
+				?>
+				</select>
+				</label>
+		      </td>
+		      <td></td>
+		      <td></td>
+		    </tr>
+
+		    <tr>
+		      <td style="height:15px;" colspan="3">&nbsp;</td>
+		    </tr>
+
+		    <tr style="background-color:#eeeeee;">
+		      <td><?php print($msg->read($POSTIT_WRITER)); ?></td>
+		      <td><?php print($msg->read($POSTIT_READER)); ?></td>
+		      <td><?php print($msg->read($POSTIT_ATTACHMENT)); ?></td>
+		    </tr>
+
+		    <tr>
+		      <td class="valign-top">
+      		<?php
+				// recherche des groupes
+				$query  = "select _IDgrp, _ident from user_group ";
+				$query .= "where _visible = 'O' AND _lang = '".$_SESSION["lang"]."' ";
+				$query .= "order by _IDgrp asc";
+
+				$result = mysql_query($query, $mysql_link);
+				$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+				while ( $row ) {
+					$check = ( $grpwr & pow(2, $row[0] - 1) ) ? "checked=\"checked\"" : "" ;
+
+             			print("<label for=\"cbwr_$row[0]\"><input type=\"checkbox\" id=\"cbwr_$row[0]\" name=\"cbwr[]\" value=\"". pow(2, $row[0] - 1) ."\" $check /> $row[1]</label><br/>");
+
+					$row   = remove_magic_quotes(mysql_fetch_row($result));
+					}
+           		?>
+		      </td>
+		      <td class="valign-top">
+      		<?php
+				// recherche des groupes
+				mysql_data_seek($result, 0);
+				$row = remove_magic_quotes(mysql_fetch_row($result));
+
+				while ( $row ) {
+					$check = ( $grprd & pow(2, $row[0] - 1) ) ? "checked=\"checked\"" : "" ;
+
+             			print("<label for=\"cbrd_$row[0]\"><input type=\"checkbox\" id=\"cbrd_$row[0]\" name=\"cbrd[]\" value=\"". pow(2, $row[0] - 1) ."\" $check /> $row[1]</label><br/>");
+
+					$row = remove_magic_quotes(mysql_fetch_row($result));
+					}
+           		?>
+		      </td>
+		      <td class="valign-top">
+      		<?php
+				// recherche des groupes
+				mysql_data_seek($result, 0);
+				$row = remove_magic_quotes(mysql_fetch_row($result));
+
+				while ( $row ) {
+					$check = ( $grppj & pow(2, $row[0] - 1) ) ? "checked=\"checked\"" : "" ;
+
+             			print("<label for=\"cbpj_$row[0]\"><input type=\"checkbox\" id=\"cbpj_$row[0]\" name=\"cbpj[]\" value=\"". pow(2, $row[0] - 1) ."\" $check /> $row[1]</label><br/>");
+
+					$row = remove_magic_quotes(mysql_fetch_row($result));
+					}
+           		?>
+		      </td>
+		    </tr>
+
+		    <tr>
+		      <td style="height:15px;" colspan="3">&nbsp;</td>
+		    </tr>
+
+		    <tr style="background-color:#eeeeee;">
+		      <td>
+	                <?php print($msg->read($POSTIT_QUOTAS)); ?>
+		      </td>
+		      <td>
+	                <?php print($msg->read($POSTIT_EXPIRE)); ?>
+		      </td>
+		      <td></td>
+		    </tr>
+
+		    <tr>
+		      <td class="valign-top">
+      		<?php
+				// recherche des groupes
+				mysql_data_seek($result, 0);
+				$row = remove_magic_quotes(mysql_fetch_row($result));
+
+				while ( $row ) {
+					print("<p class=\"hidden\"><input type=\"hidden\" name=\"grpid[]\"  value=\"$row[0]\" /></p>");
+
+					$return = mysql_query("select _maxsize from postit_quotas where _IDuser = '-$row[0]'", $mysql_link);
+					$myrow  = ( $return ) ? mysql_fetch_row($return) : 0 ;
+					$value  = ( $myrow ) ? (int) ($myrow[0] / 1024000) : (int) ($HDQUOTAS / 1024000) ;
+
+					print("<label for=\"hdsz_$row[0]\">");
+					print("<select id=\"hdsz_$row[0]\" name=\"hdsz[$row[0]]\" style=\"font-size:9px;\" >");
+					for ($i = 0; $i < 5; $i++)
+						printf("<option value=\"$i\" %s>".pow(2, $i)."</option>", (pow(2, $i) == $value) ? "selected=\"selected\"" : "");
+					print("</select> ");
+					print("</label> ");
+
+					print($msg->read($POSTIT_MBYTE) . " - $row[1]<br/>");
+
+					$row    = remove_magic_quotes(mysql_fetch_row($result));
+					}
+           		?>
+		      </td>
+		      <td class="valign-top">
+      		<?php
+				// recherche des groupes
+				mysql_data_seek($result, 0);
+				$row = remove_magic_quotes(mysql_fetch_row($result));
+
+				while ( $row ) {
+					$week   = 3600 * 24 * 7;
+
+					$return = mysql_query("select _delay from postit_quotas where _IDuser = '-$row[0]'", $mysql_link);
+					$myrow  = ( $return ) ? mysql_fetch_row($return) : 0 ;
+					$value  = ( $myrow ) ? (int) ($myrow[0] / $week) : (int) ($MAXPOST / $week) ;
+
+					print("<label for=\"delay_$row[0]\">");
+					print("<select id=\"delay_$row[0]\" name=\"delay[$row[0]]\" style=\"font-size:9px;\" >");
+					for ($i = 0; $i < 11; $i += 2)
+						printf("<option value=\"$i\" %s>$i</option>", ($i == $value) ? "selected=\"selected\"" : "");
+					print("</select> ");
+					print("</label> ");
+
+					print($msg->read($POSTIT_WEEK) . " - $row[1]<br/>");
+
+					$row    = remove_magic_quotes(mysql_fetch_row($result));
+					}
+           		?>
+		      </td>
+		      <td></td>
+		    </tr>
+		  </table>
+
+	</div>
+
+	<hr style="width:80%;" />
+
+		<table class="width100">
+	           <tr>
+	              <td style="width:10%;" class="valign-middle align-center">
+	              	<?php print("<input type=\"image\" src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/valid.gif\" name=\"valid\" alt=\"".$msg->read($POSTIT_INPUTOK)."\" />"); ?>
+	              </td>
+	              <td class="valign-middle">
+	              	<?php print($msg->read($POSTIT_RECORD)); ?>
+	              </td>
+	           </tr>
+	           <tr>
+	              <td class="valign-middle align-center">
+	              	<a href="index.php"><?php print("<img src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/cancel.gif\" title=\"\" alt=\"".$msg->read($POSTIT_INPUTCANCEL)."\" />"); ?></a>
+	              </td>
+	              <td class="valign-middle">
+	              	<?php print($msg->read($POSTIT_BACKHOME)); ?>
+	              </td>
+	           </tr>
+		</table>
+
+	</form>
+
+</div>

@@ -1,0 +1,227 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2006-2007 by Dominique Laporte(C-E-D@wanadoo.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : exam_gestion.htm
+ *		projet   : la page de gestion des examens
+ *
+ *		version  : 1.0
+ *		auteur   : laporte
+ *		creation : 17/09/06
+ *		modif    : 
+ */
+
+
+$IDcentre = ( @$_POST["IDcentre"] )		// ID du centre
+	? (int) $_POST["IDcentre"]
+	: (int) @$_GET["IDcentre"] ;
+$IDexam   = ( @$_POST["IDexam"] )		// ID de l'examen
+	? (int) $_POST["IDexam"]
+	: (int) @$_GET["IDexam"] ;
+$year     = (int) @$_POST["year"]		// année de l'exam
+	? (int) $_POST["year"]
+	: (int) @$_GET["year"] ;
+
+$IDmod   = (int) @$_POST["IDmod"];		// ID du modérateur
+$cbwr    = @$_POST["cbwr"];
+$cbrd    = @$_POST["cbrd"];
+
+$submit  = @$_POST["valid_x"];		// bouton de validation
+?>
+
+
+<?php
+	// l'utilisateur a validé la saisie
+	if ( $submit ) {
+		$status = $msg->read($EXAM_MODIFICATION) ." ";
+
+		// droits des rédacteurs et des lecteurs
+		$grpwr = $grprd = 0;
+		for ($i = 0; $i < count($cbwr); $i++)
+			$grpwr += ( @$cbwr[$i] ) ? $cbwr[$i] : 0 ;
+		for ($i = 0; $i < count($cbrd); $i++)
+			$grprd += ( @$cbrd[$i] ) ? $cbrd[$i] : 0 ;
+
+		// modification de la catégorie de la ressource
+		$Query  = "UPDATE exam ";
+		$Query .= "SET _IDmod = '$IDmod', _IDgrpwr = '$grpwr', _IDgrprd= '$grprd' ";
+		$Query .= "where _IDexam = '$IDexam' ";
+
+		if ( !mysql_query($Query, $mysql_link) ) {
+			$status .= "<img src=\"".$_SESSION["ROOTDIR"]."/images/bad.gif\" title=\"\" alt=\"\" />";
+			sql_error($mysql_link);
+			}
+		else
+			$status .= "<img src=\"".$_SESSION["ROOTDIR"]."/images/ok.gif\" title=\"\" alt=\"\" />";
+		}
+	// initialisation
+	else
+		$status = "-";
+
+	// recherche de l'examen
+	$query  = "select _IDmod, _IDgrpwr, _IDgrprd, _title, _year from exam ";
+	$query .= "where _IDexam = '$IDexam' ";
+	$query .= "limit 1";
+
+	$result = mysql_query($query, $mysql_link);
+	$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+	// initialisation
+	$IDmod  = $row[0];
+	$grpwr  = $row[1];
+	$grprd  = $row[2];
+	$title  = "$row[3] ($row[4])";
+?>
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($EXAM_MANAGEMENT)); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+
+	<p><?php print($msg->read($EXAM_STATUS) . " $status"); ?></p>
+
+	<form action="index.php" name="formulaire" method="post">
+	<?php
+		print("
+			<p class=\"hidden\"><input type=\"hidden\" name=\"item\"     value=\"$item\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"cmde\"     value=\"$cmde\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"year\"     value=\"$year\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"IDcentre\" value=\"$IDcentre\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"IDexam\"   value=\"$IDexam\" /></p>
+			");
+	?>
+
+	<div style="border:#cccccc solid 1px; padding:4px;">
+
+		  <table class="width100">
+		    <tr style="background-color:#eeeeee;">
+		      <td style="width:33%;" colspan="3">
+				<?php print($msg->read($EXAM_TEST)); ?>
+			</td>
+		    </tr>
+	    
+		    <tr>
+		      <td style="width:33%;" colspan="3">
+				<?php print("$title"); ?>
+			</td>
+		    </tr>
+
+		    <tr>
+		      <td style="height:15px;" colspan="3"></td>
+		    </tr>
+
+		    <tr style="background-color:#eeeeee;">
+		      <td><?php print($msg->read($EXAM_MODO)); ?>*</td>
+		      <td><?php print($msg->read($EXAM_WRITER)); ?></td>
+		      <td><?php print($msg->read($EXAM_READER)); ?></td>
+		    </tr>
+	    
+		    <tr>
+		      <td class="valign-top">
+				<label for="IDmod">
+				<select id="IDmod" name="IDmod">
+					<option value="0"><?php print($msg->read($EXAM_NONE)); ?></option>
+					<?php
+						// recherche des modérateurs
+						$result = mysql_query("select _ID, _name, _fname from user_id where _adm & 4 order by _name asc", $mysql_link);
+						$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+						while ( $row ) {
+							$select = ( $IDmod == $row[0] ) ? "selected=\"selected\"" : "" ;
+
+							print("<option value=\"$row[0]\" $select>".formatUserName($row[1], $row[2])."</option>");
+
+							$row = remove_magic_quotes(mysql_fetch_row($result));
+							}
+					?>
+				</select>
+				</label>
+		      </td>
+		      <td class="valign-top">
+	      		<?php
+					// recherche des groupes
+					$query  = "select _IDgrp, _ident from user_group ";
+					$query .= "where _visible = 'O' AND _lang = '".$_SESSION["lang"]."' ";
+					$query .= "order by _IDgrp asc";
+
+					$result = mysql_query($query, $mysql_link);
+					$row    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+					while ( $row ) {
+						$check = ( $grpwr & pow(2, $row[0] - 1) ) ? "checked=\"checked\"" : "" ;
+
+						print("<label for=\"cbwr_$row[0]\"><input type=\"checkbox\" id=\"cbwr_$row[0]\" name=\"cbwr[]\" value=\"". pow(2, $row[0] - 1) ."\" $check /> $row[1]</label><br/>");
+
+						$row   = mysql_fetch_row($result);
+						}
+             	?>
+		      </td>
+		      <td class="valign-top">
+	      		<?php
+					// recherche des groupes
+					mysql_data_seek($result, 0);
+					$row = mysql_fetch_row($result);
+
+					while ( $row ) {
+						$check = ( $grprd & pow(2, $row[0] - 1) ) ? "checked=\"checked\"" : "" ;
+
+						print("<label for=\"cbrd_$row[0]\"><input type=\"checkbox\" id=\"cbrd_$row[0]\" name=\"cbrd[]\" value=\"". pow(2, $row[0] - 1) ."\" $check /> $row[1]</label><br/>");
+
+						$row = mysql_fetch_row($result);
+						}
+             	?>
+		      </td>
+		    </tr>
+		  </table>
+
+	</div>
+
+	<div class="x-small">* <?php print($msg->read($EXAM_DECLARE)); ?></div>
+
+	<hr style="width:80%;" />
+
+         <table class="width100">
+           <tr>
+              <td style="width:10%;" class="valign-middle align-center">
+              	<?php print("<input type=\"image\" src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/valid.gif\" name=\"valid\" alt=\"".$msg->read($EXAM_INPUTOK)."\" />"); ?>
+              </td>
+              <td class="valign-middle">
+              	<?php print($msg->read($EXAM_MODIFY)); ?>
+              </td>
+           </tr>
+           <tr>
+              <td class="valign-middle align-center">
+              	<?php print("<a href=\"index.php?item=$item&amp;IDcentre=$IDcentre&amp;year=$year\">"); ?>
+			<?php print("<img src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/cancel.gif\" title=\"\" alt=\"".$msg->read($EXAM_INPUTCANCEL)."\" />"); ?></a>
+              </td>
+              <td class="valign-middle">
+              	<?php print($msg->read($EXAM_QUIT)); ?>
+              </td>
+           </tr>
+         </table>
+
+	</form>
+
+</div>

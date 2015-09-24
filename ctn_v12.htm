@@ -1,0 +1,384 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2005-2010 by Dominique Laporte(C-E-D@wanadoo.fr)
+   Copyright (c) 2006 by Nordine Zetoutou (nordine.zetoutou@educagri.fr)
+   Copyright (c) 2010 by Jérémy CORNILLEAU (jeremy.cornilleau@gmail.com)
+   Copyright (c) 2010 by Alexandre MAHE (alexandre.mahe@oxydia.com)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : ctn.htm
+ *		projet   : la page des cahiers de texte numériques
+ *
+ *		version  : 1.0
+ *		auteur   : laporte
+ *		creation : 23/10/05
+ *		modif    : 17/07/06 - Nordine Zetoutou
+ * 	                 migration des balises HTML en XHTML 1.0 strict
+ */
+
+
+$IDcentre = ( @$_POST["IDcentre"] )				// Identifiant du centre
+	? (int) $_POST["IDcentre"]
+	: (int) (@$_GET["IDcentre"] ? $_GET["IDcentre"] : $_SESSION["CnxCentre"]) ;
+$IDclass  = ( strlen(@$_POST["IDclass"]) )		// sélection de la classe
+	? (int) $_POST["IDclass"]
+	: (int) (@$_GET["IDclass"] ? $_GET["IDclass"] : $_SESSION["CnxClass"]) ;
+$IDgroup  = ( @$_POST["IDgroup"] )				// sélection du e-groupe
+	? (int) $_POST["IDgroup"]
+	: (int) @$_GET["IDgroup"] ;
+$IDmat    = ( @$_POST["IDmat"] )				// ID de la matière
+	? (int) $_POST["IDmat"]
+	: (int) @$_GET["IDmat"] ;
+$IDitem   = (int) @$_GET["IDitem"];				// ID de l'item du CTN
+$year     = (int) @$_POST["year"];
+$skpage   = ( @$_GET["skpage"] )				// n° de la page affichée
+	? (int) $_GET["skpage"]
+	: 1 ;
+$skshow   = ( @$_GET["skshow"] )				// n° du flash info
+	? (int) $_GET["skshow"]
+	: 1 ;
+
+$submit    = ( @$_POST["submit"] )				// bouton de validation
+	? $_POST["submit"]
+	: @$_GET["submit"] ;
+
+// réinitialisation
+if ( @$_GET["salon"] == "" )
+	$_SESSION["CampusName"] = "";
+	
+require "msg/ctn.php";
+require_once "include/TMessage.php";
+require_once "include/calendar_tools.php";
+
+$msg  = new TMessage($_SESSION["ROOTDIR"]."/msg/".$_SESSION["lang"]."/ctn.php");
+$msg->msg_search  = $keywords_search;
+$msg->msg_replace = $keywords_replace;
+
+if(!isset($_GET["year"]))
+{
+	$year = date("Y", time());
+}
+else
+{
+	$year = $_GET["year"];
+}
+
+if(!isset($_GET["month"]))
+{
+	$month = date("m", time());
+}
+else
+{
+	$month = $_GET["month"];
+}
+
+if(!isset($_GET["day"]))
+{
+	$day = date("d", time());
+}
+else
+{
+	$day = $_GET["day"];
+}
+
+if(isset($_GET["change"]))
+{
+	if($_GET["change"] == "next")
+	{
+		$datetmp = mktime(0, 0, 0, $month, $day, $year) + (24*3600)*7;
+		$day = date("d", $datetmp);
+		$month = date("m", $datetmp);
+		$year = date("Y", $datetmp);
+	}
+	else if($_GET["change"] == "prev")
+	{
+		$datetmp = mktime(0, 0, 0, $month, $day, $year) - (24*3600)*7;
+		$day = date("d", $datetmp);
+		$month = date("m", $datetmp);
+		$year = date("Y", $datetmp);
+	}
+}
+
+function lundo($jaro,$semajno)
+{
+    $semo=mktime(0,0,0,1,1,$jaro);
+    $semajno+=date('W',$semo)=='52' ? 1 :0;
+    $semo=strtotime("+$semajno week",$semo);
+    while(date('w',$semo)!='1'){$semo=strtotime("-1 day",$semo);}
+    return ($semo);
+}
+
+?>
+
+
+<?php
+	require_once $_SESSION["ROOTDIR"]."/include/ctn.php";
+
+	// vérification des droits
+	$query  = "select _IDmod, _IDgrpwr, _IDgrprd, _month, _limited, _IDctn, _common, _rss, _sndmail from ctn ";
+	$query .= "where _IDclass = '$IDclass' AND _IDgroup = '$IDgroup' ";
+	$query .= "limit 1";
+
+	$result = mysql_query($query, $mysql_link);
+	$auth   = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+	// vérification des autorisations
+	if ( $IDclass )
+		verifySessionAccess($auth[0], $auth[2]);
+
+	// l'utilisateur a cliqué sur un lien
+	switch ( $submit ) {
+		case "del" :
+			$Query  = "DELETE from ctn_items ";
+			$Query .= "where _IDitem = '$IDitem' ";
+			$Query .= ( $_SESSION["CnxAdm"] == 255 OR ($auth[6] == "O" AND ($auth[1] AND pow(2, $_SESSION["CnxGrp"] - 1))) )
+				? ""
+				: "AND _ID = '".$_SESSION["CnxID"]."' " ;
+			$Query .= "limit 1";
+
+			if ( !mysql_query($Query, $mysql_link) )
+				sql_error($mysql_link);
+			else {
+				$Query  = "DELETE from ctn_data ";
+				$Query .= "where _IDitem = '$IDitem' ";
+
+				mysql_query($Query, $mysql_link);
+
+				$Query  = "SELECT _IDpj, _ext from ctn_pj ";
+				$Query .= "where _IDitem = '$IDitem' ";
+
+				$result = mysql_query($Query, $mysql_link);
+				$row    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+				while ( $row ) {
+					$Query  = "DELETE from ctn_pj ";
+					$Query .= "where _IDpj = '$row[0]' ";
+					$Query .= "limit 1";
+
+					if ( mysql_query($Query, $mysql_link) )
+						@unlink("$DOWNLOAD/ctn/$row[0].$row[1]");
+
+					$row = mysql_fetch_row($result);
+					}
+				}
+			break;
+
+		case "visible" :
+		case "invisible" :
+			$Query  = "update ctn_items ";
+			$Query .= ( $submit == "visible" ) ? "set _visible = 'O' " : "set _visible = 'N' " ;
+			$Query .= "where _IDitem = '$IDitem' ";
+			$Query .= ( $_SESSION["CnxAdm"] == 255 OR ($auth[6] == "O" AND ($auth[1] AND pow(2, $_SESSION["CnxGrp"] - 1))) )
+				? ""
+				: "AND _ID = '".$_SESSION["CnxID"]."' " ;
+
+			if ( !mysql_query($Query, $mysql_link) )
+				sql_error($mysql_link);
+			break;
+
+		default :
+			if ( @$_POST["import"] == $msg->read($CTN_IMPORT) )
+				import_ctn($IDcentre, @$_FILES["UploadFile"]);
+
+			// affichage automatique
+			$Query  = "update ctn_items ";
+			$Query .= "set _visible = 'O' ";
+			$Query .= "where _date <= '".date("Y-m-d H:i:s")."' ";
+
+			@mysql_query($Query, $mysql_link);
+
+			// lecture des droits
+			$Query  = "select _IDmod, _IDgrpwr from campus_data ";
+			$Query .= "where _titre = '".$_SESSION["CampusName"]."' ";
+
+			$result = mysql_query($Query, $mysql_link);
+			$who    = ( $result ) ? mysql_fetch_row($result) : 0 ;
+			break;
+		}
+?>
+
+<div class="maintitle">
+	<div style="text-align: center;">
+		<strong>Liste des devoirs à faire pour la semaine du <?php echo "$day/$month/$year"; ?></strong>
+	</div>
+</div>
+
+<div class="maincontent">
+
+	<form id="formulairenote" action="index.php" method="get" enctype="multipart/form-data">
+		<input type="hidden" name="year" value="<?php echo $year; ?>" />
+		<input type="hidden" name="month" value="<?php echo $month; ?>" />
+		<input type="hidden" name="day" value="<?php echo $day; ?>" />
+		<input type="hidden" name="change" id="change" value="" />
+		<input type="hidden" name="item" id="item" value="113" />
+
+	<label for="IDcentre" style="display: none">
+	<select id="IDcentre" name="IDcentre" onchange="document.forms.formulairenote.submit()">
+	<?php
+		// lecture des centres constitutifs
+		$query  = "select _IDcentre, _ident from config_centre ";
+		$query .= "where _visible = 'O' AND _lang = '".$_SESSION["lang"]."' ";
+		$query .= "order by _IDcentre";
+
+		$result = mysql_query($query, $mysql_link);
+		$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+		while ( $row ) {
+			printf("<option value=\"$row[0]\" %s>$row[1]</option>", $IDcentre == $row[0] ? "selected=\"selected\"" : "");
+
+			$row = remove_magic_quotes(mysql_fetch_row($result));
+			}
+	?>
+	</select>
+	</label>
+
+	<input type="hidden" id="IDclass" name="IDclass" value="<?php echo $_SESSION["CnxClass"]; ?>">
+
+
+		<?php
+			// affichage bouton "ajouter"
+			$add_button = ( $IDclass AND ($_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $auth[0] OR $auth[1] & pow(2, $_SESSION["CnxGrp"] - 1)) )
+				? "<a href=\"".myurlencode("index.php?item=$item&IDcentre=$IDcentre&IDmat=$IDmat&IDgroup=$IDgroup&IDclass=$IDclass&cmde=post")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/post.gif\" title=\"\" alt=\"\" /></a>"
+				: "" ;
+			$add_text   = ( $IDclass AND ($_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $auth[0] OR $auth[1] & pow(2, $_SESSION["CnxGrp"] - 1)) )
+				? $msg->read($CTN_VALIDATE)
+				: "" ;
+
+			// les années scolaires
+			$query  = "select min(_date), max(_date) from ctn_items ";
+			$query .= "where _IDctn = '$auth[5]' ";
+			$query .= ( $IDmat ) ? "AND _IDmat = '$IDmat' " : "" ;
+
+			$return = mysql_query($query, $mysql_link);
+			$myrow  = ( $return ) ? mysql_fetch_row($return ) : 0 ;
+
+			if ( $myrow ) {
+				$min     = strval(substr($myrow[0], 0, 4));
+				$max     = strval(substr($myrow[1], 0, 4));
+
+				// initialisation
+				if ( !$year )
+					$year = $max;
+
+				$select  = "<label for=\"year\">";
+				$select .= "<select id=\"year\" name=\"year\" onchange=\"document.forms.formulairenote.submit()\" style=\"font-size:9px;\">";
+
+				for ($k = $max; $k >= $min; $k--)
+					if ( $year == $k )
+						$select .= "<option value=\"$k\" selected=\"selected\">$k</option>";
+					else
+						$select .= "<option value=\"$k\">$k</option>";
+
+				$select .= "</select>";
+				$select .= "</label>";
+				}
+			else
+				$select  = "&nbsp;";
+		?>
+		
+		<table class="align-center width100">
+			<tr>
+				<td class="align-left" style="width: 50%">
+					<a href="#" class="btn btn-inverse" style="color: white" onclick="document.getElementById('change').value='prev';document.forms.formulairenote.submit()">Avant</a>
+				</td>
+				<td class="align-right">
+					<a href="#" class="btn btn-inverse" style="color: white" onclick="document.getElementById('change').value='next';document.forms.formulairenote.submit()">Après</a>
+				</td>
+			</tr>
+		</table>
+	</form>
+	
+	<?php
+	$lundo = lundo(date("Y", mktime(0, 0, 0, $month, $day, $year)), date("W", mktime(0, 0, 0, $month, $day, $year))-1);
+	$a = 1;
+	
+	for($i=0; $i<7; $i++)
+	{
+		$lundo2 = $lundo + (24*3600)*$i;
+		$day = date("d", $lundo2);
+		$month = date("m", $lundo2);
+		$year = date("Y", $lundo2);
+		?>
+		
+		<div class="btn-primary" style="width: 100%; border-radius: 4px; padding-top: 2px; padding-bottom: 2px">
+			<div class="align-center"><?php echo "$day/$month/$year"; ?></div>
+		</div>
+		
+		<?php
+		require_once("php/datafeed.db.devoir.php");
+		$tab_cours = listCalendar($month."/".$day."/".$year, "day");
+		?>
+
+		<div class="accordion" id="accordion-1-<?php echo $i; ?>">
+		
+		<?php
+		$num = 0;
+		foreach($tab_cours["events"] as $val)
+		{
+			$mois = substr($val[2], 0, strpos($val[2], "/"));
+			$jour = substr($val[2], strpos($val[2], "/")+1, strpos($val[2], "/"));
+			$annee = substr($val[2], strpos($val[2], "/")+1);
+			$annee = substr($annee, strpos($annee, "/")+1, 4);
+			$date_courante = mktime(23, 59, 59, $month, $day, $year);
+
+			$ligne_cours = "
+			<div class=\"accordion-group\">
+				<div class=\"accordion-heading\">
+					<a class=\"accordion-toggle btn\" data-toggle=\"collapse\" data-parent=\"#accordion$num\" href=\"#collapse$a\" style=\"color: black; text-align: left\">
+						$val[1] <span style=\"float: right\">Pour le <strong>$jour/$mois/$annee</strong> de ".substr($val[2], strpos($val[2], " "))." à ".substr($val[3], strpos($val[3], " "))."</span>
+					</a>
+				</div>";
+
+				$query  = "select distinctrow ctn_items._texte ";
+				$query .= "from ctn_items ctn_items, edt_data edt_data ";
+				$query .= "where ctn_items._IDcours = '$val[0]' ";
+				$query .= "and edt_data._nosemaine = ctn_items._nosemaine ";
+				$query .= "and edt_data._annee = $year ";
+
+				$return = mysql_query($query, $mysql_link);
+				$myrow  = ( $return ) ? remove_magic_quotes(mysql_fetch_row($return)) : 0 ;
+				
+				while ($myrow)
+				{
+					$first = ($date_courante >= time()) ? " in" : "";
+					echo $ligne_cours;
+					echo "<div id=\"collapse$a\" class=\"accordion-body collapse$first\">
+							<div class=\"accordion-inner\" style=\"background-color: white\">
+								".$myrow[0]."
+							</div>
+						</div>";
+						
+					$myrow = remove_magic_quotes(mysql_fetch_row($return));
+					$a++;
+				}
+			$num++;
+		}
+		?>
+		</div>
+		<?php
+	}
+	?>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>

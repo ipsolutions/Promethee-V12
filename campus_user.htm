@@ -1,0 +1,288 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2009 by Dominique Laporte(C-E-D@wanadoo.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : campus_user.htm
+ *		projet   : la page de gestion des membres des e-campus
+ *
+ *		version  : 1.0
+ *		auteur   : laporte
+ *		creation : 3/03/09
+ *		modif    : 
+ */
+
+
+$IDcentre = ( @$_POST["IDcentre"] )			// ID du centre
+	? (int) $_POST["IDcentre"]
+	: (int) (@$_GET["IDcentre"] ? $_GET["IDcentre"] : $_SESSION["CnxCentre"]) ;
+$IDmat = ( @$_POST["IDmat"] )				// ID du e-campus (validation)
+	? (int) $_POST["IDmat"]
+	: (int) @$_GET["IDmat"] ;
+$IDtype = ( strlen(@$_POST["IDtype"]) )		// tri sur statut
+	? (int) $_POST["IDtype"]
+	: -1000 ;
+
+$submit = @$_POST["valid_x"];				// bouton de validation
+?>
+
+
+<?php
+	require_once "include/postit.php";
+
+	// lecture des droits
+	$Query  = "select _access from campus_user ";
+	$Query .= "where _ID = '".$_SESSION["CnxID"]."' ";
+	$Query .= "AND _IDmat = '$IDmat' ";
+	$Query .= "AND _access > 0 ";
+	$Query .= "limit 1";
+
+	$result = mysql_query($Query, $mysql_link);
+	$auth   = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+	// test du droit de lecture
+	if ( $_SESSION["CnxAdm"] != 255 AND !$auth[0] )
+		logSessionAccess();
+
+	// lecture modérateur
+	$Query  = "select _IDmod from campus_data ";
+	$Query .= "where _IDmat = '$IDmat' ";
+	$Query .= "AND _lang = '".$_SESSION["lang"]."' ";
+	$Query .= "limit 1";
+
+	$result = mysql_query($Query, $mysql_link);
+	$idmod  = ( $result ) ? mysql_fetch_row($result) : 0 ;
+
+	// commande modérateur
+	if ( $submit ) {
+		$user   = @$_POST["user"];
+		$action = @$_POST["action"];
+
+		for ($i = 0; $i < count($user); $i++) {
+			$Query  = "update campus_user ";
+			$Query .= "set _access = '".$action[$i]."' ";
+			$Query .= "where _ID = '".$user[$i]."' ";
+			$Query .= "AND _IDmat = '$IDmat' ";
+			$Query .= "limit 1";
+
+			mysql_query($Query, $mysql_link);
+			}
+		}
+?>
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($CAMPUS_MEMBERLIST)); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+
+	<form id="formulaire" action="index.php" method="post">
+	<?php
+		print("
+			<p class=\"hidden\"><input type=\"hidden\" name=\"item\"      value=\"$item\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"cmde\"      value=\"$cmde\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"IDcentre\"  value=\"$IDcentre\" /></p>
+			<p class=\"hidden\"><input type=\"hidden\" name=\"IDmat\"     value=\"$IDmat\" /></p>
+			");
+
+	// pour savoir le nombre de membres
+	$res = mysql_query("select _IDuser from campus_user where _IDmat = '$IDmat' AND _access > 0", $mysql_link);
+	$nbf = ( $res ) ? mysql_numrows($res) : 0 ;				
+
+	print("<div>". $msg->read($CAMPUS_NBMEMBER, strval($nbf)) ."</div><hr/>");
+
+	print("
+		<table class=\"width100\">
+		  <tr style=\"background-color:#C0C0C0;\">
+                <td class=\"align-center\" style=\"width:1%;\">
+			<img src=\"".$_SESSION["ROOTDIR"]."/images/document.gif\" title=\"". $msg->read($CAMPUS_PUBLISHCV) ."\" alt=\"". $msg->read($CAMPUS_PUBLISHCV) ."\" />
+                </td>
+
+                <td class=\"align-left\" style=\"width:39%;\" colspan=\"2\">
+			". $msg->read($CAMPUS_NAME) ."
+                </td>
+
+                <td class=\"align-center\" style=\"width:20%;\">
+			". $msg->read($CAMPUS_REGSINCE) ."
+                </td>
+
+                <td class=\"align-center\" style=\"width:20%;\">
+			". $msg->read($CAMPUS_LASTACCESS) ."
+                </td>
+
+                <td class=\"align-center\" style=\"width:20%;\">
+			<label for=\"IDtype\">
+		  	<select id=\"IDtype\" name=\"IDtype\" onchange=\"document.forms.formulaire.submit()\" style=\"font-size: 9px;\">
+		");
+
+	// affichage des statuts
+	$query  = "select _IDaccess, _ident from campus_access ";
+	$query .= "where _lang = '".$_SESSION["lang"]."' ";
+	$query .= "order by _IDaccess";
+
+	$result = mysql_query($query, $mysql_link);
+	$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+	$status = Array();
+
+	while ( $row ) {
+		$status = $status + Array($row[0] => $row[1]);
+
+		$row = remove_magic_quotes(mysql_fetch_row($result));
+		}
+
+	print("<option value=\"-1000\">". $msg->read($CAMPUS_ALLSTATUS) ."</option>");
+
+	foreach ($status as $clef => $valeur)
+		printf("<option value=\"$clef\" %s>$valeur</option>", ($IDtype == $clef) ? "selected=\"selected\"" : "");
+
+	print("
+		  	</select>
+		  	</label>
+                </td>
+		  </tr>
+		");
+
+	// affichage des membres
+	$query  = "select distinctrow user_id._ID, user_id._IDgrp, user_id._name, user_id._lang, ";
+	$query .= "campus_user._date, campus_user._access, campus_user._lastcnx, campus_user._cnx ";
+	$query .= "from user_id, campus_user ";
+	$query .= "where campus_user._IDmat = '$IDmat' ";
+	$query .= "AND user_id._ID = campus_user._ID ";
+	$query .= ( $IDtype != -1000 ) ? "AND campus_user._access = '$IDtype' " : "" ;
+	$query .= "order by user_id._name, user_id._fname";
+
+	$result = mysql_query($query, $mysql_link);
+	$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+	$i = 0;
+	while ( $row ) {
+		$about = "";
+		$bgcol = ( $i++ % 2 ) ? "item" : "menu" ;
+
+		if ( getAccess($row[1]) == 1 ) {
+			// lecture de l'élève
+			$query  = "select user_id._name, user_id._fname, campus_classe._ident ";
+			$query .= "from user_id, campus_classe ";
+			$query .= "where user_id._ID = '$row[0]' ";
+			$query .= "AND user_id._IDclass = campus_classe._IDclass ";
+			$query .= "limit 1";
+
+			$return = mysql_query($query, $mysql_link);
+			$myrow  = ( $return ) ? remove_magic_quotes(mysql_fetch_row($return)) : 0 ;
+
+			if ( $myrow ) {
+				// infos complémentaires
+ 				$about  = "<a href=\"#\" class=\"overlib\">";
+				$about .= "<img src=\"".$_SESSION["ROOTDIR"]."/images/spip/aide.gif\" title=\"\" alt=\"\" />";
+				$about .= "<span>$myrow[0] $myrow[1]<br/>$myrow[2]</span>";
+				$about .= "</a>";
+				}
+			}
+
+		// lecture du groupe
+		$return = mysql_query("select _ident from user_group where _IDgrp = '$row[1]'AND _lang = '".$_SESSION["lang"]."' limit 1", $mysql_link);
+		$groupe = ( $return ) ? remove_magic_quotes(mysql_fetch_row($return)) : 0 ;
+
+		// envoie post-it
+		$name   = getUserName($row[0]);
+
+		// qui est le modérateur
+		$mod    = ( $row[5] > 0 AND $row[5] & 4 ) ? "<img src=\"".$_SESSION["ROOTDIR"]."/images/stats/mod.gif\" title=\"". $msg->read($CAMPUS_MODO) ."\" alt=\"". $msg->read($CAMPUS_MODO) ."\" />" : "" ;
+
+		if ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $idmod[0] OR ($auth[0]& 4) ) {
+			if ( $row[0] == $idmod[0] )
+				$select = $msg->read($CAMPUS_OWNER);
+			else {
+				$select  = "<label for=\"action_$i\">";
+				$select .= "<select id=\"action_$i\" name=\"action[]\">";
+				foreach ($status as $clef => $valeur) {
+					$check   = ($row[5] == $clef) ? "selected=\"selected\"" : "";
+					$select .= "<option value=\"$clef\" $check>$valeur</option>";
+					}
+				$select .= "</select>";
+				$select .= "</label>";
+
+				$select .= "<p class=\"hidden\"><input type=\"hidden\" name=\"user[]\" value=\"$row[0]\" /></p>";
+				}
+			}
+		else
+			$select = $status[ $row[5] ];
+
+		// lecture du CV
+		$query  = "select _IDcv from cv ";
+		$query .= "where _IDuser = '$row[0]' ";
+		$query .= "AND _visible = 'O' ";
+		$query .= "limit 1";
+
+		$return = mysql_query($query, $mysql_link);
+		$myrow  = ( $return ) ? mysql_fetch_row($return) : 0 ;
+
+		// accès aux CV
+		$icon = ( $myrow )
+			? "<img src=\"".$_SESSION["ROOTDIR"]."/images/register.gif\" title=\"".$msg->read($CAMPUS_ACCESSCV)."\" alt=\"".$msg->read($CAMPUS_ACCESSCV)."\" />"
+			: "<img src=\"".$_SESSION["ROOTDIR"]."/images/unregister.gif\" title=\"\" alt=\"X\" />" ;
+		$cv   = ( $row[0] == $_SESSION["CnxID"] )
+			? "<a href=\"index.php?item=40&amp;cmde=post\">$icon</a>"
+			: ($myrow
+				? "<a href=\"index.php?item=40&amp;cmde=demande&amp;IDcv=$myrow[0]\">$icon</a>"
+				: $icon) ;
+
+		print("
+			<tr class=\"$bgcol\">
+			  <td class=\"align-center\">$cv</td>
+			  <td style=\"width:1%;\"><img src=\"".$_SESSION["ROOTDIR"]."/images/smiley/$row[1].gif\" title=\"$groupe[0]\" alt=\"$groupe[0]\" /></td>
+			  <td>
+				<img src=\"".$_SESSION["ROOTDIR"]."/images/lang/ico-$row[3].png\" title=\"$row[3]\" alt=\"$row[3]\" /> $name ($row[7]) $about $mod
+			  </td>
+			  <td class=\"align-center\">".date2longfmt($row[4])."</td>
+			  <td class=\"align-center\">".date2longfmt($row[6])."</td>
+			  <td class=\"align-center\">$select</td>
+			</tr>
+			");
+
+		$row = remove_magic_quotes(mysql_fetch_row($result));
+		}
+
+	if ( $_SESSION["CnxAdm"] == 255 OR $_SESSION["CnxID"] == $idmod[0] OR ($auth[0]& 4) )
+		print("
+	              <tr>
+				<td colspan=\"6\"><hr/></td>
+			  </tr>
+
+	              <tr>
+				<td colspan=\"5\" class=\"valign-middle align-right\">". $msg->read($CAMPUS_VALUPDATE) ."</td>
+				<td class=\"align-center\"><input type=\"image\" src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/valid.gif\" name=\"valid\" alt=\"".$msg->read($CAMPUS_INPUTOK)."\" /></td>
+			  </tr>
+
+	              <tr>
+				<td colspan=\"5\" class=\"valign-middle align-right\">". $msg->read($CAMPUS_BACK2CAMPUS) ."</td>
+				<td class=\"align-center\"><a href=\"".myurlencode("index.php?item=$item&cmde=visu&IDcentre=$IDcentre&IDmat=$IDmat")."\"><img src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/cancel.gif\" title=\"\" alt=\"".$msg->read($CAMPUS_INPUTCANCEL)."\" /></a></td>
+			  </tr>");
+
+	print("</table>");
+
+	print("</form>");
+      ?>
+
+</div>

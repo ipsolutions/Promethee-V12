@@ -1,0 +1,380 @@
+<?php
+/*-----------------------------------------------------------------------*
+   Copyright (c) 2006-2007 by Dominique Laporte (C-E-D@wanadoo.fr)
+
+   This file is part of Prométhée.
+
+   Prométhée is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   Prométhée is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with Prométhée.  If not, see <http://www.gnu.org/licenses/>.
+ *-----------------------------------------------------------------------*/
+
+
+/*
+ *		module   : config_usrmenu.htm
+ *		projet   : la page de gestion des sous menus
+ *
+ *		version  : 1.0
+ *		auteur   : laporte
+ *		creation : 22/04/07
+ *		modif    : 
+ */
+
+
+$IDconf  = ( @$_POST["IDconf"] )
+	? (int) $_POST["IDconf"]
+	: (int) @$_GET["IDconf"] ;
+$IDmenu  = ( @$_POST["IDmenu"] )
+	? $_POST["IDmenu"]
+	: @$_GET["IDmenu"] ;
+
+$cbrd    = @$_POST["cbrd"];					// droits des lecteurs
+$title   = trim(addslashes(@$_POST["title"]));
+$text    = trim(addslashes(@$_POST["text"]));
+$img     = @$_POST["img"];
+$visible = ( @$_POST["visible"] ) ? "N" : "O" ;
+$anonyme = ( @$_POST["anonyme"] ) ? "O" : "N" ;
+$marquee = ( @$_POST["marquee"] ) ? "O" : "N" ;
+$sort    = ( @$_POST["sort"] ) ? "O" : "N" ;
+$rbox    = @$_POST["rbox"];
+
+$submit  = ( @$_POST["valid_x"] )
+	? ($IDmenu ? "update" : "new")
+	: "" ;
+?>
+
+
+<?php
+	// vérification des autorisations
+	admSessionAccess();
+
+	// initialisation
+	$status = ( $IDmenu )
+		? $msg->read($CONFIG_UPDTMENU)
+		: $msg->read($CONFIG_NEWMENU) ;
+
+	// droits des lecteurs
+	$grprd  = 0;
+	for ($i = 0; $i < count($cbrd); $i++)
+		$grprd += ( @$cbrd[$i] ) ? $cbrd[$i] : 0 ;
+
+	// test d'erreur sur champs non renseignés
+	$error  = ( !strlen($title) ) ? 1 : 0 ;
+
+	// l'utilisateur a cliqué sur un lien
+	switch ( $submit ) {
+		case "new" :
+			if ( !$error ) {
+				$status = $msg->read($CONFIG_INSERT) ." ";
+
+				$Query  = "insert into config_menu ";
+				$Query .= "values('', '$title', '$text', '0', '$marquee', '$img', '$grprd', '$anonyme', '', '$sort', '$visible', 'O', 'config_submenu', '0', '".$_SESSION["lang"]."')";
+
+				if ( !mysql_query($Query, $mysql_link) ) {
+					mysql_error($mysql_link);
+					$status .= "<img src=\"".$_SESSION["ROOTDIR"]."/images/bad.gif\" title=\"\" alt=\"\" />";
+					}
+				else {
+					$my_menu = mysql_insert_id();
+					$order   = ( $rbox == "G" ) ? $my_menu : -$my_menu ;
+
+					$query   = "update config_menu ";
+					$query  .= "set _order = '$order' ";
+					$query  .= "where _IDmenu = '$my_menu' ";
+					$query  .= "limit 1";
+
+					mysql_query($query, $mysql_link);
+
+					$status .= "<img src=\"".$_SESSION["ROOTDIR"]."/images/ok.gif\" title=\"\" alt=\"\" />";
+					}
+				}
+			break;
+
+		case "update" :
+			$status = $msg->read($CONFIG_MODIFICATION) ." ";
+
+			$order  = (int) @$_POST["order"];
+			if ( ($order > 0 AND $rbox == "D") OR ($order < 0 AND $rbox == "G") )
+				setUserMenuOrder($IDmenu, $rbox == "D" ? "right" : "left");
+
+			$Query  = "update config_menu ";
+			$Query .= strlen($title) ? "set _ident = '$title', " : "set " ;
+			$Query .= "_text = '$text', _sort = '$sort', _IDgrprd = '$grprd', _visible = '$visible', _anonyme = '$anonyme', _marquee = '$marquee', _img = '$img' ";
+			$Query .= "where _IDmenu = '$IDmenu' ";
+			$Query .= "AND _lang = '".$_SESSION["lang"]."' ";
+			$Query .= "limit 1";
+
+			if ( ! mysql_query($Query, $mysql_link) ) {
+				mysql_error($mysql_link);
+				$status .= "<img src=\"".$_SESSION["ROOTDIR"]."/images/bad.gif\" title=\"\" alt=\"\" />";
+				}
+			else
+				$status .= "<img src=\"".$_SESSION["ROOTDIR"]."/images/ok.gif\" title=\"\" alt=\"\" />";
+			break;
+
+		default :
+			break;
+		}
+
+	$Query  = "select _ident, _text, _order, _visible, _marquee, _img, _anonyme, _sort, _IDgrprd ";
+	$Query .= "from config_menu ";
+	$Query .= "where _IDmenu = '$IDmenu' ";
+	$Query .= "AND _lang = '".$_SESSION["lang"]."' ";
+	$Query .= "limit 1";
+
+	$result = mysql_query($Query, $mysql_link);
+	$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+	if ( $row ) {
+		// initialisation des champs de saisie
+		$title   = $row[0];
+		$text    = $row[1];
+		$rbox    = ( $row[2] > 0 ) ? "G" : "D" ;
+		$visible = $row[3];
+		$marquee = $row[4];
+		$img     = ( $row[5] ) ? $row[5] : "default.png" ;
+		$anonyme = $row[6];
+		$sort    = $row[7];
+		$grprd   = $row[8];
+		}
+	else
+		if ( !$error ) {
+			// réinitialisation des champs de saisie
+			$title   = "";
+			$text    = "";
+			$rbox    = "D";
+			$visible = "O";
+			$marquee = "N";
+			$img     = "default.png";
+			$anonyme = "O";
+			$sort    = "O";
+			$grprd   = 255;
+			}
+?>
+
+
+<div class="maintitle" style="background-image: url('<?php echo $_SESSION["CfgHeader"]; ?>'); background-repeat: repeat;">
+	<div style="text-align: center;">
+		<?php print($msg->read($CONFIG_MANAGEMENT)); ?>
+	</div>
+</div>
+
+<div class="maincontent">
+
+	<form id="formulaire" action="" method="post">
+
+	<table class="width100">
+	    <tr>
+	      <td style="width:15%;" class="align-right"><?php print($msg->read($CONFIG_STATUS)); ?></td>
+	      <td style="width:85%;"><?php print("$status"); ?></td>
+	    </tr>
+
+	    <tr>
+	      <td class="align-right"><?php print($msg->read($CONFIG_AUTHOR)); ?></td>
+	      <td><?php print($_SESSION["CnxName"]); ?></td>
+	    </tr>
+	</table>
+
+	<hr style="width:80%; text-align:center;" />
+
+	  <table class="width100">
+	   <tr>
+	     <td style="width:10%;"></td>
+	     <td style="width:80%;">
+
+		  <table class="width100">
+		  <?php
+		  // intitulé non renseigné
+		  if ( $error AND !strlen($title) )
+		  	print("
+			    <tr>
+				<td style=\"width:100%;\" colspan=\"2\">
+					<span style=\"color:#FF0000;\">". $msg->read($CONFIG_ERRIDENT) ."</span>
+				</td>
+			    </tr>
+				");
+		  ?>
+
+		    <tr style="background-color:#eeeeee;">
+		      <td style="width:100%;" colspan="2"><?php print($msg->read($CONFIG_IDENT)); ?></td>
+		    </tr>
+	    
+		    <tr>
+		      <td style="width:100%;" colspan="2">
+			<?php
+				if ( $IDmenu == 0 OR @$_GET["action"] == "update" )
+					print("<label for=\"title\"><input type=\"text\" id=\"title\" name=\"title\" size=\"50\" value=\"$title\" /></label>");
+				else {
+					// affichage des modules actifs 
+					$query  = "select _IDmenu, _ident, _activate from config_menu ";
+					$query .= "where _activate = 'O' AND _lang = '".$_SESSION["lang"]."' ";
+					$query .= "order by _ident";
+
+					$result = mysql_query($query, $mysql_link);
+					$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+					print("<label for=\"IDmenu\">");
+					print("<select id=\"IDmenu\" name=\"IDmenu\" onchange=\"document.forms.formulaire.submit()\">");
+
+					while ( $row ) {
+						if ( $IDmenu == $row[0] )
+							print("<option selected=\"selected\" value=\"$row[0]\">$row[1]</option>");
+						else
+							print("<option value=\"$row[0]\">$row[1]</option>");
+
+						$row = remove_magic_quotes(mysql_fetch_row($result));
+						}	// endwhile config
+
+					print("</select> $submit");
+					print("</label>");
+
+				print("
+					<a href=\"".myurlencode("index.php?item=$item&cmde=usrmenu&IDconf=$IDconf&IDmenu=$IDmenu&action=update")."\">
+					<img src=\"".$_SESSION["ROOTDIR"]."/images/stats/post.gif\" title=\"". $msg->read($CONFIG_MODIFY) ."\" alt=\"". $msg->read($CONFIG_MODIFY) ."\" />
+					</a>");
+					}
+			?>
+		      </td>
+		    </tr>
+
+		    <tr style="background-color:#eeeeee;">
+		      <td style="width:100%;" colspan="2"><?php print($msg->read($CONFIG_PICTURE)); ?></td>
+		    </tr>
+	    
+		    <tr>
+		      <td style="width:100%;" colspan="2">
+				<label for="img">
+				<select id="img" name="img">
+				<?php
+					// recherche des images
+					$myDir = @opendir("images/menu/icon");
+
+					// lecture du répertoire
+					while ( $entry = readdir($myDir) ) {
+						switch ( extension($entry) ) {
+							case "png" :
+							case "jpg" :
+							case "gif" :
+								if ( $img == $entry )
+									print("<option selected=\"selected\" value=\"$entry\">$entry</option>");
+								else
+									print("<option value=\"$entry\">$entry</option>");
+								break;
+
+							default :
+								break;
+							}
+			      	        }
+
+					closedir($myDir);
+				?>
+				</select>
+				</label>
+		      </td>
+		    </tr>
+
+  		    <tr style="background-color:#eeeeee;">
+		      <td style="width:100%;" colspan="2">
+				<?php print($msg->read($CONFIG_DESCRIPTION)); ?>
+			</td>
+		    </tr>
+
+		    <tr>
+		      <td style="width:100%;" colspan="2">
+				<label for="text"><textarea id="text" name="text" rows="5" cols="50"><?php print($text); ?></textarea></label>
+		      </td>
+		    </tr>
+
+  		    <tr style="background-color:#eeeeee;">
+		      <td style="width:50%;"><?php print($msg->read($CONFIG_DISPLAY)); ?></td>
+		      <td style="width:50%;"><?php print($msg->read($CONFIG_ALIGN)); ?></td>
+		    </tr>
+
+		    <tr>
+		      <td class="valign-top">
+				<label for="marquee"><input type="checkbox" id="marquee" name="marquee" value="O" <?php print($marquee == "O" ? "checked=\"checked\"" : ""); ?> /></label>
+				<?php print($msg->read($CONFIG_MARQUEE)); ?><br/>
+				<label for="visible"><input type="checkbox" id="visible" name="visible" value="O" <?php print($visible == "N" ? "checked=\"checked\"" : ""); ?> /></label>
+				<?php print($msg->read($CONFIG_CLOSEMENU)); ?><br/>
+				<label for="sort"><input type="checkbox" id="sort" name="sort" value="O" <?php print($sort == "O" ? "checked=\"checked\"" : ""); ?> /></label>
+				<?php print($msg->read($CONFIG_SORTITEM)); ?>
+			</td>
+		      <td class="valign-top">
+	           		<label for="rbox_G"><input type="radio" id="rbox_G" name="rbox" <?php print(($rbox == "G") ? "checked=\"checked\"" : ""); ?> value="G" /><?php print($msg->read($CONFIG_LEFT)); ?></label><br/>
+	           		<label for="rbox_D"><input type="radio" id="rbox_D" name="rbox" <?php print(($rbox == "D") ? "checked=\"checked\"" : ""); ?> value="D" /><?php print($msg->read($CONFIG_RIGHT)); ?></label>
+			</td>
+		    </tr>
+
+  		    <tr style="background-color:#eeeeee;">
+		      <td><?php print($msg->read($CONFIG_ACCESS)); ?></td>
+		      <td><?php print($msg->read($CONFIG_PERMS)); ?></td>
+		    </tr>
+
+		    <tr>
+		      <td>
+	      	<?php
+				// recherche des groupes
+				$query  = "select _IDgrp, _ident from user_group ";
+				$query .= "where _visible = 'O' AND _lang = '".$_SESSION["lang"]."' ";
+				$query .= "order by _IDgrp asc";
+
+				$result = mysql_query($query, $mysql_link);
+				$row    = ( $result ) ? remove_magic_quotes(mysql_fetch_row($result)) : 0 ;
+
+				while ( $row ) {
+					$checked = ( $grprd & pow(2, $row[0] - 1) ) ? "checked=\"checked\"" : "" ;
+
+	             		print("<label for=\"cbrd_$row[0]\"><input type=\"checkbox\" id=\"cbrd_$row[0]\" name=\"cbrd[]\" value=\"". pow(2, $row[0] - 1) ."\" $checked /> $row[1]</label><br/>");
+
+					$row = remove_magic_quotes(mysql_fetch_row($result));
+					}
+             	?>
+		      </td>
+		      <td class="valign-top">
+				<label for="anonyme"><input type="checkbox" id="anonyme" name="anonyme" value="O" <?php print($anonyme == "O" ? "checked=\"checked\"" : ""); ?> /></label>
+				<?php print($msg->read($CONFIG_ANONYMOUS)); ?>
+			</td>
+		    </tr>
+
+		  </table>
+
+	     </td>
+	     <td style="width:10%;"></td>
+	   </tr>
+	  </table>
+
+	<hr style="width:80%; text-align:center;" />
+
+         <table class="width100">
+           <tr>
+              <td style="width:10%;" class="valign-middle align-center">
+              	<?php print("<input type=\"image\" src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/valid.gif\" name=\"valid\" alt=\"".$msg->read($CONFIG_INPUTOK)."\" />"); ?>
+              </td>
+              <td class="valign-middle">
+              	<?php print($IDmenu ? $msg->read($CONFIG_UPDTMENU) : $msg->read($CONFIG_ADDMENU)); ?>.
+              </td>
+           </tr>
+
+           <tr>
+              <td class="valign-middle align-center">
+              	<?php print("<a href=\"index.php?item=$item&amp;IDconf=$IDconf&amp;IDmenu=$IDmenu&amp;cmde=menu\">"); ?>
+              	<?php print("<img src=\"".$_SESSION["ROOTDIR"]."/images/lang/".$_SESSION["lang"]."/cancel.gif\" title=\"\" alt=\"".$msg->read($CONFIG_INPUTCANCEL)."\" />"); ?></a>
+              </td>
+              <td class="valign-middle">
+              	<?php print($msg->read($CONFIG_PREV)); ?>
+              </td>
+           </tr>
+         </table>
+
+	</form>
+
+</div>
